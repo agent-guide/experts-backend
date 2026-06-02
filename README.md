@@ -1,1 +1,35 @@
-# amazon-experts-backend
+# Amazon Experts Backend
+
+Python 3 + FastAPI backend scaffold for the Amazon experts API.
+
+The new service keeps the existing API shape where useful, but delegates major
+capabilities to external systems:
+
+- Knowledge bases, documents, uploads and object storage: PageIndex adapter.
+- Chat/session execution: ngent + Codex/ACP adapter.
+- Skill management: Codex skills filesystem management.
+- Multi-tenant auth and common APIs: implemented in this service.
+
+## Run
+
+```bash
+cd amazon-experts-backend
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -e ".[dev]"
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 15000
+```
+
+OpenAPI docs:
+
+```text
+http://127.0.0.1:15000/docs
+```
+
+## Current Status
+
+This is a framework scaffold. It exposes the API modules and dependency
+boundaries, but PageIndex/ngent/Codex skill integrations are intentionally thin
+adapters for future hardening.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
