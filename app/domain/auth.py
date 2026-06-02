@@ -14,35 +14,55 @@ Permission = str
 
 
 def role_permissions(role: Role) -> set[Permission]:
-    base = {"chat:ask", "kb:read"}
     if role == Role.USER:
-        return base | {"kb:create", "kb:update", "doc:upload", "doc:delete", "doc:reindex"}
-    if role == Role.EXPERT:
-        return base | {
+        return {
             "kb:create",
+            "kb:read",
             "kb:update",
             "kb:delete",
             "doc:upload",
             "doc:delete",
-            "doc:reindex",
-            "skill:publish",
+            "chat:ask",
         }
-    if role == Role.OPS:
-        return base | {"system:ops"}
-    if role == Role.ADMIN:
-        return base | {
+    if role == Role.EXPERT:
+        return {
             "kb:create",
+            "kb:read",
             "kb:update",
             "kb:delete",
             "kb:publish_official",
             "doc:upload",
             "doc:delete",
             "doc:reindex",
-            "role:grant",
-            "system:ops",
+            "chat:ask",
             "skill:publish",
         }
-    return base
+    if role == Role.OPS:
+        return {
+            "kb:read",
+            "doc:reindex",
+            "user:manage",
+            "role:grant",
+            "tenant:manage",
+            "system:ops",
+        }
+    if role == Role.ADMIN:
+        return {
+            "kb:create",
+            "kb:read",
+            "kb:update",
+            "kb:delete",
+            "kb:publish_official",
+            "doc:upload",
+            "doc:delete",
+            "doc:reindex",
+            "chat:ask",
+            "user:manage",
+            "role:grant",
+            "tenant:manage",
+            "skill:publish",
+        }
+    return set()
 
 
 class Principal(BaseModel):
@@ -80,3 +100,19 @@ class AdminActivateRequest(BaseModel):
 
 class GrantRoleRequest(BaseModel):
     role: Role
+
+
+class AdminUser(BaseModel):
+    id: str
+    tenantId: str
+    email: str
+    name: str
+    status: str
+    roles: list[Role]
+    permissions: list[Permission]
+    createdAt: str
+    updatedAt: str
+
+
+class ListUsersResponse(BaseModel):
+    items: list[AdminUser]

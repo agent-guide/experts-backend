@@ -67,13 +67,11 @@ Current scaffold:
 - `POST /api/v1/auth/refresh`
 - `POST /api/v1/auth/logout`
 - `POST /api/v1/auth/admin/activate`
+- `GET /api/v1/admin/users`
 - `POST /api/v1/admin/users/{id}/roles`
 
 Future work:
 
-- Replace in-memory auth store with PostgreSQL/SQLAlchemy.
-- Add tenant table, tenant membership, tenant status and admin activation tokens.
-- Add refresh-token persistence and revocation.
 - Add audit log for role changes and login failures.
 
 ### 4.2 Knowledge Base APIs

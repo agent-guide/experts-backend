@@ -43,11 +43,15 @@ Auth endpoints are backed by the shared auth tables:
 - `POST /api/v1/auth/refresh`
 - `POST /api/v1/auth/logout`
 - `POST /api/v1/auth/admin/activate`
+- `GET /api/v1/admin/users`
 - `POST /api/v1/admin/users/{id}/roles`
 
 Register/login use `EXPERT_NEXT_DEFAULT_TENANT_ID`, which defaults to
 `tenant_default` to match the current Expert project seed data. Production
 deployments must set a strong `EXPERT_NEXT_JWT_SECRET`.
+
+RBAC permissions are resolved from the same role model as the current Expert
+project: `User`, `Expert`, `Admin` and `Ops`.
 
 OpenAPI docs:
 

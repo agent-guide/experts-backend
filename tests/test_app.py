@@ -21,6 +21,8 @@ def test_openapi_loads() -> None:
     assert response.status_code == 200
     paths = response.json()["paths"]
     assert "/api/v1/auth/login" in paths
+    assert "/api/v1/admin/users" in paths
+    assert "/api/v1/admin/users/{user_id}/roles" in paths
     assert "/api/v1/knowledge-bases" in paths
     assert "/api/v1/chat/tasks" in paths
     assert "/api/v1/skills" in paths
@@ -211,6 +213,102 @@ def test_admin_activation_updates_password_and_allows_login(tmp_path: Path) -> N
     assert user["name"] == "Root Admin"
 
 
+def test_rbac_admin_lists_users_and_grants_roles(tmp_path: Path) -> None:
+    database_path = tmp_path / "rbac.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+    )
+    test_app = create_app(settings)
+
+    with TestClient(test_app) as client:
+        _seed_tenant(settings)
+        _seed_user(settings, "admin_user", "admin@example.com", "Admin User", "admin-secret", "Admin")
+        _seed_user(settings, "target_user", "target@example.com", "Target User", "target-secret", "User")
+
+        login_response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "admin@example.com", "password": "admin-secret"},
+        )
+        assert login_response.status_code == 200
+        access_token = login_response.json()["accessToken"]
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "x-tenant-id": "tenant_default",
+        }
+
+        list_response = client.get("/api/v1/admin/users", headers=headers)
+        assert list_response.status_code == 200
+        items = {item["id"]: item for item in list_response.json()["items"]}
+        assert items["admin_user"]["roles"] == ["Admin"]
+        assert "user:manage" in items["admin_user"]["permissions"]
+        assert "system:ops" not in items["admin_user"]["permissions"]
+        assert items["target_user"]["roles"] == ["User"]
+        assert "kb:delete" in items["target_user"]["permissions"]
+        assert "doc:reindex" not in items["target_user"]["permissions"]
+
+        grant_response = client.post(
+            "/api/v1/admin/users/target_user/roles",
+            headers=headers,
+            json={"role": "Expert"},
+        )
+        assert grant_response.status_code == 204
+
+        updated_response = client.get("/api/v1/admin/users", headers=headers)
+        assert updated_response.status_code == 200
+        updated_items = {item["id"]: item for item in updated_response.json()["items"]}
+        assert set(updated_items["target_user"]["roles"]) == {"User", "Expert"}
+        assert "skill:publish" in updated_items["target_user"]["permissions"]
+
+    with open_database_connection(settings) as connection:
+        roles = [
+            row["role"]
+            for row in connection.execute(
+                """
+                select role from user_roles
+                where tenant_id = ? and user_id = ?
+                order by created_at asc
+                """,
+                ("tenant_default", "target_user"),
+            ).fetchall()
+        ]
+
+    assert set(roles) == {"User", "Expert"}
+
+
+def test_rbac_ops_cannot_grant_admin(tmp_path: Path) -> None:
+    database_path = tmp_path / "rbac_ops.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+    )
+    test_app = create_app(settings)
+
+    with TestClient(test_app) as client:
+        _seed_tenant(settings)
+        _seed_user(settings, "ops_user", "ops@example.com", "Ops User", "ops-secret", "Ops")
+        _seed_user(settings, "target_user", "target@example.com", "Target User", "target-secret", "User")
+
+        login_response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "ops@example.com", "password": "ops-secret"},
+        )
+        assert login_response.status_code == 200
+        access_token = login_response.json()["accessToken"]
+
+        grant_response = client.post(
+            "/api/v1/admin/users/target_user/roles",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "x-tenant-id": "tenant_default",
+            },
+            json={"role": "Admin"},
+        )
+        assert grant_response.status_code == 403
+
+
 def _seed_tenant(settings: Settings) -> None:
     with open_database_connection(settings) as connection:
         connection.execute(
@@ -219,5 +317,31 @@ def _seed_tenant(settings: Settings) -> None:
             values ('tenant_default', 'Default Tenant', 'default', 'active')
             on conflict (id) do nothing
             """
+        )
+        connection.commit()
+
+
+def _seed_user(
+    settings: Settings,
+    user_id: str,
+    email: str,
+    name: str,
+    password: str,
+    role: str,
+) -> None:
+    with open_database_connection(settings) as connection:
+        connection.execute(
+            """
+            insert into users (id, tenant_id, email, password_hash, name, status)
+            values (?, ?, ?, ?, ?, 'active')
+            """,
+            (user_id, "tenant_default", email, hash_password(password), name),
+        )
+        connection.execute(
+            """
+            insert into user_roles (id, tenant_id, user_id, role, assigned_by)
+            values (?, ?, ?, ?, ?)
+            """,
+            (f"{user_id}_role", "tenant_default", user_id, role, user_id),
         )
         connection.commit()

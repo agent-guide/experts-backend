@@ -17,7 +17,7 @@ from app.core.security import (
     verify_password,
 )
 from app.db import DatabaseConnection, open_database_connection
-from app.domain.auth import Principal, Role, role_permissions
+from app.domain.auth import AdminUser, Principal, Role, role_permissions
 
 
 @dataclass
@@ -28,6 +28,8 @@ class UserRecord:
     name: str
     password_hash: str
     status: str
+    created_at: str
+    updated_at: str
 
 
 class AuthService:
@@ -62,6 +64,8 @@ class AuthService:
                 name=name,
                 password_hash=hash_password(password),
                 status="active",
+                created_at=_now_iso(),
+                updated_at=_now_iso(),
             )
             _execute(
                 connection,
@@ -247,6 +251,25 @@ class AuthService:
             )
             _commit(connection)
 
+    def list_users(self, tenant_id: str) -> list[AdminUser]:
+        with open_database_connection(self.settings) as connection:
+            rows = _fetch_all(
+                connection,
+                """
+                select id, tenant_id, email, password_hash, name, status, created_at, updated_at
+                from users
+                where tenant_id = ?
+                order by created_at desc, id asc
+                """,
+                (tenant_id,),
+            )
+
+            return [
+                self._admin_user(connection, user)
+                for row in rows
+                if (user := _map_user(row)) is not None
+            ]
+
     def _issue_token_pair(
         self, connection: DatabaseConnection, user: UserRecord
     ) -> dict[str, object]:
@@ -301,7 +324,7 @@ class AuthService:
         row = _fetch_one(
             connection,
             """
-            select id, tenant_id, email, password_hash, name, status
+            select id, tenant_id, email, password_hash, name, status, created_at, updated_at
             from users
             where tenant_id = ? and email = ?
             limit 1
@@ -316,7 +339,7 @@ class AuthService:
         row = _fetch_one(
             connection,
             """
-            select id, tenant_id, email, password_hash, name, status
+            select id, tenant_id, email, password_hash, name, status, created_at, updated_at
             from users
             where tenant_id = ? and id = ?
             limit 1
@@ -324,6 +347,21 @@ class AuthService:
             (tenant_id, user_id),
         )
         return _map_user(row)
+
+    def _admin_user(self, connection: DatabaseConnection, user: UserRecord) -> AdminUser:
+        roles = self._list_roles(connection, user.tenant_id, user.id)
+        permissions = sorted({perm for role in roles for perm in role_permissions(role)})
+        return AdminUser(
+            id=user.id,
+            tenantId=user.tenant_id,
+            email=user.email,
+            name=user.name,
+            status=user.status,
+            roles=roles,
+            permissions=permissions,
+            createdAt=user.created_at,
+            updatedAt=user.updated_at,
+        )
 
 
 def _map_user(row: dict[str, Any] | None) -> UserRecord | None:
@@ -336,6 +374,8 @@ def _map_user(row: dict[str, Any] | None) -> UserRecord | None:
         password_hash=str(row["password_hash"]),
         name=str(row["name"]),
         status=str(row["status"]),
+        created_at=str(row["created_at"]),
+        updated_at=str(row["updated_at"]),
     )
 
 

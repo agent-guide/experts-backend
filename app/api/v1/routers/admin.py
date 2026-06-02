@@ -2,11 +2,19 @@ from fastapi import APIRouter, Depends
 
 from app.api.deps import get_auth_service, get_pageindex_client, require_permission
 from app.clients.pageindex import PageIndexClient
-from app.domain.auth import GrantRoleRequest, Principal
+from app.domain.auth import GrantRoleRequest, ListUsersResponse, Principal
 from app.domain.knowledge import CreateKnowledgeBaseRequest
 from app.services.auth_service import AuthService
 
 router = APIRouter()
+
+
+@router.get("/users", response_model=ListUsersResponse)
+async def list_users(
+    principal: Principal = Depends(require_permission("user:manage")),
+    auth: AuthService = Depends(get_auth_service),
+) -> ListUsersResponse:
+    return ListUsersResponse(items=auth.list_users(principal.tenant_id))
 
 
 @router.post("/users/{user_id}/roles", status_code=204)
