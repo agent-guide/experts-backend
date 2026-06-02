@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     jwt_audience: str = "expert-web"
     access_token_ttl_seconds: int = 900
     refresh_token_ttl_seconds: int = 60 * 60 * 24 * 7
-    default_tenant_id: str = "default"
+    default_tenant_id: str = "tenant_default"
 
     cors_origins: list[str] = Field(default_factory=lambda: ["*"])
 

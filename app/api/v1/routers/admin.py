@@ -13,10 +13,10 @@ router = APIRouter()
 async def grant_role(
     user_id: str,
     body: GrantRoleRequest,
-    _: Principal = Depends(require_permission("role:grant")),
+    principal: Principal = Depends(require_permission("role:grant")),
     auth: AuthService = Depends(get_auth_service),
 ) -> None:
-    auth.grant_role(user_id, body.role)
+    auth.grant_role(principal.tenant_id, principal.user_id, user_id, body.role)
     return None
 
 

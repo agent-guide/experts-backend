@@ -36,6 +36,19 @@ On startup the service applies the shared schema files from the repository root
 `infra/sql`. Override the location with `EXPERT_NEXT_DATABASE_SCHEMA_DIR` if the
 backend is deployed outside the monorepo checkout.
 
+Auth endpoints are backed by the shared auth tables:
+
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/refresh`
+- `POST /api/v1/auth/logout`
+- `POST /api/v1/auth/admin/activate`
+- `POST /api/v1/admin/users/{id}/roles`
+
+Register/login use `EXPERT_NEXT_DEFAULT_TENANT_ID`, which defaults to
+`tenant_default` to match the current Expert project seed data. Production
+deployments must set a strong `EXPERT_NEXT_JWT_SECRET`.
+
 OpenAPI docs:
 
 ```text

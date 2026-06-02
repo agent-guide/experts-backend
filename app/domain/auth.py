@@ -72,5 +72,11 @@ class LogoutRequest(BaseModel):
     refreshToken: str
 
 
+class AdminActivateRequest(BaseModel):
+    token: str
+    newPassword: str
+    name: str | None = None
+
+
 class GrantRoleRequest(BaseModel):
     role: Role

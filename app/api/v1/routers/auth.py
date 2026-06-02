@@ -1,8 +1,13 @@
 from fastapi import APIRouter, Depends
 
 from app.api.deps import get_auth_service
-from app.core.errors import ApiError
-from app.domain.auth import LoginRequest, LogoutRequest, RefreshRequest, RegisterRequest
+from app.domain.auth import (
+    AdminActivateRequest,
+    LoginRequest,
+    LogoutRequest,
+    RefreshRequest,
+    RegisterRequest,
+)
 from app.services.auth_service import AuthService
 
 router = APIRouter()
@@ -19,15 +24,19 @@ async def login(body: LoginRequest, auth: AuthService = Depends(get_auth_service
 
 
 @router.post("/refresh")
-async def refresh(_: RefreshRequest) -> dict:
-    raise ApiError(501, "NOT_IMPLEMENTED", "Refresh token rotation will be backed by persistent auth storage")
+async def refresh(body: RefreshRequest, auth: AuthService = Depends(get_auth_service)) -> dict:
+    return auth.refresh(body.refreshToken)
 
 
 @router.post("/logout", status_code=204)
-async def logout(_: LogoutRequest) -> None:
+async def logout(body: LogoutRequest, auth: AuthService = Depends(get_auth_service)) -> None:
+    auth.logout(body.refreshToken)
     return None
 
 
 @router.post("/admin/activate")
-async def activate_admin() -> dict:
-    raise ApiError(501, "NOT_IMPLEMENTED", "Admin activation token flow is not implemented yet")
+async def activate_admin(
+    body: AdminActivateRequest,
+    auth: AuthService = Depends(get_auth_service),
+) -> dict:
+    return auth.activate_admin(body.token, body.newPassword, body.name)

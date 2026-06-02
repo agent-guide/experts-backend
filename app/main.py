@@ -35,6 +35,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     install_error_handlers(app)
+    app.dependency_overrides[get_settings] = lambda: settings
 
     @app.get("/health", tags=["health"])
     async def health() -> dict[str, str]:

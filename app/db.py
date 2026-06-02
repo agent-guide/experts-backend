@@ -45,10 +45,11 @@ def open_database_connection(settings: Settings) -> Iterator[DatabaseConnection]
     if _is_postgres_url(settings.database_url):
         try:
             import psycopg
+            from psycopg.rows import dict_row
         except ImportError as exc:  # pragma: no cover - exercised only without optional dependency
             raise RuntimeError("PostgreSQL requires the psycopg dependency.") from exc
 
-        with psycopg.connect(settings.database_url) as connection:
+        with psycopg.connect(settings.database_url, row_factory=dict_row) as connection:
             yield connection
         return
 

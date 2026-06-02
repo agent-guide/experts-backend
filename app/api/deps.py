@@ -1,5 +1,4 @@
 from collections.abc import Iterator
-from functools import lru_cache
 
 from fastapi import Depends, Header
 
@@ -14,9 +13,8 @@ from app.domain.auth import Principal
 from app.services.auth_service import AuthService
 
 
-@lru_cache
-def get_auth_service() -> AuthService:
-    return AuthService(get_settings())
+def get_auth_service(settings: Settings = Depends(get_settings)) -> AuthService:
+    return AuthService(settings)
 
 
 def get_pageindex_client(settings: Settings = get_settings()) -> PageIndexClient:
@@ -39,7 +37,7 @@ def get_database(settings: Settings = Depends(get_settings)) -> Iterator[Databas
 async def require_principal(
     authorization: str | None = Header(default=None, alias="Authorization"),
     tenant_id: str | None = Header(default=None, alias="x-tenant-id"),
-    settings: Settings = get_settings(),
+    settings: Settings = Depends(get_settings),
 ) -> Principal:
     if not authorization or not authorization.startswith("Bearer "):
         raise ApiError(401, "AUTH_UNAUTHORIZED", "Missing bearer token")

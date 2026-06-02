@@ -3,6 +3,7 @@ import hmac
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from uuid import uuid4
 
 import jwt
 
@@ -39,6 +40,7 @@ def _encode(settings: Settings, payload: dict[str, Any], ttl_seconds: int) -> st
         "aud": settings.jwt_audience,
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(seconds=ttl_seconds)).timestamp()),
+        "jti": str(uuid4()),
     }
     return jwt.encode(claims, settings.jwt_secret, algorithm="HS256")
 
@@ -96,3 +98,24 @@ def decode_access_token(settings: Settings, token: str) -> Principal:
         roles=roles,
         permissions=permissions,
     )
+
+
+def decode_refresh_token(settings: Settings, token: str) -> dict[str, Any]:
+    try:
+        claims = jwt.decode(
+            token,
+            settings.jwt_secret,
+            algorithms=["HS256"],
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
+        )
+    except jwt.PyJWTError as exc:
+        raise ApiError(401, "AUTH_UNAUTHORIZED", "Invalid refresh token") from exc
+
+    if claims.get("type") != "refresh":
+        raise ApiError(401, "AUTH_UNAUTHORIZED", "Invalid refresh token type")
+    return claims
+
+
+def hash_opaque_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
