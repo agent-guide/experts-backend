@@ -20,6 +20,22 @@ pip install -e ".[dev]"
 python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 15000
 ```
 
+By default the service uses sqlite for local/test runs:
+
+```text
+EXPERT_NEXT_DATABASE_URL=sqlite:///./.data/amazon-experts-backend.sqlite3
+```
+
+Set `EXPERT_NEXT_DATABASE_URL` to a PostgreSQL URL for production, for example:
+
+```text
+EXPERT_NEXT_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/expert
+```
+
+On startup the service applies the shared schema files from the repository root
+`infra/sql`. Override the location with `EXPERT_NEXT_DATABASE_SCHEMA_DIR` if the
+backend is deployed outside the monorepo checkout.
+
 OpenAPI docs:
 
 ```text

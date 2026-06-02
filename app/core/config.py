@@ -22,6 +22,12 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = Field(default_factory=lambda: ["*"])
 
+    database_url: str = "sqlite:///./.data/amazon-experts-backend.sqlite3"
+    database_auto_migrate: bool = True
+    database_schema_dir: str = Field(
+        default_factory=lambda: str(Path(__file__).resolve().parents[3] / "infra" / "sql")
+    )
+
     pageindex_base_url: str | None = None
     pageindex_api_key: str | None = None
 

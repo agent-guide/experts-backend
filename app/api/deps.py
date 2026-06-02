@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from functools import lru_cache
 
 from fastapi import Depends, Header
@@ -8,6 +9,7 @@ from app.clients.pageindex import PageIndexClient
 from app.core.config import Settings, get_settings
 from app.core.errors import ApiError
 from app.core.security import decode_access_token
+from app.db import DatabaseConnection, open_database_connection
 from app.domain.auth import Principal
 from app.services.auth_service import AuthService
 
@@ -27,6 +29,11 @@ def get_ngent_client(settings: Settings = get_settings()) -> NgentClient:
 
 def get_codex_skills_client(settings: Settings = get_settings()) -> CodexSkillsClient:
     return CodexSkillsClient(settings)
+
+
+def get_database(settings: Settings = Depends(get_settings)) -> Iterator[DatabaseConnection]:
+    with open_database_connection(settings) as connection:
+        yield connection
 
 
 async def require_principal(
