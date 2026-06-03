@@ -65,6 +65,9 @@ token claims; they are derived server-side from the current role mapping.
 - [Skills](./skills.md)
 - [Models and Ops](./models-ops.md)
 
+Knowledge base storage, MinIO direct upload, and build decoupling are described
+in [Knowledge Base Storage and Build Design](../KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md).
+
 ## Response Format
 
 Successful responses generally return JSON, except:

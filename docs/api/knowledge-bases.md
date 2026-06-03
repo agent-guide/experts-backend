@@ -18,7 +18,7 @@ No `x-tenant-id` header is used. Implementation is delegated to PageIndex, and t
 platform operations intentionally do not send an upstream `X-Tenant-Id`. Tenants do not
 own or author knowledge bases; they consume them through product workflows (chat).
 Which tenants/users may use a knowledge base is governed by the entitlement mechanism
-(deferred — see `docs/RBAC_CAPABILITY_OWNERSHIP_TODO.md`).
+(deferred — see `docs/USER_TENANT_RBAC_DESIGN.md` §11).
 
 ## POST /
 
