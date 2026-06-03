@@ -6,22 +6,21 @@ Base path:
 /api/v1/uploads
 ```
 
-All APIs in this group are tenant-scoped and require:
+Uploads feed the platform-provided knowledge base capability. All APIs in this group are
+**platform-scoped** and require a platform role:
 
 ```text
 Authorization: Bearer <accessToken>
-x-tenant-id: <tenant_id>
 ```
 
-Required tenant permission for all endpoints:
+Required platform permission for all endpoints:
 
 ```text
 doc:upload
 ```
 
-Implementation is delegated to PageIndex.
-Expert Next API forwards the active tenant to PageIndex as `X-Tenant-Id`;
-PageIndex must scope upload/session operations to that tenant.
+No `x-tenant-id` header is used. Implementation is delegated to PageIndex, and these
+platform operations do not send an upstream `X-Tenant-Id`.
 
 ## POST /initiate
 

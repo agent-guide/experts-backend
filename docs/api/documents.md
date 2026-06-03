@@ -6,22 +6,21 @@ Base path:
 /api/v1/documents
 ```
 
-All APIs in this group are tenant-scoped and require:
+Documents are part of the platform-provided knowledge base capability. All APIs in this
+group are **platform-scoped** and require a platform role:
 
 ```text
 Authorization: Bearer <accessToken>
-x-tenant-id: <tenant_id>
 ```
 
-Implementation is delegated to PageIndex.
-Expert Next API forwards the active tenant to PageIndex as `X-Tenant-Id`;
-PageIndex must scope document-id operations to that tenant.
+No `x-tenant-id` header is used. Implementation is delegated to PageIndex, and these
+platform operations do not send an upstream `X-Tenant-Id`.
 
 ## GET /{document_id}
 
 Get document status.
 
-Required tenant permission:
+Required platform permission:
 
 ```text
 kb:read
@@ -33,7 +32,7 @@ Response body is returned from PageIndex.
 
 List document jobs.
 
-Required tenant permission:
+Required platform permission:
 
 ```text
 kb:read
@@ -45,7 +44,7 @@ Response body is returned from PageIndex.
 
 List document chunks.
 
-Required tenant permission:
+Required platform permission:
 
 ```text
 kb:read
@@ -57,7 +56,7 @@ Response body is returned from PageIndex.
 
 Delete a document.
 
-Required tenant permission:
+Required platform permission:
 
 ```text
 doc:delete
@@ -73,7 +72,7 @@ Response:
 
 Request document reindexing.
 
-Required tenant permission:
+Required platform permission:
 
 ```text
 doc:reindex

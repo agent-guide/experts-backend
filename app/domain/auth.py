@@ -18,25 +18,15 @@ Permission = str
 
 
 def tenant_role_permissions(role: TenantRole) -> set[Permission]:
+    # Tenant roles only consume platform-provided capabilities (via chat). Knowledge
+    # bases, documents and skills are authored on the platform side, so tenant roles
+    # hold no kb:* / doc:* / skill:* permissions.
     if role == TenantRole.MEMBER:
         return {
-            "kb:create",
-            "kb:read",
-            "kb:update",
-            "kb:delete",
-            "doc:upload",
-            "doc:delete",
             "chat:ask",
         }
     if role == TenantRole.ADMIN:
         return {
-            "kb:create",
-            "kb:read",
-            "kb:update",
-            "kb:delete",
-            "doc:upload",
-            "doc:delete",
-            "doc:reindex",
             "chat:ask",
             "tenant:user_manage",
             "tenant:role_grant",
@@ -46,23 +36,46 @@ def tenant_role_permissions(role: TenantRole) -> set[Permission]:
 
 
 def platform_role_permissions(role: PlatformRole) -> set[Permission]:
+    # Platform-provided capabilities (knowledge bases, documents, skills) are authored by
+    # `expert`. `operator` governs tenant users and capability entitlement: it can read
+    # capabilities and grant their use, but cannot author them.
     if role == PlatformRole.EXPERT:
         return {
-            "platform:kb_publish_official",
+            "kb:create",
+            "kb:read",
+            "kb:update",
+            "kb:delete",
+            "doc:upload",
+            "doc:delete",
+            "doc:reindex",
+            "skill:read",
             "skill:write",
+            "platform:kb_publish_official",
         }
     if role == PlatformRole.OPERATOR:
         return {
             "platform:user_manage",
             "platform:role_grant",
+            "platform:entitlement_grant",
             "system:ops",
+            "kb:read",
+            "skill:read",
         }
     if role == PlatformRole.ADMIN:
         return {
             "platform:user_manage",
             "platform:role_grant",
+            "platform:entitlement_grant",
             "platform:tenant_manage",
             "platform:kb_publish_official",
+            "kb:create",
+            "kb:read",
+            "kb:update",
+            "kb:delete",
+            "doc:upload",
+            "doc:delete",
+            "doc:reindex",
+            "skill:read",
             "skill:write",
             "system:ops",
         }

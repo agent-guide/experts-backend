@@ -104,11 +104,18 @@ platform_user_roles (
 Platform roles:
 
 - `admin`: manages platform-level configuration, users, experts, skills and
-  global governance.
-- `expert`: creates or maintains platform-managed expert assets, knowledge bases
-  and skills.
-- `operator`: performs operational tasks, review, troubleshooting and support
-  workflows.
+  global governance. Superset of `expert` and `operator`.
+- `expert`: authors and maintains the platform-provided capabilities — knowledge
+  bases, documents and skills. This is the only role that can create, update or
+  delete those capabilities.
+- `operator`: manages tenant users and capability entitlement — it governs which
+  users/tenants may use which platform capabilities. It can read capabilities and
+  grant their use (`platform:entitlement_grant`), but cannot author them.
+
+Platform-provided capabilities (knowledge bases, documents, skills) are managed
+exclusively through platform roles. Tenant roles do not hold any `kb:*`, `doc:*`
+or `skill:*` permission; tenants consume capabilities through product workflows
+(chat).
 
 ## 3. Identity Context
 
@@ -285,9 +292,16 @@ Experts:
 
 Knowledge bases:
 
-- Platform knowledge bases can power official experts.
-- Tenant knowledge bases should be scoped by `tenant_id`.
-- Do not mix these two ownership models in one ambiguous field.
+- Knowledge bases and their documents are platform-provided capabilities. They are
+  authored and managed by platform `expert`/`admin` through platform-scoped
+  endpoints (`/api/v1/knowledge-bases`, `/api/v1/documents`, `/api/v1/uploads`),
+  which require `kb:*` / `doc:*` platform permissions and are not tenant-scoped.
+- Tenants do not own or author knowledge bases. They consume them through product
+  workflows (chat), which forward the active tenant to the upstream runtime.
+- Which tenants/users may use which knowledge bases is governed by the entitlement
+  mechanism (`platform:entitlement_grant`), deferred until the `experts` entity
+  exists (an expert associates one knowledge base and a set of skills). See
+  `docs/RBAC_CAPABILITY_OWNERSHIP_TODO.md`.
 
 ## 9. Implementation Notes
 

@@ -275,8 +275,10 @@ def test_rbac_admin_lists_users_and_grants_roles(tmp_path: Path) -> None:
         assert "tenant:user_manage" in items["admin_user"]["tenantPermissions"]
         assert "system:ops" not in items["admin_user"]["platformPermissions"]
         assert items["target_user"]["tenantRoles"] == ["member"]
-        assert "kb:delete" in items["target_user"]["tenantPermissions"]
-        assert "doc:reindex" not in items["target_user"]["tenantPermissions"]
+        # Tenant roles only consume (chat); capability authoring is platform-side.
+        assert "chat:ask" in items["target_user"]["tenantPermissions"]
+        assert "kb:delete" not in items["target_user"]["tenantPermissions"]
+        assert "tenant:user_manage" not in items["target_user"]["tenantPermissions"]
 
         grant_response = client.post(
             "/api/v1/rbac/tenant/users/target_user/roles",
@@ -289,7 +291,7 @@ def test_rbac_admin_lists_users_and_grants_roles(tmp_path: Path) -> None:
         assert updated_response.status_code == 200
         updated_items = {item["id"]: item for item in updated_response.json()["items"]}
         assert updated_items["target_user"]["tenantRoles"] == ["admin"]
-        assert "doc:reindex" in updated_items["target_user"]["tenantPermissions"]
+        assert "tenant:user_manage" in updated_items["target_user"]["tenantPermissions"]
 
     with open_database_connection(settings) as connection:
         roles = [
