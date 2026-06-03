@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from app.api.deps import get_pageindex_client, require_permission
+from app.api.deps import get_pageindex_client, require_platform_permission, require_tenant_permission
 from app.clients.pageindex import PageIndexClient
 from app.domain.auth import Principal
 from app.domain.knowledge import CreateKnowledgeBaseRequest, UpdateKnowledgeBaseRequest
@@ -11,48 +11,70 @@ router = APIRouter()
 @router.post("", status_code=201)
 async def create_knowledge_base(
     body: CreateKnowledgeBaseRequest,
-    _: Principal = Depends(require_permission("kb:create")),
+    principal: Principal = Depends(require_tenant_permission("kb:create")),
     pageindex: PageIndexClient = Depends(get_pageindex_client),
 ) -> dict:
-    return await pageindex.request("POST", "/knowledge-bases", json=body.model_dump())
+    return await pageindex.request(
+        "POST", "/knowledge-bases", tenant_id=principal.active_tenant_id, json=body.model_dump()
+    )
+
+
+@router.post("/official", status_code=201)
+async def create_official_knowledge_base(
+    body: CreateKnowledgeBaseRequest,
+    _: Principal = Depends(require_platform_permission("platform:kb_publish_official")),
+    pageindex: PageIndexClient = Depends(get_pageindex_client),
+) -> dict:
+    payload = body.model_dump()
+    payload["visibility"] = "official_public"
+    return await pageindex.request("POST", "/knowledge-bases", json=payload)
 
 
 @router.get("")
 async def list_knowledge_bases(
-    _: Principal = Depends(require_permission("kb:read")),
+    principal: Principal = Depends(require_tenant_permission("kb:read")),
     pageindex: PageIndexClient = Depends(get_pageindex_client),
 ) -> dict:
-    return await pageindex.request("GET", "/knowledge-bases")
+    return await pageindex.request(
+        "GET", "/knowledge-bases", tenant_id=principal.active_tenant_id
+    )
 
 
 @router.get("/{knowledge_base_id}")
 async def get_knowledge_base(
     knowledge_base_id: str,
-    _: Principal = Depends(require_permission("kb:read")),
+    principal: Principal = Depends(require_tenant_permission("kb:read")),
     pageindex: PageIndexClient = Depends(get_pageindex_client),
 ) -> dict:
-    return await pageindex.request("GET", f"/knowledge-bases/{knowledge_base_id}")
+    return await pageindex.request(
+        "GET", f"/knowledge-bases/{knowledge_base_id}", tenant_id=principal.active_tenant_id
+    )
 
 
 @router.patch("/{knowledge_base_id}")
 async def update_knowledge_base(
     knowledge_base_id: str,
     body: UpdateKnowledgeBaseRequest,
-    _: Principal = Depends(require_permission("kb:update")),
+    principal: Principal = Depends(require_tenant_permission("kb:update")),
     pageindex: PageIndexClient = Depends(get_pageindex_client),
 ) -> dict:
     return await pageindex.request(
-        "PATCH", f"/knowledge-bases/{knowledge_base_id}", json=body.model_dump(exclude_none=True)
+        "PATCH",
+        f"/knowledge-bases/{knowledge_base_id}",
+        tenant_id=principal.active_tenant_id,
+        json=body.model_dump(exclude_none=True),
     )
 
 
 @router.delete("/{knowledge_base_id}", status_code=204)
 async def delete_knowledge_base(
     knowledge_base_id: str,
-    _: Principal = Depends(require_permission("kb:delete")),
+    principal: Principal = Depends(require_tenant_permission("kb:delete")),
     pageindex: PageIndexClient = Depends(get_pageindex_client),
 ) -> None:
-    await pageindex.request("DELETE", f"/knowledge-bases/{knowledge_base_id}")
+    await pageindex.request(
+        "DELETE", f"/knowledge-bases/{knowledge_base_id}", tenant_id=principal.active_tenant_id
+    )
     return None
 
 
@@ -66,7 +88,11 @@ async def upload_document_multipart() -> dict:
 @router.get("/{knowledge_base_id}/documents")
 async def list_knowledge_base_documents(
     knowledge_base_id: str,
-    _: Principal = Depends(require_permission("kb:read")),
+    principal: Principal = Depends(require_tenant_permission("kb:read")),
     pageindex: PageIndexClient = Depends(get_pageindex_client),
 ) -> dict:
-    return await pageindex.request("GET", f"/knowledge-bases/{knowledge_base_id}/documents")
+    return await pageindex.request(
+        "GET",
+        f"/knowledge-bases/{knowledge_base_id}/documents",
+        tenant_id=principal.active_tenant_id,
+    )

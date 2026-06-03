@@ -36,22 +36,43 @@ def get_database(settings: Settings = Depends(get_settings)) -> Iterator[Databas
 
 async def require_principal(
     authorization: str | None = Header(default=None, alias="Authorization"),
-    tenant_id: str | None = Header(default=None, alias="x-tenant-id"),
     settings: Settings = Depends(get_settings),
 ) -> Principal:
     if not authorization or not authorization.startswith("Bearer "):
         raise ApiError(401, "AUTH_UNAUTHORIZED", "Missing bearer token")
+    token_principal = decode_access_token(settings, authorization.removeprefix("Bearer ").strip())
+    return AuthService(settings).current_principal(token_principal)
+
+
+async def require_tenant_principal(
+    principal: Principal = Depends(require_principal),
+    tenant_id: str | None = Header(default=None, alias="x-tenant-id"),
+) -> Principal:
     if not tenant_id:
         raise ApiError(401, "AUTH_UNAUTHORIZED", "Missing x-tenant-id")
-    principal = decode_access_token(settings, authorization.removeprefix("Bearer ").strip())
-    if principal.tenant_id != tenant_id:
+    if principal.active_tenant_id != tenant_id:
         raise ApiError(403, "AUTH_FORBIDDEN", "Tenant mismatch")
     return principal
 
 
-def require_permission(permission: str):
-    async def dependency(principal: Principal = Depends(require_principal)) -> Principal:
-        if permission not in principal.permissions:
+async def require_platform_principal(principal: Principal = Depends(require_principal)) -> Principal:
+    if not principal.platform_roles:
+        raise ApiError(403, "AUTH_FORBIDDEN", "Missing platform role")
+    return principal
+
+
+def require_tenant_permission(permission: str):
+    async def dependency(principal: Principal = Depends(require_tenant_principal)) -> Principal:
+        if permission not in principal.tenant_permissions:
+            raise ApiError(403, "AUTH_FORBIDDEN", f"Missing permission: {permission}")
+        return principal
+
+    return dependency
+
+
+def require_platform_permission(permission: str):
+    async def dependency(principal: Principal = Depends(require_platform_principal)) -> Principal:
+        if permission not in principal.platform_permissions:
             raise ApiError(403, "AUTH_FORBIDDEN", f"Missing permission: {permission}")
         return principal
 

@@ -62,13 +62,26 @@ Owned by Expert Next API.
 
 Current scaffold:
 
-- `POST /api/v1/auth/register`
+- `POST /api/v1/users/register`
+- `POST /api/v1/users/platform/activate`
+- `POST /api/v1/users/platform`
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/refresh`
 - `POST /api/v1/auth/logout`
-- `POST /api/v1/auth/admin/activate`
-- `GET /api/v1/admin/users`
-- `POST /api/v1/admin/users/{id}/roles`
+- `GET /api/v1/rbac/tenant/users`
+- `POST /api/v1/rbac/tenant/users/{id}/roles`
+- `DELETE /api/v1/rbac/tenant/users/{id}`
+- `POST /api/v1/rbac/platform/users/{id}/roles`
+- `DELETE /api/v1/rbac/platform/users/{id}/roles/{role}`
+
+Authorization behavior:
+
+- Access tokens carry identity and roles only; permission lists are derived from
+  role mappings server-side.
+- Auth dependencies reload the user and current roles from the database on each
+  authenticated request, so user disablement and role/membership revocation are
+  enforced immediately.
+- Tenant-scoped APIs require `x-tenant-id` to match the active tenant context.
 
 Future work:
 
@@ -85,11 +98,13 @@ Current API shell:
 - `GET /api/v1/knowledge-bases/{id}`
 - `PATCH /api/v1/knowledge-bases/{id}`
 - `DELETE /api/v1/knowledge-bases/{id}`
-- `POST /api/v1/admin/official-knowledge-bases`
+- `POST /api/v1/knowledge-bases/official`
 
 Design:
 
 - Expert Next API enforces auth, tenant and RBAC.
+- Tenant-scoped PageIndex calls include `X-Tenant-Id` so PageIndex can enforce
+  resource isolation. Official/platform calls intentionally omit that header.
 - PageIndex owns actual corpus/index/project state.
 - Store only mapping metadata locally if PageIndex IDs do not directly match old
   API IDs.
@@ -125,6 +140,8 @@ Current API shell:
 Design:
 
 - FastAPI should not parse/index documents itself.
+- Tenant-scoped PageIndex calls include `X-Tenant-Id` so PageIndex can enforce
+  resource isolation for document and upload ids.
 - Upload presigning, storage keys, indexing jobs and status should come from
   PageIndex or a PageIndex-side wrapper service.
 - If PageIndex does not expose the exact old upload contract, add a small
@@ -154,6 +171,8 @@ Mapping:
   when necessary.
 - `llmModel`, `queryRewrite`, `multiHop`, and `knowledgeBaseIds` are passed as
   `agentOptions` until a stricter ngent contract is finalized.
+- Tenant-scoped ngent calls include `X-Tenant-Id` so ngent can enforce resource
+  isolation for thread and turn ids.
 
 Open decisions:
 
@@ -241,7 +260,7 @@ Status: scaffolded.
 ### Phase 2: Persistent Auth and Tenancy
 
 - Add SQLAlchemy/Alembic.
-- Migrate tenant, user, role, refresh token and admin activation flows.
+- Migrate tenant, user, role, refresh token and platform user activation flows.
 - Add request-scoped tenant enforcement and audit logging.
 - Add test coverage for auth and RBAC.
 

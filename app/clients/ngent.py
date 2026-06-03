@@ -14,17 +14,21 @@ class NgentClient:
         self.default_agent = settings.ngent_default_agent
         self.default_cwd = settings.ngent_default_cwd
 
-    def _headers(self) -> dict[str, str]:
+    def _headers(self, tenant_id: str | None = None) -> dict[str, str]:
         headers = {"X-Client-ID": self.client_id}
         if self.auth_token:
             headers["Authorization"] = f"Bearer {self.auth_token}"
+        if tenant_id:
+            headers["X-Tenant-Id"] = tenant_id
         return headers
 
-    async def request(self, method: str, path: str, **kwargs: Any) -> Any:
+    async def request(
+        self, method: str, path: str, *, tenant_id: str | None = None, **kwargs: Any
+    ) -> Any:
         if not self.base_url:
             raise ApiError(503, "NGENT_UNCONFIGURED", "ngent base URL is not configured")
         async with httpx.AsyncClient(base_url=self.base_url, timeout=120) as client:
-            response = await client.request(method, path, headers=self._headers(), **kwargs)
+            response = await client.request(method, path, headers=self._headers(tenant_id), **kwargs)
         if response.status_code >= 400:
             raise ApiError(
                 response.status_code,
@@ -36,11 +40,15 @@ class NgentClient:
             return None
         return response.json()
 
-    async def stream(self, method: str, path: str, **kwargs: Any) -> AsyncIterator[str]:
+    async def stream(
+        self, method: str, path: str, *, tenant_id: str | None = None, **kwargs: Any
+    ) -> AsyncIterator[str]:
         if not self.base_url:
             raise ApiError(503, "NGENT_UNCONFIGURED", "ngent base URL is not configured")
         async with httpx.AsyncClient(base_url=self.base_url, timeout=None) as client:
-            async with client.stream(method, path, headers=self._headers(), **kwargs) as response:
+            async with client.stream(
+                method, path, headers=self._headers(tenant_id), **kwargs
+            ) as response:
                 if response.status_code >= 400:
                     body = await response.aread()
                     raise ApiError(

@@ -1,7 +1,12 @@
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import Response
 
-from app.api.deps import get_database, get_skill_storage, require_permission, require_principal
+from app.api.deps import (
+    get_database,
+    get_skill_storage,
+    require_platform_permission,
+    require_principal,
+)
 from app.db import DatabaseConnection
 from app.domain.auth import Principal
 from app.domain.skills import Skill, SkillListResponse, SkillMetadataUpdate
@@ -15,7 +20,7 @@ router = APIRouter()
 async def upload_skill(
     file: UploadFile = File(...),
     slug: str | None = None,
-    _: Principal = Depends(require_permission("skill:publish")),
+    _: Principal = Depends(require_platform_permission("skill:publish")),
     connection: DatabaseConnection = Depends(get_database),
     storage: SkillStorage = Depends(get_skill_storage),
 ) -> Skill:
@@ -56,7 +61,7 @@ async def get_skill(
 async def update_skill(
     slug: str,
     update: SkillMetadataUpdate,
-    _: Principal = Depends(require_permission("skill:publish")),
+    _: Principal = Depends(require_platform_permission("skill:publish")),
     connection: DatabaseConnection = Depends(get_database),
     storage: SkillStorage = Depends(get_skill_storage),
 ) -> Skill:
@@ -67,7 +72,7 @@ async def update_skill(
 async def delete_skill(
     slug: str,
     delete_files: bool = False,
-    _: Principal = Depends(require_permission("skill:publish")),
+    _: Principal = Depends(require_platform_permission("skill:publish")),
     connection: DatabaseConnection = Depends(get_database),
     storage: SkillStorage = Depends(get_skill_storage),
 ) -> None:

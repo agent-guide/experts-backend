@@ -37,20 +37,22 @@ Override the location with `EXPERT_NEXT_DATABASE_SCHEMA_DIR` if needed.
 
 Auth endpoints are backed by the shared auth tables:
 
-- `POST /api/v1/auth/register`
+- `POST /api/v1/users/register`
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/refresh`
 - `POST /api/v1/auth/logout`
-- `POST /api/v1/auth/admin/activate`
-- `GET /api/v1/admin/users`
-- `POST /api/v1/admin/users/{id}/roles`
+- `POST /api/v1/users/platform/activate`
+- `POST /api/v1/users/platform`
+- `GET /api/v1/rbac/tenant/users`
+- `POST /api/v1/rbac/tenant/users/{id}/roles`
+- `POST /api/v1/rbac/platform/users/{id}/roles`
 
 Register/login use `EXPERT_NEXT_DEFAULT_TENANT_ID`, which defaults to
 `tenant_default` to match the current Expert project seed data. Production
 deployments must set a strong `EXPERT_NEXT_JWT_SECRET`.
 
-RBAC permissions are resolved from the same role model as the current Expert
-project: `User`, `Expert`, `Admin` and `Ops`.
+RBAC permissions are resolved from tenant roles (`admin`, `member`) and platform
+roles (`admin`, `expert`, `operator`).
 
 Skill files default to local storage:
 

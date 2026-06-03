@@ -9,7 +9,13 @@ import jwt
 
 from app.core.config import Settings
 from app.core.errors import ApiError
-from app.domain.auth import Principal, Role, role_permissions
+from app.domain.auth import (
+    PlatformRole,
+    Principal,
+    TenantRole,
+    platform_role_permissions,
+    tenant_role_permissions,
+)
 
 
 def hash_password(password: str) -> str:
@@ -46,14 +52,17 @@ def _encode(settings: Settings, payload: dict[str, Any], ttl_seconds: int) -> st
 
 
 def issue_token_pair(settings: Settings, principal: Principal) -> dict[str, object]:
+    # Only roles are stored in the token; permissions are derived from roles on
+    # decode (see decode_access_token), so the role->permission mapping stays the
+    # single source of truth and tokens do not grow with the permission list.
     access = _encode(
         settings,
         {
             "sub": principal.user_id,
-            "tenantId": principal.tenant_id,
             "email": principal.email,
-            "roles": principal.roles,
-            "permissions": principal.permissions,
+            "activeTenantId": principal.active_tenant_id,
+            "tenantRoles": principal.tenant_roles,
+            "platformRoles": principal.platform_roles,
             "type": "access",
         },
         settings.access_token_ttl_seconds,
@@ -62,7 +71,6 @@ def issue_token_pair(settings: Settings, principal: Principal) -> dict[str, obje
         settings,
         {
             "sub": principal.user_id,
-            "tenantId": principal.tenant_id,
             "type": "refresh",
         },
         settings.refresh_token_ttl_seconds,
@@ -89,14 +97,22 @@ def decode_access_token(settings: Settings, token: str) -> Principal:
     if claims.get("type") != "access":
         raise ApiError(401, "AUTH_UNAUTHORIZED", "Invalid access token type")
 
-    roles = [Role(role) for role in claims.get("roles", [])]
-    permissions = sorted({perm for role in roles for perm in role_permissions(role)})
+    tenant_roles = [TenantRole(role) for role in claims.get("tenantRoles", [])]
+    platform_roles = [PlatformRole(role) for role in claims.get("platformRoles", [])]
     return Principal(
         user_id=str(claims["sub"]),
-        tenant_id=str(claims["tenantId"]),
         email=str(claims.get("email", "")),
-        roles=roles,
-        permissions=permissions,
+        active_tenant_id=(
+            str(claims["activeTenantId"]) if claims.get("activeTenantId") else None
+        ),
+        tenant_roles=tenant_roles,
+        tenant_permissions=sorted(
+            {perm for role in tenant_roles for perm in tenant_role_permissions(role)}
+        ),
+        platform_roles=platform_roles,
+        platform_permissions=sorted(
+            {perm for role in platform_roles for perm in platform_role_permissions(role)}
+        ),
     )
 
 

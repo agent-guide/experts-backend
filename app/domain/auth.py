@@ -1,20 +1,24 @@
 from enum import StrEnum
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
-class Role(StrEnum):
-    USER = "User"
-    ADMIN = "Admin"
-    EXPERT = "Expert"
-    OPS = "Ops"
+class TenantRole(StrEnum):
+    ADMIN = "admin"
+    MEMBER = "member"
+
+
+class PlatformRole(StrEnum):
+    ADMIN = "admin"
+    EXPERT = "expert"
+    OPERATOR = "operator"
 
 
 Permission = str
 
 
-def role_permissions(role: Role) -> set[Permission]:
-    if role == Role.USER:
+def tenant_role_permissions(role: TenantRole) -> set[Permission]:
+    if role == TenantRole.MEMBER:
         return {
             "kb:create",
             "kb:read",
@@ -24,53 +28,55 @@ def role_permissions(role: Role) -> set[Permission]:
             "doc:delete",
             "chat:ask",
         }
-    if role == Role.EXPERT:
+    if role == TenantRole.ADMIN:
         return {
             "kb:create",
             "kb:read",
             "kb:update",
             "kb:delete",
-            "kb:publish_official",
             "doc:upload",
             "doc:delete",
             "doc:reindex",
             "chat:ask",
+            "tenant:user_manage",
+            "tenant:role_grant",
+            "tenant:manage",
+        }
+    return set()
+
+
+def platform_role_permissions(role: PlatformRole) -> set[Permission]:
+    if role == PlatformRole.EXPERT:
+        return {
+            "platform:kb_publish_official",
             "skill:publish",
         }
-    if role == Role.OPS:
+    if role == PlatformRole.OPERATOR:
         return {
-            "kb:read",
-            "doc:reindex",
-            "user:manage",
-            "role:grant",
-            "tenant:manage",
+            "platform:user_manage",
+            "platform:role_grant",
             "system:ops",
         }
-    if role == Role.ADMIN:
+    if role == PlatformRole.ADMIN:
         return {
-            "kb:create",
-            "kb:read",
-            "kb:update",
-            "kb:delete",
-            "kb:publish_official",
-            "doc:upload",
-            "doc:delete",
-            "doc:reindex",
-            "chat:ask",
-            "user:manage",
-            "role:grant",
-            "tenant:manage",
+            "platform:user_manage",
+            "platform:role_grant",
+            "platform:tenant_manage",
+            "platform:kb_publish_official",
             "skill:publish",
+            "system:ops",
         }
     return set()
 
 
 class Principal(BaseModel):
     user_id: str
-    tenant_id: str
     email: str
-    roles: list[Role]
-    permissions: list[Permission]
+    active_tenant_id: str | None = None
+    tenant_roles: list[TenantRole] = []
+    tenant_permissions: list[Permission] = []
+    platform_roles: list[PlatformRole] = []
+    platform_permissions: list[Permission] = []
 
 
 class RegisterRequest(BaseModel):
@@ -82,37 +88,61 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+    tenantId: str | None = None
 
 
 class RefreshRequest(BaseModel):
     refreshToken: str
+    tenantId: str | None = None
 
 
 class LogoutRequest(BaseModel):
     refreshToken: str
 
 
-class AdminActivateRequest(BaseModel):
+class PlatformUserActivateRequest(BaseModel):
     token: str
     newPassword: str
     name: str | None = None
 
 
-class GrantRoleRequest(BaseModel):
-    role: Role
+class CreatePlatformUserRequest(BaseModel):
+    email: EmailStr
+    name: str
+    roles: list[PlatformRole] = Field(default_factory=lambda: [PlatformRole.EXPERT])
 
 
-class AdminUser(BaseModel):
+class CreatePlatformUserResponse(BaseModel):
     id: str
-    tenantId: str
+    email: EmailStr
+    name: str
+    status: str
+    platformRoles: list[PlatformRole]
+    activationToken: str
+    activationExpiresAt: str
+
+
+class GrantTenantRoleRequest(BaseModel):
+    role: TenantRole
+
+
+class GrantPlatformRoleRequest(BaseModel):
+    role: PlatformRole
+
+
+class UserAccessSummary(BaseModel):
+    id: str
     email: str
     name: str
     status: str
-    roles: list[Role]
-    permissions: list[Permission]
+    activeTenantId: str | None = None
+    tenantRoles: list[TenantRole]
+    tenantPermissions: list[Permission]
+    platformRoles: list[PlatformRole]
+    platformPermissions: list[Permission]
     createdAt: str
     updatedAt: str
 
 
 class ListUsersResponse(BaseModel):
-    items: list[AdminUser]
+    items: list[UserAccessSummary]

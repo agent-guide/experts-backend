@@ -19,17 +19,21 @@ class PageIndexClient:
         self.base_url = settings.pageindex_base_url
         self.api_key = settings.pageindex_api_key
 
-    def _headers(self) -> dict[str, str]:
+    def _headers(self, tenant_id: str | None = None) -> dict[str, str]:
         headers: dict[str, str] = {}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
+        if tenant_id:
+            headers["X-Tenant-Id"] = tenant_id
         return headers
 
-    async def request(self, method: str, path: str, **kwargs: Any) -> Any:
+    async def request(
+        self, method: str, path: str, *, tenant_id: str | None = None, **kwargs: Any
+    ) -> Any:
         if not self.base_url:
             raise ApiError(503, "PAGEINDEX_UNCONFIGURED", "PageIndex base URL is not configured")
         async with httpx.AsyncClient(base_url=self.base_url, timeout=60) as client:
-            response = await client.request(method, path, headers=self._headers(), **kwargs)
+            response = await client.request(method, path, headers=self._headers(tenant_id), **kwargs)
         if response.status_code >= 400:
             raise ApiError(
                 response.status_code,
