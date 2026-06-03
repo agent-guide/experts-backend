@@ -1,87 +1,61 @@
 from fastapi import APIRouter, Depends
 
-from app.api.deps import get_pageindex_client, require_platform_permission
-from app.clients.pageindex import PageIndexClient
+from app.api.deps import get_database, require_platform_permission
+from app.db import DatabaseConnection
 from app.domain.auth import Principal
-from app.domain.knowledge import CreateKnowledgeBaseRequest, UpdateKnowledgeBaseRequest
+from app.domain.knowledge import (
+    CreateKnowledgeBaseRequest,
+    KnowledgeBase,
+    KnowledgeBaseListResponse,
+    UpdateKnowledgeBaseRequest,
+)
+from app.services.knowledge_base_service import KnowledgeBaseService
 
 router = APIRouter()
 
 
-@router.post("", status_code=201)
+@router.post("", response_model=KnowledgeBase, status_code=201)
 async def create_knowledge_base(
     body: CreateKnowledgeBaseRequest,
-    _: Principal = Depends(require_platform_permission("kb:create")),
-    pageindex: PageIndexClient = Depends(get_pageindex_client),
-) -> dict:
-    return await pageindex.request("POST", "/knowledge-bases", json=body.model_dump())
+    principal: Principal = Depends(require_platform_permission("kb:create")),
+    connection: DatabaseConnection = Depends(get_database),
+) -> KnowledgeBase:
+    return KnowledgeBaseService(connection).create(principal, body)
 
 
-@router.post("/official", status_code=201)
-async def create_official_knowledge_base(
-    body: CreateKnowledgeBaseRequest,
-    _: Principal = Depends(require_platform_permission("platform:kb_publish_official")),
-    pageindex: PageIndexClient = Depends(get_pageindex_client),
-) -> dict:
-    payload = body.model_dump()
-    payload["visibility"] = "official_public"
-    return await pageindex.request("POST", "/knowledge-bases", json=payload)
-
-
-@router.get("")
+@router.get("", response_model=KnowledgeBaseListResponse)
 async def list_knowledge_bases(
-    _: Principal = Depends(require_platform_permission("kb:read")),
-    pageindex: PageIndexClient = Depends(get_pageindex_client),
-) -> dict:
-    return await pageindex.request("GET", "/knowledge-bases")
+    principal: Principal = Depends(require_platform_permission("kb:read")),
+    connection: DatabaseConnection = Depends(get_database),
+) -> KnowledgeBaseListResponse:
+    items = KnowledgeBaseService(connection).list(principal)
+    return KnowledgeBaseListResponse(items=items)
 
 
-@router.get("/{knowledge_base_id}")
+@router.get("/{knowledge_base_id}", response_model=KnowledgeBase)
 async def get_knowledge_base(
     knowledge_base_id: str,
-    _: Principal = Depends(require_platform_permission("kb:read")),
-    pageindex: PageIndexClient = Depends(get_pageindex_client),
-) -> dict:
-    return await pageindex.request("GET", f"/knowledge-bases/{knowledge_base_id}")
+    principal: Principal = Depends(require_platform_permission("kb:read")),
+    connection: DatabaseConnection = Depends(get_database),
+) -> KnowledgeBase:
+    return KnowledgeBaseService(connection).get(principal, knowledge_base_id)
 
 
-@router.patch("/{knowledge_base_id}")
+@router.patch("/{knowledge_base_id}", response_model=KnowledgeBase)
 async def update_knowledge_base(
     knowledge_base_id: str,
     body: UpdateKnowledgeBaseRequest,
-    _: Principal = Depends(require_platform_permission("kb:update")),
-    pageindex: PageIndexClient = Depends(get_pageindex_client),
-) -> dict:
-    return await pageindex.request(
-        "PATCH",
-        f"/knowledge-bases/{knowledge_base_id}",
-        json=body.model_dump(exclude_none=True),
-    )
+    principal: Principal = Depends(require_platform_permission("kb:update")),
+    connection: DatabaseConnection = Depends(get_database),
+) -> KnowledgeBase:
+    return KnowledgeBaseService(connection).update(principal, knowledge_base_id, body)
 
 
 @router.delete("/{knowledge_base_id}", status_code=204)
 async def delete_knowledge_base(
     knowledge_base_id: str,
-    _: Principal = Depends(require_platform_permission("kb:delete")),
-    pageindex: PageIndexClient = Depends(get_pageindex_client),
+    principal: Principal = Depends(require_platform_permission("kb:delete")),
+    connection: DatabaseConnection = Depends(get_database),
 ) -> None:
-    await pageindex.request("DELETE", f"/knowledge-bases/{knowledge_base_id}")
+    KnowledgeBaseService(connection).delete(principal, knowledge_base_id)
     return None
-
-
-@router.post("/{knowledge_base_id}/documents", status_code=202)
-async def upload_document_multipart() -> dict:
-    return {
-        "message": "Use /api/v1/uploads/* direct-upload APIs until multipart PageIndex mapping is finalized"
-    }
-
-
-@router.get("/{knowledge_base_id}/documents")
-async def list_knowledge_base_documents(
-    knowledge_base_id: str,
-    _: Principal = Depends(require_platform_permission("kb:read")),
-    pageindex: PageIndexClient = Depends(get_pageindex_client),
-) -> dict:
-    return await pageindex.request(
-        "GET", f"/knowledge-bases/{knowledge_base_id}/documents"
-    )

@@ -51,6 +51,8 @@ class Settings(BaseSettings):
     minio_secret_key: str | None = None
     minio_bucket: str | None = None
     minio_secure: bool = False
+    # Short-lived presigned URL TTL for document upload/download (seconds). See design section 11.
+    presigned_url_ttl_seconds: int = 900
 
 
 @lru_cache

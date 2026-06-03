@@ -89,7 +89,9 @@ Future work:
 
 ### 4.2 Knowledge Base APIs
 
-Compatibility API owned by Expert Next API; implementation delegated to PageIndex.
+Platform-authored resources. Knowledge bases have **no tenant relationship** (no `tenant_id`,
+no official/tenant/private visibility); access is decided purely by the platform permission on
+the route. Canonical contract: `docs/KNOWLEDGE_BASE_STORAGE_AND_BUILD_SPEC.md`.
 
 Current API shell:
 
@@ -97,55 +99,40 @@ Current API shell:
 - `GET /api/v1/knowledge-bases`
 - `GET /api/v1/knowledge-bases/{id}`
 - `PATCH /api/v1/knowledge-bases/{id}`
-- `DELETE /api/v1/knowledge-bases/{id}`
-- `POST /api/v1/knowledge-bases/official`
+- `DELETE /api/v1/knowledge-bases/{id}` — soft delete; objects are reclaimed by storage GC
 
 Design:
 
-- Expert Next API enforces auth, tenant and RBAC.
-- Tenant-scoped PageIndex calls include `X-Tenant-Id` so PageIndex can enforce
-  resource isolation. Official/platform calls intentionally omit that header.
-- PageIndex owns actual corpus/index/project state.
-- Store only mapping metadata locally if PageIndex IDs do not directly match old
-  API IDs.
-
-Open decisions:
-
-- Whether PageIndex is used as a direct Python SDK, self-hosted HTTP service,
-  cloud API, or MCP.
-- How PageIndex corpus/project IDs map to old `knowledgeBaseId`.
-- Whether official/tenant/private visibility lives locally or in PageIndex
-  metadata.
+- Expert Next API enforces auth and platform RBAC (`kb:*`). `owner_user_id` is creator
+  attribution, not access control.
+- A single `status` (`active`/`archived`) answers whether a base is usable; archived bases
+  reject writes.
+- Build is deferred: `POST /{id}/build` and the `/{id}/builds*` routes are placeholders
+  (validate the base, then return 501). See section 4.3 of the spec.
 
 ### 4.3 Document and Upload APIs
 
-Compatibility API owned by Expert Next API; implementation delegated to PageIndex.
+Documents are nested under a knowledge base and uploaded directly to MinIO via presigned URLs;
+FastAPI never streams document bodies. There are **no** top-level `/documents` or `/uploads`
+routes, and no jobs/chunks/reindex/multipart endpoints. Canonical contract:
+`docs/KNOWLEDGE_BASE_STORAGE_AND_BUILD_SPEC.md`.
 
-Current API shell:
+Current API shell (all nested under `/api/v1/knowledge-bases/{id}/docs`):
 
-- `POST /api/v1/knowledge-bases/{id}/documents`
-- `GET /api/v1/knowledge-bases/{id}/documents`
-- `GET /api/v1/documents/{id}`
-- `GET /api/v1/documents/{id}/jobs`
-- `GET /api/v1/documents/{id}/chunks`
-- `DELETE /api/v1/documents/{id}`
-- `POST /api/v1/documents/{id}/reindex`
-- `POST /api/v1/uploads/initiate`
-- `POST /api/v1/uploads/complete`
-- `POST /api/v1/uploads/multipart/initiate`
-- `POST /api/v1/uploads/multipart/parts`
-- `POST /api/v1/uploads/multipart/complete`
-- `POST /api/v1/uploads/multipart/abort`
+- `POST .../docs/upload-url` — mint a presigned PUT + create an upload session
+- `POST .../docs/complete-upload` — verify the object (HEAD) and create the document
+- `GET .../docs` / `GET .../docs/{documentId}`
+- `PATCH .../docs/{documentId}` — rename / metadata
+- `DELETE .../docs/{documentId}` — soft delete; object reclaimed by storage GC
+- `GET .../docs/{documentId}/download-url` — presigned GET
 
 Design:
 
-- FastAPI should not parse/index documents itself.
-- Tenant-scoped PageIndex calls include `X-Tenant-Id` so PageIndex can enforce
-  resource isolation for document and upload ids.
-- Upload presigning, storage keys, indexing jobs and status should come from
-  PageIndex or a PageIndex-side wrapper service.
-- If PageIndex does not expose the exact old upload contract, add a small
-  adapter translation layer, not new ingestion logic.
+- The control plane only mints/verifies presigned URLs and removes objects; chunking and
+  indexing are decided at build time, not here.
+- Delete is a soft delete (`deleted_at`) so the cascade never strands MinIO objects. Storage GC
+  (`POST /api/v1/ops/storage/gc`, `system:ops`) reclaims expired upload-session objects,
+  soft-deleted document objects and soft-deleted knowledge-base objects, then hard-deletes rows.
 
 ### 4.4 Chat APIs
 

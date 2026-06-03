@@ -83,3 +83,35 @@ Current response:
   }
 }
 ```
+
+### POST /storage/gc
+
+Run the object-storage garbage-collection passes. Intended to be called periodically (e.g. from
+a cron job).
+
+Auth:
+
+```text
+Authorization: Bearer <accessToken>
+```
+
+Required platform permission:
+
+```text
+system:ops
+```
+
+Each pass is idempotent and best-effort by object key, so repeated runs are safe and a partial
+failure is retried on the next call. Reclaims, in order: expired upload-session objects,
+soft-deleted document objects, and soft-deleted knowledge-base objects (then hard-deletes the
+rows).
+
+Current response (counts reclaimed by each pass):
+
+```json
+{
+  "expiredSessions": 0,
+  "purgedDocuments": 0,
+  "purgedKnowledgeBases": 0
+}
+```

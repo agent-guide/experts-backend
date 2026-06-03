@@ -3,30 +3,92 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
-Visibility = Literal["private", "tenant_public", "official_public"]
+# A knowledge base has a single lifecycle status. `active` means it is usable; `archived`
+# means it is retired and rejects writes. Build readiness is intentionally NOT modeled yet:
+# build is deferred, and a separate field would only add another status to reconcile.
+KbStatus = Literal["active", "archived"]
+FileType = Literal["pdf", "docx", "pptx", "xlsx", "md", "txt", "html", "csv", "json"]
+ParseStatus = Literal["pending", "processing", "ready", "failed"]
+IndexStatus = Literal["pending", "processing", "ready", "failed", "stale"]
+
+
+# Knowledge bases -----------------------------------------------------------------
 
 
 class CreateKnowledgeBaseRequest(BaseModel):
     name: str
     description: str | None = None
-    visibility: Visibility = "private"
-    defaultChunkStrategy: str | None = None
-    defaultChunkConfig: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class UpdateKnowledgeBaseRequest(BaseModel):
     name: str | None = None
     description: str | None = None
-    visibility: Visibility | None = None
-    defaultChunkStrategy: str | None = None
-    defaultChunkConfig: dict[str, Any] | None = None
+    metadata: dict[str, Any] | None = None
 
 
-class InitiateUploadRequest(BaseModel):
+class KnowledgeBase(BaseModel):
+    id: str
+    # Creator attribution only. Access is governed by platform permissions, not ownership.
+    ownerUserId: str | None = None
+    name: str
+    description: str | None = None
+    status: KbStatus
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    createdAt: str
+    updatedAt: str
+
+
+class KnowledgeBaseListResponse(BaseModel):
+    items: list[KnowledgeBase]
+
+
+# Documents -----------------------------------------------------------------------
+
+
+class Document(BaseModel):
+    id: str
     knowledgeBaseId: str
     fileName: str
+    fileType: FileType
+    mimeType: str | None = None
     fileSizeBytes: int
-    contentType: str | None = None
+    storageKey: str
+    contentHash: str | None = None
+    parseStatus: ParseStatus
+    indexStatus: IndexStatus
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    createdAt: str
+    updatedAt: str
+
+
+class DocumentListResponse(BaseModel):
+    items: list[Document]
+
+
+class UpdateDocumentRequest(BaseModel):
+    fileName: str | None = None
+    metadata: dict[str, Any] | None = None
+
+
+# Upload flow ---------------------------------------------------------------------
+
+
+class UploadUrlRequest(BaseModel):
+    fileName: str
+    mimeType: str | None = None
+    fileSizeBytes: int
+    contentHash: str | None = None
+
+
+class UploadUrlResponse(BaseModel):
+    uploadSessionId: str
+    documentId: str
+    method: Literal["PUT"] = "PUT"
+    uploadUrl: str
+    headers: dict[str, str] = Field(default_factory=dict)
+    objectKey: str
+    expiresAt: str
 
 
 class CompleteUploadRequest(BaseModel):
@@ -35,17 +97,16 @@ class CompleteUploadRequest(BaseModel):
     fileSizeBytes: int | None = None
 
 
-class MultipartPartsRequest(BaseModel):
-    uploadSessionId: str
-    partNumbers: list[int]
+class DownloadUrlResponse(BaseModel):
+    method: Literal["GET"] = "GET"
+    downloadUrl: str
+    expiresAt: str
 
 
-class CompleteMultipartRequest(BaseModel):
-    uploadSessionId: str
-    parts: list[dict]
-    etag: str | None = None
-    fileSizeBytes: int | None = None
+# Build (Phase 2 placeholder) -----------------------------------------------------
 
 
-class AbortMultipartRequest(BaseModel):
-    uploadSessionId: str
+class BuildRequest(BaseModel):
+    force: bool = False
+    documentIds: list[str] = Field(default_factory=list)
+    config: dict[str, Any] = Field(default_factory=dict)

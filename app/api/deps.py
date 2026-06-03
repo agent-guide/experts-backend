@@ -10,6 +10,7 @@ from app.core.security import decode_access_token
 from app.db import DatabaseConnection, open_database_connection
 from app.domain.auth import Principal
 from app.services.auth_service import AuthService
+from app.services.object_store import ObjectStore, create_object_store
 from app.services.skill_storage import SkillStorage, create_skill_storage
 
 
@@ -27,6 +28,10 @@ def get_ngent_client(settings: Settings = get_settings()) -> NgentClient:
 
 def get_skill_storage(settings: Settings = Depends(get_settings)) -> SkillStorage:
     return create_skill_storage(settings)
+
+
+def get_object_store(settings: Settings = Depends(get_settings)) -> ObjectStore:
+    return create_object_store(settings)
 
 
 def get_database(settings: Settings = Depends(get_settings)) -> Iterator[DatabaseConnection]:

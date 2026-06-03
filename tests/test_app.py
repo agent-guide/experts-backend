@@ -2,6 +2,7 @@ from pathlib import Path
 from io import BytesIO
 from zipfile import ZipFile
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.api.deps import get_skill_storage
@@ -34,7 +35,7 @@ def test_openapi_loads() -> None:
     assert "/api/v1/rbac/platform/users/{user_id}/roles/{role}" in paths
     assert "/api/v1/admin/users" not in paths
     assert "/api/v1/knowledge-bases" in paths
-    assert "/api/v1/knowledge-bases/official" in paths
+    assert "/api/v1/knowledge-bases/official" not in paths
     assert "/api/v1/chat/tasks" in paths
     assert "/api/v1/skills" in paths
 
@@ -524,9 +525,9 @@ def test_rbac_platform_role_changes_invalidate_existing_access_token(tmp_path: P
         assert revoke_expert.status_code == 204
 
         stale_request = client.post(
-            "/api/v1/knowledge-bases/official",
+            "/api/v1/knowledge-bases",
             headers=stale_headers,
-            json={"name": "Official KB", "description": "test"},
+            json={"name": "KB", "description": "test"},
         )
         assert stale_request.status_code == 403
 
@@ -1131,3 +1132,559 @@ tags:
         )
     content.seek(0)
     return content
+
+
+# Knowledge base + document redesign -------------------------------------------------
+
+from app.api.deps import get_object_store  # noqa: E402
+from app.services.object_store import ObjectStat, ObjectStore  # noqa: E402
+
+
+class FakeObjectStore(ObjectStore):
+    """In-memory stand-in for MinIO. Tests simulate the client PUT via `put`."""
+
+    def __init__(self, bucket: str = "expert-docs") -> None:
+        self._bucket = bucket
+        self.objects: dict[str, int] = {}
+        self.removed: list[str] = []
+        self.fail_remove: set[str] = set()
+
+    @property
+    def bucket(self) -> str:
+        return self._bucket
+
+    def presigned_put_url(self, object_key, *, expires, content_type=None) -> str:
+        return f"https://minio.test/{self._bucket}/{object_key}?put"
+
+    def presigned_get_url(self, object_key, *, expires) -> str:
+        return f"https://minio.test/{self._bucket}/{object_key}?get"
+
+    def stat(self, object_key: str) -> ObjectStat:
+        if object_key not in self.objects:
+            from app.core.errors import ApiError
+
+            raise ApiError(404, "DOC_OBJECT_NOT_FOUND", "Uploaded object not found")
+        return ObjectStat(size=self.objects[object_key], etag="fake-md5")
+
+    def remove(self, object_key: str) -> None:
+        if object_key in self.fail_remove:
+            raise RuntimeError("remove failed")
+        self.removed.append(object_key)
+        self.objects.pop(object_key, None)
+
+    # test helper
+    def put(self, object_key: str, size: int) -> None:
+        self.objects[object_key] = size
+
+
+def _kb_test_settings(tmp_path: Path) -> Settings:
+    return Settings(
+        database_url=f"sqlite:///{tmp_path / 'kb.sqlite3'}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+    )
+
+
+def _kb_app(settings: Settings, store: FakeObjectStore):
+    app = create_app(settings)
+    app.dependency_overrides[get_object_store] = lambda: store
+    return app
+
+
+def _login(client: TestClient, settings: Settings, user_id: str, email: str, role: str) -> dict[str, str]:
+    _seed_platform_user(settings, user_id, email, f"{user_id} name", "secret-pass", role)
+    login = client.post("/api/v1/auth/login", json={"email": email, "password": "secret-pass"})
+    assert login.status_code == 200, login.text
+    return {"Authorization": f"Bearer {login.json()['accessToken']}"}
+
+
+def test_kb_crud_has_no_tenant(tmp_path: Path) -> None:
+    settings = _kb_test_settings(tmp_path)
+    store = FakeObjectStore()
+    with TestClient(_kb_app(settings, store)) as client:
+        headers = _login(client, settings, "expert_user", "expert@example.com", "expert")
+        created = client.post("/api/v1/knowledge-bases", headers=headers, json={"name": "KB One"})
+        assert created.status_code == 201, created.text
+        body = created.json()
+        assert "tenantId" not in body
+        # Removed fields are gone from the contract entirely.
+        for gone in ("scope", "visibility", "buildProvider", "buildStatus", "activeBuildId"):
+            assert gone not in body
+        assert body["status"] == "active"
+        kb_id = body["id"]
+
+        got = client.get(f"/api/v1/knowledge-bases/{kb_id}", headers=headers)
+        assert got.status_code == 200
+        listed = client.get("/api/v1/knowledge-bases", headers=headers)
+        assert listed.status_code == 200
+        assert any(item["id"] == kb_id for item in listed.json()["items"])
+
+        patched = client.patch(
+            f"/api/v1/knowledge-bases/{kb_id}", headers=headers, json={"name": "KB Renamed"}
+        )
+        assert patched.status_code == 200
+        assert patched.json()["name"] == "KB Renamed"
+
+        deleted = client.delete(f"/api/v1/knowledge-bases/{kb_id}", headers=headers)
+        assert deleted.status_code == 204
+        assert client.get(f"/api/v1/knowledge-bases/{kb_id}", headers=headers).status_code == 404
+
+
+def test_document_upload_flow(tmp_path: Path) -> None:
+    settings = _kb_test_settings(tmp_path)
+    store = FakeObjectStore()
+    with TestClient(_kb_app(settings, store)) as client:
+        headers = _login(client, settings, "expert_user", "expert@example.com", "expert")
+        kb_id = client.post(
+            "/api/v1/knowledge-bases", headers=headers, json={"name": "Docs KB"}
+        ).json()["id"]
+
+        url_resp = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/upload-url",
+            headers=headers,
+            json={"fileName": "guide.pdf", "mimeType": "application/pdf", "fileSizeBytes": 1024},
+        )
+        assert url_resp.status_code == 200, url_resp.text
+        payload = url_resp.json()
+        assert payload["objectKey"].startswith(f"knowledge-bases/{kb_id}/documents/")
+        assert "tenants/" not in payload["objectKey"]
+
+        # Simulate the client PUT to MinIO with the declared size.
+        store.put(payload["objectKey"], 1024)
+
+        completed = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/complete-upload",
+            headers=headers,
+            json={"uploadSessionId": payload["uploadSessionId"], "fileSizeBytes": 1024},
+        )
+        assert completed.status_code == 201, completed.text
+        doc = completed.json()
+        assert doc["fileType"] == "pdf"
+        assert doc["parseStatus"] == "pending"
+
+        listed = client.get(f"/api/v1/knowledge-bases/{kb_id}/docs", headers=headers)
+        assert listed.status_code == 200
+        assert len(listed.json()["items"]) == 1
+
+        dl = client.get(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/{doc['id']}/download-url", headers=headers
+        )
+        assert dl.status_code == 200
+        assert dl.json()["downloadUrl"].endswith("?get")
+
+        deleted = client.delete(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/{doc['id']}", headers=headers
+        )
+        assert deleted.status_code == 204
+        assert client.get(f"/api/v1/knowledge-bases/{kb_id}/docs", headers=headers).json()["items"] == []
+
+
+def test_complete_upload_size_mismatch_is_rejected(tmp_path: Path) -> None:
+    settings = _kb_test_settings(tmp_path)
+    store = FakeObjectStore()
+    with TestClient(_kb_app(settings, store)) as client:
+        headers = _login(client, settings, "expert_user", "expert@example.com", "expert")
+        kb_id = client.post(
+            "/api/v1/knowledge-bases", headers=headers, json={"name": "KB"}
+        ).json()["id"]
+        payload = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/upload-url",
+            headers=headers,
+            json={"fileName": "a.txt", "fileSizeBytes": 100},
+        ).json()
+
+        # Client uploaded a larger object than declared.
+        store.put(payload["objectKey"], 999)
+        resp = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/complete-upload",
+            headers=headers,
+            json={"uploadSessionId": payload["uploadSessionId"]},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["code"] == "UPLOAD_SIZE_MISMATCH"
+        # No document created, object removed.
+        assert client.get(f"/api/v1/knowledge-bases/{kb_id}/docs", headers=headers).json()["items"] == []
+        assert payload["objectKey"] in store.removed
+
+
+def test_kb_delete_is_soft_and_gc_reclaims_objects(tmp_path: Path) -> None:
+    settings = _kb_test_settings(tmp_path)
+    store = FakeObjectStore()
+    with TestClient(_kb_app(settings, store)) as client:
+        headers = _login(client, settings, "expert_user", "expert@example.com", "expert")
+        kb_id = client.post(
+            "/api/v1/knowledge-bases", headers=headers, json={"name": "Doomed KB"}
+        ).json()["id"]
+
+        payload = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/upload-url",
+            headers=headers,
+            json={"fileName": "guide.pdf", "mimeType": "application/pdf", "fileSizeBytes": 512},
+        ).json()
+        object_key = payload["objectKey"]
+        store.put(object_key, 512)
+        completed = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/complete-upload",
+            headers=headers,
+            json={"uploadSessionId": payload["uploadSessionId"], "fileSizeBytes": 512},
+        )
+        assert completed.status_code == 201, completed.text
+
+        # Delete is a soft delete: the base disappears from all reads at once, but the object is
+        # NOT reclaimed inline -- a hard cascade would have stranded it.
+        assert client.delete(f"/api/v1/knowledge-bases/{kb_id}", headers=headers).status_code == 204
+        assert client.get(f"/api/v1/knowledge-bases/{kb_id}", headers=headers).status_code == 404
+        assert all(
+            item["id"] != kb_id
+            for item in client.get("/api/v1/knowledge-bases", headers=headers).json()["items"]
+        )
+        assert object_key not in store.removed
+
+        # GC reclaims the object, then hard-deletes the rows; a second pass is a no-op.
+        from app.db import open_database_connection
+        from app.services.document_service import DocumentService
+
+        with open_database_connection(settings) as connection:
+            service = DocumentService(connection, store, settings)
+            assert service.purge_deleted_knowledge_bases() == 1
+            assert service.purge_deleted_knowledge_bases() == 0
+        assert object_key in store.removed
+
+
+def test_complete_upload_concurrent_completion_maps_to_409(tmp_path: Path, monkeypatch) -> None:
+    settings = _kb_test_settings(tmp_path)
+    store = FakeObjectStore()
+    with TestClient(_kb_app(settings, store)) as client:
+        headers = _login(client, settings, "expert_user", "expert@example.com", "expert")
+        kb_id = client.post(
+            "/api/v1/knowledge-bases", headers=headers, json={"name": "KB"}
+        ).json()["id"]
+        payload = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/upload-url",
+            headers=headers,
+            json={"fileName": "a.txt", "fileSizeBytes": 64},
+        ).json()
+        store.put(payload["objectKey"], 64)
+        body = {"uploadSessionId": payload["uploadSessionId"], "fileSizeBytes": 64}
+
+        first = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/complete-upload", headers=headers, json=body
+        )
+        assert first.status_code == 201, first.text
+
+        # Simulate a second request that read the session as still `initiated` (the lost race):
+        # it passes the status gate and collides on the documents primary key. The guard must
+        # turn that into a 409, never a 500.
+        from app.services.document_repository import DocumentRepository
+
+        original_get_session = DocumentRepository.get_session
+
+        def stale_get_session(self, session_id):
+            session = original_get_session(self, session_id)
+            if session is not None:
+                session.status = "initiated"
+            return session
+
+        monkeypatch.setattr(DocumentRepository, "get_session", stale_get_session)
+        second = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/complete-upload", headers=headers, json=body
+        )
+        assert second.status_code == 409, second.text
+        assert second.json()["code"] == "UPLOAD_ALREADY_COMPLETED"
+        # Still exactly one document.
+        listed = client.get(f"/api/v1/knowledge-bases/{kb_id}/docs", headers=headers)
+        assert len(listed.json()["items"]) == 1
+
+
+def test_document_reads_do_not_require_object_store(tmp_path: Path) -> None:
+    settings = _kb_test_settings(tmp_path)
+    store = FakeObjectStore()
+    app = create_app(settings)
+    app.dependency_overrides[get_object_store] = lambda: store
+    with TestClient(app) as client:
+        headers = _login(client, settings, "expert_user", "expert@example.com", "expert")
+        kb_id = client.post(
+            "/api/v1/knowledge-bases", headers=headers, json={"name": "KB"}
+        ).json()["id"]
+        payload = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/upload-url",
+            headers=headers,
+            json={"fileName": "a.txt", "fileSizeBytes": 32},
+        ).json()
+        store.put(payload["objectKey"], 32)
+        doc_id = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/complete-upload",
+            headers=headers,
+            json={"uploadSessionId": payload["uploadSessionId"], "fileSizeBytes": 32},
+        ).json()["id"]
+
+        # Object storage is now unavailable. Pure-DB routes must not depend on it.
+        def broken_store() -> ObjectStore:
+            raise RuntimeError("object store is down")
+
+        app.dependency_overrides[get_object_store] = broken_store
+        assert client.get(f"/api/v1/knowledge-bases/{kb_id}/docs", headers=headers).status_code == 200
+        assert (
+            client.get(f"/api/v1/knowledge-bases/{kb_id}/docs/{doc_id}", headers=headers).status_code
+            == 200
+        )
+        assert (
+            client.patch(
+                f"/api/v1/knowledge-bases/{kb_id}/docs/{doc_id}",
+                headers=headers,
+                json={"fileName": "b.txt"},
+            ).status_code
+            == 200
+        )
+        assert (
+            client.delete(
+                f"/api/v1/knowledge-bases/{kb_id}/docs/{doc_id}", headers=headers
+            ).status_code
+            == 204
+        )
+
+        # Routes that genuinely mint presigned URLs still surface the broken store.
+        with pytest.raises(RuntimeError):
+            client.post(
+                f"/api/v1/knowledge-bases/{kb_id}/docs/upload-url",
+                headers=headers,
+                json={"fileName": "c.txt", "fileSizeBytes": 10},
+            )
+
+
+def test_storage_gc_endpoint_reclaims_all_three_classes(tmp_path: Path) -> None:
+    settings = _kb_test_settings(tmp_path)
+    store = FakeObjectStore()
+    with TestClient(_kb_app(settings, store)) as client:
+        admin = _login(client, settings, "admin_user", "admin@example.com", "admin")
+
+        kb_id = client.post(
+            "/api/v1/knowledge-bases", headers=admin, json={"name": "KB"}
+        ).json()["id"]
+
+        # (a) A soft-deleted document -> purgedDocuments.
+        doc_payload = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/upload-url",
+            headers=admin,
+            json={"fileName": "doc.txt", "fileSizeBytes": 16},
+        ).json()
+        store.put(doc_payload["objectKey"], 16)
+        doc_id = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/complete-upload",
+            headers=admin,
+            json={"uploadSessionId": doc_payload["uploadSessionId"], "fileSizeBytes": 16},
+        ).json()["id"]
+        client.delete(f"/api/v1/knowledge-bases/{kb_id}/docs/{doc_id}", headers=admin)
+
+        # (b) An expired, never-completed upload session -> expiredSessions.
+        orphan = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/upload-url",
+            headers=admin,
+            json={"fileName": "orphan.txt", "fileSizeBytes": 8},
+        ).json()
+        store.put(orphan["objectKey"], 8)
+        # Force the session past its TTL without waiting on the clock.
+        with open_database_connection(settings) as connection:
+            connection.execute(
+                "update upload_sessions set expires_at = ? where id = ?",
+                ("2000-01-01T00:00:00+00:00", orphan["uploadSessionId"]),
+            )
+            connection.commit()
+
+        # (c) A soft-deleted knowledge base -> purgedKnowledgeBases.
+        kb2_id = client.post(
+            "/api/v1/knowledge-bases", headers=admin, json={"name": "KB2"}
+        ).json()["id"]
+        kb2_doc = client.post(
+            f"/api/v1/knowledge-bases/{kb2_id}/docs/upload-url",
+            headers=admin,
+            json={"fileName": "k2.txt", "fileSizeBytes": 4},
+        ).json()
+        store.put(kb2_doc["objectKey"], 4)
+        client.post(
+            f"/api/v1/knowledge-bases/{kb2_id}/docs/complete-upload",
+            headers=admin,
+            json={"uploadSessionId": kb2_doc["uploadSessionId"], "fileSizeBytes": 4},
+        )
+        client.delete(f"/api/v1/knowledge-bases/{kb2_id}", headers=admin)
+
+        resp = client.post("/api/v1/ops/storage/gc", headers=admin)
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body == {
+            "expiredSessions": 1,
+            "purgedDocuments": 1,
+            "purgedKnowledgeBases": 1,
+        }
+        for key in (doc_payload["objectKey"], orphan["objectKey"], kb2_doc["objectKey"]):
+            assert key in store.removed
+
+        # Idempotent: a second pass reclaims nothing.
+        assert client.post("/api/v1/ops/storage/gc", headers=admin).json() == {
+            "expiredSessions": 0,
+            "purgedDocuments": 0,
+            "purgedKnowledgeBases": 0,
+        }
+
+
+def test_storage_gc_keeps_rows_when_object_remove_fails(tmp_path: Path) -> None:
+    settings = _kb_test_settings(tmp_path)
+    store = FakeObjectStore()
+    with TestClient(_kb_app(settings, store)) as client:
+        admin = _login(client, settings, "admin_user", "admin@example.com", "admin")
+        kb_id = client.post(
+            "/api/v1/knowledge-bases", headers=admin, json={"name": "KB"}
+        ).json()["id"]
+
+        deleted_doc = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/upload-url",
+            headers=admin,
+            json={"fileName": "deleted.txt", "fileSizeBytes": 16},
+        ).json()
+        store.put(deleted_doc["objectKey"], 16)
+        deleted_doc_id = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/complete-upload",
+            headers=admin,
+            json={"uploadSessionId": deleted_doc["uploadSessionId"], "fileSizeBytes": 16},
+        ).json()["id"]
+        assert (
+            client.delete(
+                f"/api/v1/knowledge-bases/{kb_id}/docs/{deleted_doc_id}", headers=admin
+            ).status_code
+            == 204
+        )
+
+        orphan = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/upload-url",
+            headers=admin,
+            json={"fileName": "orphan.txt", "fileSizeBytes": 8},
+        ).json()
+        store.put(orphan["objectKey"], 8)
+        with open_database_connection(settings) as connection:
+            connection.execute(
+                "update upload_sessions set expires_at = ? where id = ?",
+                ("2000-01-01T00:00:00+00:00", orphan["uploadSessionId"]),
+            )
+            connection.commit()
+
+        kb2_id = client.post(
+            "/api/v1/knowledge-bases", headers=admin, json={"name": "KB2"}
+        ).json()["id"]
+        kb_doc = client.post(
+            f"/api/v1/knowledge-bases/{kb2_id}/docs/upload-url",
+            headers=admin,
+            json={"fileName": "kb.txt", "fileSizeBytes": 4},
+        ).json()
+        store.put(kb_doc["objectKey"], 4)
+        client.post(
+            f"/api/v1/knowledge-bases/{kb2_id}/docs/complete-upload",
+            headers=admin,
+            json={"uploadSessionId": kb_doc["uploadSessionId"], "fileSizeBytes": 4},
+        )
+        assert client.delete(f"/api/v1/knowledge-bases/{kb2_id}", headers=admin).status_code == 204
+
+        store.fail_remove.update(
+            {deleted_doc["objectKey"], orphan["objectKey"], kb_doc["objectKey"]}
+        )
+        assert client.post("/api/v1/ops/storage/gc", headers=admin).json() == {
+            "expiredSessions": 0,
+            "purgedDocuments": 0,
+            "purgedKnowledgeBases": 0,
+        }
+
+        with open_database_connection(settings) as connection:
+            doc_row = connection.execute(
+                "select id from documents where id = ?", (deleted_doc_id,)
+            ).fetchone()
+            session_row = connection.execute(
+                "select status from upload_sessions where id = ?", (orphan["uploadSessionId"],)
+            ).fetchone()
+            kb_row = connection.execute(
+                "select id from knowledge_bases where id = ?", (kb2_id,)
+            ).fetchone()
+        assert doc_row is not None
+        assert session_row["status"] == "initiated"
+        assert kb_row is not None
+
+        store.fail_remove.clear()
+        assert client.post("/api/v1/ops/storage/gc", headers=admin).json() == {
+            "expiredSessions": 1,
+            "purgedDocuments": 1,
+            "purgedKnowledgeBases": 1,
+        }
+
+
+def test_sqlite_unique_violation_detection_is_specific() -> None:
+    import sqlite3
+
+    from app.services._sql import is_unique_violation
+
+    assert is_unique_violation(sqlite3.IntegrityError("UNIQUE constraint failed: documents.id"))
+    assert is_unique_violation(sqlite3.IntegrityError("PRIMARY KEY must be unique"))
+    assert not is_unique_violation(sqlite3.IntegrityError("CHECK constraint failed: file_type"))
+    assert not is_unique_violation(sqlite3.IntegrityError("FOREIGN KEY constraint failed"))
+
+
+def test_storage_gc_endpoint_requires_system_ops(tmp_path: Path) -> None:
+    settings = _kb_test_settings(tmp_path)
+    store = FakeObjectStore()
+    with TestClient(_kb_app(settings, store)) as client:
+        # `expert` authors knowledge bases but holds no system:ops permission.
+        expert = _login(client, settings, "expert_user", "expert@example.com", "expert")
+        resp = client.post("/api/v1/ops/storage/gc", headers=expert)
+        assert resp.status_code == 403
+
+
+def test_upload_url_rejects_unsupported_type(tmp_path: Path) -> None:
+    settings = _kb_test_settings(tmp_path)
+    store = FakeObjectStore()
+    with TestClient(_kb_app(settings, store)) as client:
+        headers = _login(client, settings, "expert_user", "expert@example.com", "expert")
+        kb_id = client.post(
+            "/api/v1/knowledge-bases", headers=headers, json={"name": "KB"}
+        ).json()["id"]
+        resp = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/upload-url",
+            headers=headers,
+            json={"fileName": "malware.exe", "fileSizeBytes": 10},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["code"] == "DOC_UNSUPPORTED_TYPE"
+
+
+def test_kb_access_is_permission_based_not_owner_based(tmp_path: Path) -> None:
+    settings = _kb_test_settings(tmp_path)
+    store = FakeObjectStore()
+    with TestClient(_kb_app(settings, store)) as client:
+        creator = _login(client, settings, "creator_user", "creator@example.com", "expert")
+        other = _login(client, settings, "other_user", "other@example.com", "expert")
+        kb_id = client.post(
+            "/api/v1/knowledge-bases", headers=creator, json={"name": "Platform KB"}
+        ).json()["id"]
+        # Knowledge bases are platform-owned: any platform user holding kb:delete may delete
+        # one, regardless of who created it. ownerUserId is attribution, not access control.
+        resp = client.delete(f"/api/v1/knowledge-bases/{kb_id}", headers=other)
+        assert resp.status_code == 204
+
+
+def test_build_endpoint_is_stub(tmp_path: Path) -> None:
+    settings = _kb_test_settings(tmp_path)
+    store = FakeObjectStore()
+    with TestClient(_kb_app(settings, store)) as client:
+        headers = _login(client, settings, "expert_user", "expert@example.com", "expert")
+        kb_id = client.post(
+            "/api/v1/knowledge-bases", headers=headers, json={"name": "KB"}
+        ).json()["id"]
+        resp = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/build", headers=headers, json={}
+        )
+        assert resp.status_code == 501
+        assert resp.json()["status"] == "not_implemented"
+
+        # A missing knowledge base is a 404, not a 501 -- the placeholder still honours resource
+        # semantics rather than acknowledging arbitrary ids.
+        missing = client.post(
+            "/api/v1/knowledge-bases/kb_does_not_exist/build", headers=headers, json={}
+        )
+        assert missing.status_code == 404
+        assert missing.json()["code"] == "KB_NOT_FOUND"
