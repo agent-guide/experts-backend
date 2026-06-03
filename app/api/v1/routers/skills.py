@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+import mimetypes
+import posixpath
+
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import Response
 
 from app.api.deps import (
@@ -10,7 +13,8 @@ from app.api.deps import (
 from app.db import DatabaseConnection
 from app.domain.auth import Principal
 from app.domain.skills import Skill, SkillListResponse, SkillMetadataUpdate
-from app.services.skill_service import SkillService
+from app.core.errors import ApiError
+from app.services.skill_service import MAX_ARCHIVE_BYTES, SkillService
 from app.services.skill_storage import SkillStorage
 
 router = APIRouter()
@@ -19,12 +23,15 @@ router = APIRouter()
 @router.post("", response_model=Skill, status_code=201)
 async def upload_skill(
     file: UploadFile = File(...),
-    slug: str | None = None,
-    _: Principal = Depends(require_platform_permission("skill:publish")),
+    slug: str | None = Form(default=None),
+    _: Principal = Depends(require_platform_permission("skill:write")),
     connection: DatabaseConnection = Depends(get_database),
     storage: SkillStorage = Depends(get_skill_storage),
 ) -> Skill:
-    return SkillService(connection, storage).upload(await file.read(), slug)
+    content = await file.read(MAX_ARCHIVE_BYTES + 1)
+    if len(content) > MAX_ARCHIVE_BYTES:
+        raise ApiError(400, "SKILL_ZIP_TOO_LARGE", "Skill zip archive is too large")
+    return SkillService(connection, storage).upload(content, slug)
 
 
 @router.get("", response_model=SkillListResponse)
@@ -38,13 +45,19 @@ async def list_skills(
     storage: SkillStorage = Depends(get_skill_storage),
 ) -> SkillListResponse:
     normalized_tags = _normalize_tags(tags)
-    items = SkillService(connection, storage).list(
+    items, total = SkillService(connection, storage).list(
         tags=normalized_tags,
         search=search,
         limit=limit,
         offset=offset,
     )
-    return SkillListResponse(items=items, limit=limit, offset=offset)
+    return SkillListResponse(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        hasMore=offset + len(items) < total,
+    )
 
 
 @router.get("/{slug}", response_model=Skill)
@@ -61,7 +74,7 @@ async def get_skill(
 async def update_skill(
     slug: str,
     update: SkillMetadataUpdate,
-    _: Principal = Depends(require_platform_permission("skill:publish")),
+    _: Principal = Depends(require_platform_permission("skill:write")),
     connection: DatabaseConnection = Depends(get_database),
     storage: SkillStorage = Depends(get_skill_storage),
 ) -> Skill:
@@ -72,7 +85,7 @@ async def update_skill(
 async def delete_skill(
     slug: str,
     delete_files: bool = False,
-    _: Principal = Depends(require_platform_permission("skill:publish")),
+    _: Principal = Depends(require_platform_permission("skill:write")),
     connection: DatabaseConnection = Depends(get_database),
     storage: SkillStorage = Depends(get_skill_storage),
 ) -> None:
@@ -89,7 +102,18 @@ async def get_skill_file(
     storage: SkillStorage = Depends(get_skill_storage),
 ) -> Response:
     content = SkillService(connection, storage).get_file(slug, path)
-    return Response(content=content, media_type="text/markdown; charset=utf-8")
+    return Response(content=content, media_type=_media_type_for(path))
+
+
+def _media_type_for(path: str) -> str:
+    if posixpath.basename(path).lower().endswith(".md"):
+        return "text/markdown; charset=utf-8"
+    guessed, _ = mimetypes.guess_type(path)
+    if guessed is None:
+        return "application/octet-stream"
+    if guessed.startswith("text/"):
+        return f"{guessed}; charset=utf-8"
+    return guessed
 
 
 def _normalize_tags(values: list[str]) -> list[str]:

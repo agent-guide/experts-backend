@@ -7,10 +7,13 @@ from app.core.errors import ApiError
 
 
 class SkillStorage:
+    def uri_for(self, slug: str) -> str:
+        raise NotImplementedError
+
     def put_files(self, slug: str, files: dict[str, bytes]) -> str:
         raise NotImplementedError
 
-    def get_file(self, slug: str, path: str) -> str:
+    def get_file(self, slug: str, path: str) -> bytes:
         raise NotImplementedError
 
     def delete_skill(self, slug: str) -> None:
@@ -29,14 +32,17 @@ class LocalSkillStorage(SkillStorage):
             target = base / relative_path
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(content)
+        return self.uri_for(slug)
+
+    def uri_for(self, slug: str) -> str:
         return f"/{self.prefix}/{slug}"
 
-    def get_file(self, slug: str, path: str) -> str:
+    def get_file(self, slug: str, path: str) -> bytes:
         relative = _safe_relative_path(path)
         target = self._base(slug) / relative
         if not target.is_file():
             raise ApiError(404, "SKILL_FILE_NOT_FOUND", "Skill file not found")
-        return target.read_text(encoding="utf-8")
+        return target.read_bytes()
 
     def delete_skill(self, slug: str) -> None:
         base = self._base(slug)
@@ -92,14 +98,17 @@ class MinioSkillStorage(SkillStorage):
                 BytesIO(content),
                 length=len(content),
             )
+        return self.uri_for(slug)
+
+    def uri_for(self, slug: str) -> str:
         return f"minio://{self.bucket}/{self.prefix}/{slug}"
 
-    def get_file(self, slug: str, path: str) -> str:
+    def get_file(self, slug: str, path: str) -> bytes:
         object_name = self._object_name(slug, path)
         try:
             response = self.client.get_object(self.bucket, object_name)
             try:
-                return response.read().decode("utf-8")
+                return response.read()
             finally:
                 response.close()
                 response.release_conn()

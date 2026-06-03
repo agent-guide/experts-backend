@@ -272,7 +272,7 @@ Skills:
 
 - Skills are platform-managed assets.
 - Creating, updating and deleting skills should require platform permission,
-  for example `skill:publish`.
+  for example `skill:write`.
 - Tenant users may browse or use published skills only if the product exposes
   that capability.
 

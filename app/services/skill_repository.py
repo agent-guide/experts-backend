@@ -102,7 +102,10 @@ class SkillRepository:
         search: str | None,
         limit: int,
         offset: int,
-    ) -> list[Skill]:
+    ) -> tuple[list[Skill], int]:
+        # Skills are a small, curated platform-global set, so filtering in memory is
+        # acceptable. `total` is the size of the filtered set (not the page) so callers
+        # can paginate correctly.
         rows = _fetch_all(
             self.connection,
             """
@@ -126,7 +129,8 @@ class SkillRepository:
                 or needle in item.slug.casefold()
                 or needle in item.description.casefold()
             ]
-        return filtered[offset : offset + limit]
+        total = len(filtered)
+        return filtered[offset : offset + limit], total
 
 
 def _map_skill(row: dict[str, Any] | None) -> Skill | None:

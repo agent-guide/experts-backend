@@ -25,5 +25,7 @@ class Skill(BaseModel):
 
 class SkillListResponse(BaseModel):
     items: list[Skill]
+    total: int
     limit: int
     offset: int
+    hasMore: bool

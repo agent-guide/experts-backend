@@ -49,7 +49,7 @@ def platform_role_permissions(role: PlatformRole) -> set[Permission]:
     if role == PlatformRole.EXPERT:
         return {
             "platform:kb_publish_official",
-            "skill:publish",
+            "skill:write",
         }
     if role == PlatformRole.OPERATOR:
         return {
@@ -63,7 +63,7 @@ def platform_role_permissions(role: PlatformRole) -> set[Permission]:
             "platform:role_grant",
             "platform:tenant_manage",
             "platform:kb_publish_official",
-            "skill:publish",
+            "skill:write",
             "system:ops",
         }
     return set()

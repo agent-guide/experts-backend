@@ -4,6 +4,7 @@ from zipfile import ZipFile
 
 from fastapi.testclient import TestClient
 
+from app.api.deps import get_skill_storage
 from app.core.config import Settings
 from app.core.security import hash_opaque_token, hash_password
 from app.db import migrate_database, open_database_connection
@@ -767,9 +768,10 @@ def test_skills_upload_list_get_file_update_and_delete(tmp_path: Path) -> None:
 
         list_response = client.get("/api/v1/skills?tags=amazon&search=review", headers=headers)
         assert list_response.status_code == 200
-        assert [item["slug"] for item in list_response.json()["items"]] == [
-            "amazon-review-analyzer"
-        ]
+        list_body = list_response.json()
+        assert [item["slug"] for item in list_body["items"]] == ["amazon-review-analyzer"]
+        assert list_body["total"] == 1
+        assert list_body["hasMore"] is False
 
         file_response = client.get(
             "/api/v1/skills/amazon-review-analyzer/file?path=SKILL.md",
@@ -797,6 +799,240 @@ def test_skills_upload_list_get_file_update_and_delete(tmp_path: Path) -> None:
         missing_response = client.get("/api/v1/skills/amazon-review-analyzer", headers=headers)
         assert missing_response.status_code == 404
         assert not (tmp_path / "skill-storage" / "skills" / "amazon-review-analyzer").exists()
+
+
+def _skill_test_settings(tmp_path: Path) -> Settings:
+    return Settings(
+        database_url=f"sqlite:///{tmp_path / 'skills.sqlite3'}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+        skill_storage_backend="local",
+        skill_storage_local_dir=str(tmp_path / "skill-storage"),
+    )
+
+
+def _login_skill_expert(client: TestClient, settings: Settings) -> dict[str, str]:
+    _seed_platform_user(
+        settings, "expert_user", "expert@example.com", "Expert User", "expert-secret", "expert"
+    )
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "expert@example.com", "password": "expert-secret"},
+    )
+    assert login.status_code == 200
+    return {"Authorization": f"Bearer {login.json()['accessToken']}"}
+
+
+def _skill_md_zip(skill_md: str, *, root: str = "pkg") -> BytesIO:
+    content = BytesIO()
+    with ZipFile(content, "w") as archive:
+        archive.writestr(f"{root}/SKILL.md", skill_md)
+    content.seek(0)
+    return content
+
+
+def _binary_skill_zip() -> BytesIO:
+    content = BytesIO()
+    with ZipFile(content, "w") as archive:
+        archive.writestr(
+            "pkg/SKILL.md",
+            "---\nname: binary-skill\ndescription: Contains a binary asset.\n---\n",
+        )
+        archive.writestr("pkg/assets/blob.bin", b"\xff\xfe\x00")
+    content.seek(0)
+    return content
+
+
+def test_skills_duplicate_slug_conflict(tmp_path: Path) -> None:
+    settings = _skill_test_settings(tmp_path)
+    with TestClient(create_app(settings)) as client:
+        headers = _login_skill_expert(client, settings)
+        first = client.post(
+            "/api/v1/skills",
+            headers=headers,
+            files={"file": ("skill.zip", _skill_zip(), "application/zip")},
+        )
+        assert first.status_code == 201
+        second = client.post(
+            "/api/v1/skills",
+            headers=headers,
+            files={"file": ("skill.zip", _skill_zip(), "application/zip")},
+        )
+        assert second.status_code == 409
+        assert second.json()["code"] == "SKILL_EXISTS"
+
+
+def test_skills_upload_slug_accepts_multipart_form_field(tmp_path: Path) -> None:
+    settings = _skill_test_settings(tmp_path)
+    with TestClient(create_app(settings)) as client:
+        headers = _login_skill_expert(client, settings)
+        response = client.post(
+            "/api/v1/skills",
+            headers=headers,
+            data={"slug": "custom-skill"},
+            files={"file": ("skill.zip", _skill_zip(), "application/zip")},
+        )
+        assert response.status_code == 201
+        assert response.json()["slug"] == "custom-skill"
+
+
+def test_skills_upload_storage_failure_rolls_back_metadata(tmp_path: Path) -> None:
+    class FailingSkillStorage:
+        deleted = False
+
+        def uri_for(self, slug: str) -> str:
+            return f"/skills/{slug}"
+
+        def put_files(self, slug: str, files: dict[str, bytes]) -> str:
+            raise RuntimeError("storage unavailable")
+
+        def get_file(self, slug: str, path: str) -> bytes:
+            raise AssertionError("not used")
+
+        def delete_skill(self, slug: str) -> None:
+            self.deleted = True
+
+    settings = _skill_test_settings(tmp_path)
+    storage = FailingSkillStorage()
+    test_app = create_app(settings)
+    test_app.dependency_overrides[get_skill_storage] = lambda: storage
+    with TestClient(test_app, raise_server_exceptions=False) as client:
+        headers = _login_skill_expert(client, settings)
+        response = client.post(
+            "/api/v1/skills",
+            headers=headers,
+            files={"file": ("skill.zip", _skill_zip(), "application/zip")},
+        )
+        assert response.status_code == 500
+
+    with open_database_connection(settings) as connection:
+        row = connection.execute(
+            "select count(*) as count from skills where slug = ?",
+            ("amazon-review-analyzer",),
+        ).fetchone()
+    assert row["count"] == 0
+    assert storage.deleted is True
+
+
+def test_skills_list_pagination(tmp_path: Path) -> None:
+    settings = _skill_test_settings(tmp_path)
+    with TestClient(create_app(settings)) as client:
+        headers = _login_skill_expert(client, settings)
+        for slug in ("skill-a", "skill-b"):
+            response = client.post(
+                "/api/v1/skills",
+                headers=headers,
+                data={"slug": slug},
+                files={"file": ("skill.zip", _skill_zip(), "application/zip")},
+            )
+            assert response.status_code == 201
+
+        page = client.get("/api/v1/skills?limit=1", headers=headers).json()
+        assert page["total"] == 2
+        assert len(page["items"]) == 1
+        assert page["hasMore"] is True
+
+        last = client.get("/api/v1/skills?limit=1&offset=1", headers=headers).json()
+        assert last["total"] == 2
+        assert last["hasMore"] is False
+
+
+def test_skills_file_content_type_by_extension(tmp_path: Path) -> None:
+    settings = _skill_test_settings(tmp_path)
+    with TestClient(create_app(settings)) as client:
+        headers = _login_skill_expert(client, settings)
+        client.post(
+            "/api/v1/skills",
+            headers=headers,
+            files={"file": ("skill.zip", _skill_zip(), "application/zip")},
+        )
+        response = client.get(
+            "/api/v1/skills/amazon-review-analyzer/file?path=scripts/analyze_reviews.py",
+            headers=headers,
+        )
+        assert response.status_code == 200
+        content_type = response.headers["content-type"]
+        assert "markdown" not in content_type
+
+
+def test_skills_file_returns_binary_content(tmp_path: Path) -> None:
+    settings = _skill_test_settings(tmp_path)
+    with TestClient(create_app(settings)) as client:
+        headers = _login_skill_expert(client, settings)
+        upload = client.post(
+            "/api/v1/skills",
+            headers=headers,
+            files={"file": ("skill.zip", _binary_skill_zip(), "application/zip")},
+        )
+        assert upload.status_code == 201
+
+        response = client.get(
+            "/api/v1/skills/binary-skill/file?path=assets/blob.bin",
+            headers=headers,
+        )
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/octet-stream"
+        assert response.content == b"\xff\xfe\x00"
+
+
+def test_skills_zip_too_many_files(tmp_path: Path) -> None:
+    settings = _skill_test_settings(tmp_path)
+    with TestClient(create_app(settings)) as client:
+        headers = _login_skill_expert(client, settings)
+        buffer = BytesIO()
+        with ZipFile(buffer, "w") as archive:
+            archive.writestr(
+                "pkg/SKILL.md",
+                "---\nname: big-skill\ndescription: Too many files.\n---\n",
+            )
+            for index in range(501):
+                archive.writestr(f"pkg/file_{index}.txt", "x")
+        buffer.seek(0)
+        response = client.post(
+            "/api/v1/skills",
+            headers=headers,
+            files={"file": ("skill.zip", buffer, "application/zip")},
+        )
+        assert response.status_code == 400
+        assert response.json()["code"] == "SKILL_ZIP_TOO_MANY_FILES"
+
+
+def test_skills_frontmatter_unclosed_block(tmp_path: Path) -> None:
+    settings = _skill_test_settings(tmp_path)
+    with TestClient(create_app(settings)) as client:
+        headers = _login_skill_expert(client, settings)
+        skill_md = "---\nname: broken\ndescription: No closing fence.\n# body without close\n"
+        response = client.post(
+            "/api/v1/skills",
+            headers=headers,
+            files={"file": ("skill.zip", _skill_md_zip(skill_md), "application/zip")},
+        )
+        assert response.status_code == 400
+        assert response.json()["code"] == "SKILL_INVALID_FRONTMATTER"
+
+
+def test_skills_frontmatter_inline_lists_and_dashes(tmp_path: Path) -> None:
+    settings = _skill_test_settings(tmp_path)
+    with TestClient(create_app(settings)) as client:
+        headers = _login_skill_expert(client, settings)
+        skill_md = (
+            "---\n"
+            "name: dash-skill\n"
+            "description: Values with dashes and inline lists.\n"
+            "tags: [alpha-one, beta]\n"
+            "allowed-tools:\n"
+            "  - Bash(some-tool --flag)\n"
+            "---\n# Dash Skill\n"
+        )
+        response = client.post(
+            "/api/v1/skills",
+            headers=headers,
+            files={"file": ("skill.zip", _skill_md_zip(skill_md), "application/zip")},
+        )
+        assert response.status_code == 201
+        body = response.json()
+        assert body["tags"] == ["alpha-one", "beta"]
+        assert body["allowedTools"] == ["Bash(some-tool --flag)"]
 
 
 def _seed_tenant(settings: Settings) -> None:
