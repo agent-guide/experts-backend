@@ -1,75 +1,94 @@
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import Response
 
-from app.api.deps import get_codex_skills_client, require_permission, require_principal
-from app.clients.codex_skills import CodexSkillsClient
+from app.api.deps import get_database, get_skill_storage, require_permission, require_principal
+from app.db import DatabaseConnection
 from app.domain.auth import Principal
+from app.domain.skills import Skill, SkillListResponse, SkillMetadataUpdate
+from app.services.skill_service import SkillService
+from app.services.skill_storage import SkillStorage
 
 router = APIRouter()
 
 
-@router.post("", status_code=201)
+@router.post("", response_model=Skill, status_code=201)
 async def upload_skill(
-    slug: str,
     file: UploadFile = File(...),
+    slug: str | None = None,
     _: Principal = Depends(require_permission("skill:publish")),
-    skills: CodexSkillsClient = Depends(get_codex_skills_client),
-) -> dict:
-    summary = skills.install_zip(slug, await file.read())
-    return summary.model_dump()
+    connection: DatabaseConnection = Depends(get_database),
+    storage: SkillStorage = Depends(get_skill_storage),
+) -> Skill:
+    return SkillService(connection, storage).upload(await file.read(), slug)
 
 
-@router.get("/installed")
-async def list_installed_skills(
+@router.get("", response_model=SkillListResponse)
+async def list_skills(
+    tags: list[str] = Query(default_factory=list),
+    search: str | None = None,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     _: Principal = Depends(require_principal),
-    skills: CodexSkillsClient = Depends(get_codex_skills_client),
-) -> dict:
-    return {"items": [item.model_dump() for item in skills.list_installed()]}
+    connection: DatabaseConnection = Depends(get_database),
+    storage: SkillStorage = Depends(get_skill_storage),
+) -> SkillListResponse:
+    normalized_tags = _normalize_tags(tags)
+    items = SkillService(connection, storage).list(
+        tags=normalized_tags,
+        search=search,
+        limit=limit,
+        offset=offset,
+    )
+    return SkillListResponse(items=items, limit=limit, offset=offset)
 
 
-@router.get("")
-async def list_public_skills(
-    _: Principal = Depends(require_principal),
-    skills: CodexSkillsClient = Depends(get_codex_skills_client),
-) -> dict:
-    return {"items": [item.model_dump() for item in skills.list_installed()]}
-
-
-@router.get("/{slug}")
+@router.get("/{slug}", response_model=Skill)
 async def get_skill(
     slug: str,
     _: Principal = Depends(require_principal),
-    skills: CodexSkillsClient = Depends(get_codex_skills_client),
-) -> dict:
-    for item in skills.list_installed():
-        if item.slug == slug:
-            return item.model_dump()
-    from app.core.errors import ApiError
+    connection: DatabaseConnection = Depends(get_database),
+    storage: SkillStorage = Depends(get_skill_storage),
+) -> Skill:
+    return SkillService(connection, storage).get(slug)
 
-    raise ApiError(404, "SKILL_NOT_FOUND", "Skill not found")
+
+@router.put("/{slug}", response_model=Skill)
+async def update_skill(
+    slug: str,
+    update: SkillMetadataUpdate,
+    _: Principal = Depends(require_permission("skill:publish")),
+    connection: DatabaseConnection = Depends(get_database),
+    storage: SkillStorage = Depends(get_skill_storage),
+) -> Skill:
+    return SkillService(connection, storage).update(slug, update)
+
+
+@router.delete("/{slug}", status_code=204)
+async def delete_skill(
+    slug: str,
+    delete_files: bool = False,
+    _: Principal = Depends(require_permission("skill:publish")),
+    connection: DatabaseConnection = Depends(get_database),
+    storage: SkillStorage = Depends(get_skill_storage),
+) -> None:
+    SkillService(connection, storage).delete(slug, delete_files)
+    return None
 
 
 @router.get("/{slug}/file")
 async def get_skill_file(
     slug: str,
-    filePath: str = "SKILL.md",
+    path: str = "SKILL.md",
     _: Principal = Depends(require_principal),
-    skills: CodexSkillsClient = Depends(get_codex_skills_client),
+    connection: DatabaseConnection = Depends(get_database),
+    storage: SkillStorage = Depends(get_skill_storage),
 ) -> Response:
-    return Response(content=skills.get_file(slug, filePath), media_type="text/plain; charset=utf-8")
+    content = SkillService(connection, storage).get_file(slug, path)
+    return Response(content=content, media_type="text/markdown; charset=utf-8")
 
 
-@router.post("/{slug}/install", status_code=204)
-async def install_skill(slug: str, _: Principal = Depends(require_principal)) -> None:
-    _ = slug
-    return None
-
-
-@router.delete("/{slug}/install", status_code=204)
-async def uninstall_skill(
-    slug: str,
-    _: Principal = Depends(require_principal),
-    skills: CodexSkillsClient = Depends(get_codex_skills_client),
-) -> None:
-    skills.uninstall(slug)
-    return None
+def _normalize_tags(values: list[str]) -> list[str]:
+    tags: list[str] = []
+    for value in values:
+        tags.extend(part.strip() for part in value.split(","))
+    return [tag for tag in tags if tag]

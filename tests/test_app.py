@@ -1,4 +1,6 @@
 from pathlib import Path
+from io import BytesIO
+from zipfile import ZipFile
 
 from fastapi.testclient import TestClient
 
@@ -309,6 +311,83 @@ def test_rbac_ops_cannot_grant_admin(tmp_path: Path) -> None:
         assert grant_response.status_code == 403
 
 
+def test_skills_upload_list_get_file_update_and_delete(tmp_path: Path) -> None:
+    database_path = tmp_path / "skills.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+        skill_storage_backend="local",
+        skill_storage_local_dir=str(tmp_path / "skill-storage"),
+    )
+    test_app = create_app(settings)
+
+    with TestClient(test_app) as client:
+        _seed_tenant(settings)
+        _seed_user(
+            settings,
+            "expert_user",
+            "expert@example.com",
+            "Expert User",
+            "expert-secret",
+            "Expert",
+        )
+        login_response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "expert@example.com", "password": "expert-secret"},
+        )
+        assert login_response.status_code == 200
+        headers = {
+            "Authorization": f"Bearer {login_response.json()['accessToken']}",
+            "x-tenant-id": "tenant_default",
+        }
+
+        upload_response = client.post(
+            "/api/v1/skills",
+            headers=headers,
+            files={"file": ("skill.zip", _skill_zip(), "application/zip")},
+        )
+        assert upload_response.status_code == 201
+        uploaded = upload_response.json()
+        assert uploaded["slug"] == "amazon-review-analyzer"
+        assert uploaded["allowedTools"] == ["Bash(python scripts/analyze_reviews.py:*)"]
+        assert uploaded["filePaths"] == ["SKILL.md", "scripts/analyze_reviews.py"]
+        assert uploaded["tags"] == ["amazon", "reviews"]
+
+        list_response = client.get("/api/v1/skills?tags=amazon&search=review", headers=headers)
+        assert list_response.status_code == 200
+        assert [item["slug"] for item in list_response.json()["items"]] == [
+            "amazon-review-analyzer"
+        ]
+
+        file_response = client.get(
+            "/api/v1/skills/amazon-review-analyzer/file?path=SKILL.md",
+            headers=headers,
+        )
+        assert file_response.status_code == 200
+        assert "Analyze Amazon review trends" in file_response.text
+
+        update_response = client.put(
+            "/api/v1/skills/amazon-review-analyzer",
+            headers=headers,
+            json={"description": "Updated description", "tags": ["amazon", "feedback"]},
+        )
+        assert update_response.status_code == 200
+        updated = update_response.json()
+        assert updated["description"] == "Updated description"
+        assert updated["tags"] == ["amazon", "feedback"]
+
+        delete_response = client.delete(
+            "/api/v1/skills/amazon-review-analyzer?delete_files=true",
+            headers=headers,
+        )
+        assert delete_response.status_code == 204
+
+        missing_response = client.get("/api/v1/skills/amazon-review-analyzer", headers=headers)
+        assert missing_response.status_code == 404
+        assert not (tmp_path / "skill-storage" / "skills" / "amazon-review-analyzer").exists()
+
+
 def _seed_tenant(settings: Settings) -> None:
     with open_database_connection(settings) as connection:
         connection.execute(
@@ -345,3 +424,29 @@ def _seed_user(
             (f"{user_id}_role", "tenant_default", user_id, role, user_id),
         )
         connection.commit()
+
+
+def _skill_zip() -> BytesIO:
+    content = BytesIO()
+    with ZipFile(content, "w") as archive:
+        archive.writestr(
+            "amazon-review-analyzer/SKILL.md",
+            """---
+name: amazon-review-analyzer
+description: Analyze Amazon review trends and customer feedback.
+version: 1.0.0
+allowed-tools:
+  - Bash(python scripts/analyze_reviews.py:*)
+tags:
+  - amazon
+  - reviews
+---
+# Amazon Review Analyzer
+""",
+        )
+        archive.writestr(
+            "amazon-review-analyzer/scripts/analyze_reviews.py",
+            "print('ok')\n",
+        )
+    content.seek(0)
+    return content

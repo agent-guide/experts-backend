@@ -164,24 +164,28 @@ Open decisions:
 
 ### 4.5 Skill APIs
 
-Owned by Expert Next API, backed by Codex skills directory.
+Owned by Expert Next API, backed by the `skills` database table and local or
+MinIO skill file storage. Skills are platform-managed assets, not tenant/user
+installation records.
 
-Current API shell:
+Current APIs:
 
 - `POST /api/v1/skills`
 - `GET /api/v1/skills`
-- `GET /api/v1/skills/installed`
 - `GET /api/v1/skills/{slug}`
+- `PUT /api/v1/skills/{slug}`
+- `DELETE /api/v1/skills/{slug}`
 - `GET /api/v1/skills/{slug}/file`
-- `POST /api/v1/skills/{slug}/install`
-- `DELETE /api/v1/skills/{slug}/install`
 
 Design:
 
 - Treat skills as Codex-native assets, not a separate product-specific format.
-- Initial storage is `$CODEX_HOME/skills` or `EXPERT_NEXT_CODEX_SKILLS_DIR`.
-- Future version should parse skill frontmatter, validate slugs, and optionally
-  maintain tenant/user installation metadata.
+- Upload accepts a zip containing `SKILL.md`, parses frontmatter, validates a
+  slug, stores files, and records metadata.
+- Database metadata includes slug, name, description, version, allowed tools,
+  file paths, tags and storage URI.
+- Storage backend is selected by `EXPERT_NEXT_SKILL_STORAGE_BACKEND`, currently
+  `local` or `minio`.
 
 ### 4.6 Models and Ops APIs
 

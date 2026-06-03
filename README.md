@@ -7,7 +7,7 @@ capabilities to external systems:
 
 - Knowledge bases, documents, uploads and object storage: PageIndex adapter.
 - Chat/session execution: ngent + Codex/ACP adapter.
-- Skill management: Codex skills filesystem management.
+- Skill management: DB metadata plus local or MinIO-backed skill file storage.
 - Multi-tenant auth and common APIs: implemented in this service.
 
 ## Run
@@ -32,9 +32,8 @@ Set `EXPERT_NEXT_DATABASE_URL` to a PostgreSQL URL for production, for example:
 EXPERT_NEXT_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/expert
 ```
 
-On startup the service applies the shared schema files from the repository root
-`infra/sql`. Override the location with `EXPERT_NEXT_DATABASE_SCHEMA_DIR` if the
-backend is deployed outside the monorepo checkout.
+On startup the service applies schema files from `amazon-experts-backend/infra/sql`.
+Override the location with `EXPERT_NEXT_DATABASE_SCHEMA_DIR` if needed.
 
 Auth endpoints are backed by the shared auth tables:
 
@@ -53,6 +52,34 @@ deployments must set a strong `EXPERT_NEXT_JWT_SECRET`.
 RBAC permissions are resolved from the same role model as the current Expert
 project: `User`, `Expert`, `Admin` and `Ops`.
 
+Skill files default to local storage:
+
+```text
+EXPERT_NEXT_SKILL_STORAGE_BACKEND=local
+EXPERT_NEXT_SKILL_STORAGE_LOCAL_DIR=./.data/skills
+EXPERT_NEXT_SKILL_STORAGE_PREFIX=skills
+```
+
+Set `EXPERT_NEXT_SKILL_STORAGE_BACKEND=minio` and provide the MinIO settings for
+object storage:
+
+```text
+EXPERT_NEXT_MINIO_ENDPOINT=127.0.0.1:9000
+EXPERT_NEXT_MINIO_ACCESS_KEY=minioadmin
+EXPERT_NEXT_MINIO_SECRET_KEY=minioadmin
+EXPERT_NEXT_MINIO_BUCKET=expert-skills
+EXPERT_NEXT_MINIO_SECURE=false
+```
+
+Skill endpoints:
+
+- `POST /api/v1/skills`
+- `GET /api/v1/skills`
+- `GET /api/v1/skills/{slug}`
+- `PUT /api/v1/skills/{slug}`
+- `DELETE /api/v1/skills/{slug}?delete_files=true`
+- `GET /api/v1/skills/{slug}/file?path=SKILL.md`
+
 OpenAPI docs:
 
 ```text
@@ -62,7 +89,7 @@ http://127.0.0.1:15000/docs
 ## Current Status
 
 This is a framework scaffold. It exposes the API modules and dependency
-boundaries, but PageIndex/ngent/Codex skill integrations are intentionally thin
-adapters for future hardening.
+boundaries. PageIndex and ngent integrations are intentionally thin adapters for
+future hardening.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
