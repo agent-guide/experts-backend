@@ -20,20 +20,69 @@ pip install -e ".[dev]"
 python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 15000
 ```
 
-By default the service uses sqlite for local/test runs:
+OpenAPI docs are then served at `http://127.0.0.1:15000/docs`.
 
-```text
-EXPERT_NEXT_DATABASE_URL=sqlite:///./.data/amazon-experts-backend.sqlite3
-```
+All configuration is read from environment variables prefixed with `EXPERT_NEXT_`,
+which can also be placed in a `.env` or `.env.local` file at the project root
+(see `app/core/config.py`). Copy `.env.example` to `.env` to get started.
 
-Set `EXPERT_NEXT_DATABASE_URL` to a PostgreSQL URL for production, for example:
+## Configuration
 
-```text
-EXPERT_NEXT_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/expert
-```
+### Choosing the database: SQLite vs PostgreSQL
 
-On startup the service applies schema files from `amazon-experts-backend/infra/sql`.
-Override the location with `EXPERT_NEXT_DATABASE_SCHEMA_DIR` if needed.
+The backend is selected automatically from the **URL scheme** of
+`EXPERT_NEXT_DATABASE_URL` — there is no separate toggle (see `app/db.py`).
+
+- SQLite (default, local/tests) — the URL starts with `sqlite:///`:
+
+  ```text
+  EXPERT_NEXT_DATABASE_URL=sqlite:///./.data/amazon-experts-backend.sqlite3
+  ```
+
+  Use `sqlite:///:memory:` for an in-memory database.
+
+- PostgreSQL (production) — the URL starts with `postgresql://` (or `postgres://`):
+
+  ```text
+  EXPERT_NEXT_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/expert
+  ```
+
+  PostgreSQL requires the `psycopg` dependency; without it the service fails at
+  startup with `PostgreSQL requires the psycopg dependency.`
+
+Both backends share the same schema files. On startup (when
+`EXPERT_NEXT_DATABASE_AUTO_MIGRATE=true`) the service applies every
+`*.sql` file under `amazon-experts-backend/infra/sql`; override the location with
+`EXPERT_NEXT_DATABASE_SCHEMA_DIR`. The runner re-runs all SQL on each boot and
+relies on `if not exists` idempotency. The SQL files are written in PostgreSQL
+syntax; for SQLite, `app/db.py` rewrites Postgres-only constructs (`jsonb`,
+`timestamptz`, `now()`, ...) into SQLite-compatible forms on the fly.
+
+### Choosing skill file storage: filesystem vs MinIO
+
+The backend is selected by `EXPERT_NEXT_SKILL_STORAGE_BACKEND` (default `local`).
+
+- Local filesystem (default):
+
+  ```text
+  EXPERT_NEXT_SKILL_STORAGE_BACKEND=local
+  EXPERT_NEXT_SKILL_STORAGE_LOCAL_DIR=./.data/skills
+  EXPERT_NEXT_SKILL_STORAGE_PREFIX=skills
+  ```
+
+- MinIO object storage — set the backend to `minio` and provide the connection
+  settings:
+
+  ```text
+  EXPERT_NEXT_SKILL_STORAGE_BACKEND=minio
+  EXPERT_NEXT_MINIO_ENDPOINT=127.0.0.1:9000
+  EXPERT_NEXT_MINIO_ACCESS_KEY=minioadmin
+  EXPERT_NEXT_MINIO_SECRET_KEY=minioadmin
+  EXPERT_NEXT_MINIO_BUCKET=expert-skills
+  EXPERT_NEXT_MINIO_SECURE=false
+  ```
+
+## Auth
 
 Auth endpoints are backed by the shared auth tables:
 
@@ -54,26 +103,7 @@ deployments must set a strong `EXPERT_NEXT_JWT_SECRET`.
 RBAC permissions are resolved from tenant roles (`admin`, `member`) and platform
 roles (`admin`, `expert`, `operator`).
 
-Skill files default to local storage:
-
-```text
-EXPERT_NEXT_SKILL_STORAGE_BACKEND=local
-EXPERT_NEXT_SKILL_STORAGE_LOCAL_DIR=./.data/skills
-EXPERT_NEXT_SKILL_STORAGE_PREFIX=skills
-```
-
-Set `EXPERT_NEXT_SKILL_STORAGE_BACKEND=minio` and provide the MinIO settings for
-object storage:
-
-```text
-EXPERT_NEXT_MINIO_ENDPOINT=127.0.0.1:9000
-EXPERT_NEXT_MINIO_ACCESS_KEY=minioadmin
-EXPERT_NEXT_MINIO_SECRET_KEY=minioadmin
-EXPERT_NEXT_MINIO_BUCKET=expert-skills
-EXPERT_NEXT_MINIO_SECURE=false
-```
-
-Skill endpoints:
+Skill endpoints (file storage backend is configured above):
 
 - `POST /api/v1/skills`
 - `GET /api/v1/skills`
@@ -81,12 +111,6 @@ Skill endpoints:
 - `PUT /api/v1/skills/{slug}`
 - `DELETE /api/v1/skills/{slug}?delete_files=true`
 - `GET /api/v1/skills/{slug}/file?path=SKILL.md`
-
-OpenAPI docs:
-
-```text
-http://127.0.0.1:15000/docs
-```
 
 ## Current Status
 
