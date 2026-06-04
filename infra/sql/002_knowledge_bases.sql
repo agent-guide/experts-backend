@@ -7,11 +7,6 @@
 -- rather than here. There is no build_provider/build_status/active_build_id either -- build is
 -- deferred and a single status answers whether the knowledge base is usable. owner_user_id is
 -- creator attribution only, not an access-control input.
---
--- This is the canonical (final) shape. The redesign is folded into this create-if-not-exists
--- definition rather than an unconditional drop/recreate, because the migration runner re-runs
--- every file on each boot and has no applied-migrations table -- an unconditional recreate
--- would wipe data on restart. Legacy databases are reshaped idempotently by 012.
 create table if not exists knowledge_bases (
   id text primary key,
   owner_user_id text references users(id) on delete set null,

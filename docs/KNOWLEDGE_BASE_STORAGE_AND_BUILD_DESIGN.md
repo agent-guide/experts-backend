@@ -271,12 +271,12 @@ chunk。因此**检索侧（chat/search）必须按引用文档的 `documents.de
 > 1. **kb/doc 与 tenant 零关系**：`knowledge_bases` / `documents` / `upload_sessions`
 >    **不含 `tenant_id`**。KB 归属由 `owner_user_id` 表达；tenant 仅通过 chat 消费。
 >    对象 key 也不带 tenant 前缀（见 §6）。
-> 2. **迁移折叠进幂等定义，而非无条件 drop & recreate**：`app/db.py` 的迁移器**每次启动重跑
->    所有 `.sql`**、且无"已应用迁移"表，靠 `create table if not exists` / `add column if not
->    exists` 的幂等性。无条件 `drop table + create table` 会在每次重启时清空数据。因此最终
->    schema 直接写进 `002`（knowledge_bases）/ `003`（documents、upload_sessions）的
->    create-if-not-exists 定义；`012` 退化为对老库的**幂等清理**（`drop column if exists
->    tenant_id` 等，对全新库为 no-op）。下文凡提到"drop & recreate / 执行 012"均以此为准。
+> 2. **最终 schema 直接写进幂等定义，无迁移历史**：`app/db.py` 的迁移器**每次启动重跑
+>    所有 `.sql`**、且无"已应用迁移"表，靠 `create table if not exists` 的幂等性。无条件
+>    `drop table + create table` 会在每次重启时清空数据。因此最终 schema 直接写进
+>    `002_knowledge_bases.sql` / `003_documents.sql`（documents、upload_sessions）的
+>    create-if-not-exists 定义，每个文件即对应表的最终形态——没有增量补丁文件。下文凡提到
+>    "drop & recreate"，对开发期均指**重建数据库**（清库后按当前 `.sql` 重新迁移）。
 > 3. **`knowledge_bases` 收敛为最小形态**：删除 `scope` / `visibility` / `build_provider` /
 >    `build_status` / `active_build_id` / `last_built_at`。理由——所有 KB 都属于平台侧，权限不在
 >    业务表里管理（如需共享规则另立表）；build 细节"想清楚了再加"，当前只需一个 `status`
@@ -317,8 +317,8 @@ metadata: 业务标签等
 
 ### 7.2 documents
 
-`documents` 表承载文档元数据。因有 `not null` 列与新流程冲突，采用 drop & recreate（见 §7.5、
-`infra/sql/012_kb_docs_redesign.sql`）。重建后相对旧表的关键变化：
+`documents` 表承载文档元数据。最终形态直接定义在 `infra/sql/003_documents.sql`（见 §7.5）。
+相对旧表的关键变化：
 
 ```text
 新增: content_hash, object_bucket, object_version, deleted_at, metadata
@@ -423,12 +423,12 @@ create index if not exists idx_kb_builds_kb_created
 
 构建任务必须使用快照，不能在执行中动态扫描 MinIO 或重新查询不稳定文档集合。
 
-### 7.5 现有表破坏性变更清单（Phase 1 必须处理）
+### 7.5 相对旧模型的破坏性变更清单
 
-现有 `infra/sql/002`、`003` 已建好 `knowledge_bases` / `documents` / `upload_sessions` 表，
-当前路由层是 PageIndex 透传、并未读写这些表。旧的 `ingestion_jobs` / `document_chunks` 已彻底移除。
+`infra/sql/002`、`003` 定义了 `knowledge_bases` / `documents` / `upload_sessions` 表的最终形态。
+旧的 `ingestion_jobs` / `document_chunks` 已彻底移除。
 
-**实现方式：不考虑兼容，直接重建**（见 `infra/sql/012_kb_docs_redesign.sql`）。
+**实现方式：不考虑兼容，schema 直接收敛到 `002`/`003` 的最终定义，开发期清库重建即可。**
 
 `documents` 表（003）的 `not null` 且无默认值列，与新上传流程冲突，处理方式：
 
@@ -455,10 +455,9 @@ object_bucket  -> 新增。
 ```
 
 `ingestion_jobs` / `document_chunks` 属于旧 ingestion 模型，由 build/provider 模型取代，
-本次已直接清理：从 `003` 删除其建表语句，并在 `012` 用 `drop table if exists`（无 `cascade`，
-按 FK 依赖顺序先删 `document_chunks` 再删 `ingestion_jobs`）抹掉存量库中的表，build 阶段重新设计。
+本次已直接清理：`003` 中不再有它们的建表语句，存量开发库清库重建即可消除，build 阶段重新设计。
 
-> 这些都是破坏性 schema 变更。已确认无需兼容存量数据，迁移直接 drop & recreate。
+> 这些都是破坏性 schema 变更。已确认无需兼容存量数据，开发期清库重建。
 
 ## 8. Build 流程（后续实现，当前仅占位接口）
 
@@ -698,8 +697,8 @@ multipart 仍遵循同样原则：
 
 ### Phase 1: DB 与 API 收敛
 
-- 执行 `infra/sql/012_kb_docs_redesign.sql`：drop & recreate `documents` / `upload_sessions`，
-  为 `knowledge_bases` 增构建控制列（§7.5）。
+- schema 已收敛到 `infra/sql/002`/`003` 的最终定义（`documents` / `upload_sessions` /
+  `knowledge_bases`，见 §7.5）；开发期清库重建即可。
 - 删除旧 `/documents/*`、`/uploads/*` 路由。
 - 同步更新 API 文档：删除/替换 `docs/api/documents.md`、`docs/api/uploads.md`，修订
   `docs/api/knowledge-bases.md` 中旧的 `/{id}/documents` 段，并更新 `docs/api/README.md` 的链接

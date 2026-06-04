@@ -1,6 +1,5 @@
 -- Documents and upload sessions. Like knowledge_bases, these are platform-authored and carry
--- NO tenant_id (tenants never own/operate documents). Canonical (final) shape -- see the note
--- in 002 on why the redesign lives in create-if-not-exists definitions, not a drop/recreate.
+-- NO tenant_id (tenants never own/operate documents).
 --
 -- Chunking is decided at build time, so there are no chunk_strategy columns. Only storage_key
 -- (plus object_bucket) locates the MinIO object. object_bucket comes from settings.minio_bucket
@@ -35,6 +34,10 @@ create index if not exists idx_documents_kb_status
 
 create unique index if not exists idx_documents_storage_key
   on documents (storage_key);
+
+-- Support knowledge-base document list sorted by created_at.
+create index if not exists idx_documents_kb_created
+  on documents (knowledge_base_id, created_at desc);
 
 -- upload_sessions tracks a MinIO direct-upload handshake. document_id is allocated at
 -- upload-url time (the object key depends on it) but the documents row is only inserted at

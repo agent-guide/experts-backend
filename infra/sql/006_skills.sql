@@ -1,3 +1,5 @@
+-- Skills are platform-authored resources (no tenant relationship), stored externally and
+-- referenced here by storage_uri.
 create table if not exists skills (
   id text primary key,
   slug text not null unique,

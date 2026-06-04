@@ -4,9 +4,7 @@
 > This document is the English architecture design and technical specification for the
 > knowledge base storage and build subsystem as it exists in the codebase. The original
 > design rationale (in Chinese) is retained in
-> [`KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md`](./KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md);
-> the step-by-step execution plan is in
-> [`KNOWLEDGE_BASE_IMPLEMENTATION_PLAN.md`](./KNOWLEDGE_BASE_IMPLEMENTATION_PLAN.md).
+> [`KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md`](./KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md).
 > Where this spec and the design doc disagree, **this spec reflects the shipped code**.
 
 ---
@@ -110,16 +108,17 @@ Relevant modules:
 
 > **Migration model (important).** `app/db.py` re-runs **every** `infra/sql/*.sql` file on
 > each boot and has **no applied-migrations table**; idempotency relies on
-> `create table if not exists` / `add column if not exists`. An unconditional
-> `drop & recreate` would therefore wipe data on every restart. Consequently the **canonical
-> final schema lives in `002` (knowledge_bases) and `003` (documents, upload_sessions)** as
-> create-if-not-exists definitions, while `012_kb_docs_redesign.sql` is a **purely idempotent
-> reshape** of legacy databases (drop legacy columns/indexes/tables, add new columns). On a
-> fresh database every statement in `012` is a no-op.
+> `create table if not exists`. There is **no migration history** — each file holds the
+> canonical (final) shape of its tables, with every column/index/constraint folded into the
+> `create table`. The **canonical schema lives in `002_knowledge_bases.sql` and
+> `003_documents.sql`** (documents, upload_sessions). Files are numbered only to order FK
+> dependencies (`sorted(glob)`). Evolve a table by editing its `create table` in place; add an
+> idempotent `alter ... if [not] exists` only when an existing deployment must be preserved.
 >
-> Portability constraint: the runner splits statements on the terminator, recognizes only one
-> `add column if not exists` per `ALTER`, and does not support `DROP ... CASCADE` on SQLite.
-> Hence: one `ALTER` per column, no `CASCADE`, and no `;` inside comments.
+> Portability constraint (relevant if you ever add an `ALTER`): the runner splits statements on
+> the terminator, recognizes only one `add column if not exists` per `ALTER`, and does not
+> support `DROP ... CASCADE` on SQLite. Hence: one `ALTER` per column, no `CASCADE`, and no `;`
+> inside comments.
 
 ### 3.1 `knowledge_bases`
 
@@ -238,17 +237,12 @@ Notes:
 
 ### 3.4 Removed legacy schema
 
-`012` drops the legacy ingestion model outright (no backward compatibility), in FK order:
-
-```sql
-drop table if exists document_chunks;
-drop table if exists ingestion_jobs;
-```
-
-It also drops legacy columns from the three tables above: `tenant_id`, `storage_url`,
-`chunk_strategy` / `chunk_strategy_version` / `chunk_config`, and the KB
-`scope` / `visibility` / `build_provider` / `build_status` / `active_build_id` /
-`last_built_at` columns, plus their indexes.
+The legacy ingestion model (`document_chunks`, `ingestion_jobs`) and the legacy columns
+(`tenant_id`, `storage_url`, `chunk_strategy` / `chunk_strategy_version` / `chunk_config`, and
+the KB `scope` / `visibility` / `build_provider` / `build_status` / `active_build_id` /
+`last_built_at`) no longer exist in the schema — they were dropped when the canonical
+definitions in `002`/`003` were consolidated. No backward compatibility is kept; databases
+created before the redesign should be rebuilt from the current SQL.
 
 ---
 
@@ -566,6 +560,5 @@ Large-file **multipart** upload is likewise deferred; the schema reserves `uploa
 - Document deletion is soft and effective immediately; reads filter `deleted_at is null`.
 - `object_bucket` is persisted `not null` (single bucket from config today).
 - Build endpoints are `501` placeholders — no table, no records, no state changes.
-- The migration runner re-runs all SQL every boot, so the final schema lives in
-  create-if-not-exists definitions and `012` is an idempotent reshape, never an unconditional
-  drop/recreate.
+- The migration runner re-runs all SQL every boot, so each file holds the final schema as
+  create-if-not-exists definitions — no migration history, no incremental patch files.

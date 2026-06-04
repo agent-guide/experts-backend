@@ -273,7 +273,7 @@ Support or impersonation access:
 - `refresh_tokens` (user-scoped)
 - `platform_activation_tokens`
 
-The schema lives in `001_phase3_auth.sql`.
+The schema lives in `001_auth.sql`.
 
 ### 8.2 Domain model
 

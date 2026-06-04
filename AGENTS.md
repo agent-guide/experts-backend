@@ -27,8 +27,11 @@ PageIndex / ngent / Codex are upstream/optional integrations, not the source of 
 - SQLite quirks the runner imposes: one `add column if not exists` per `ALTER`; no
   `DROP TABLE ... CASCADE`; statements split on `;`, so **no `;` inside SQL comments**;
   `alter column` / `add constraint` are skipped on SQLite.
-- Canonical schema lives in the create-if-not-exists definitions (e.g. `002`/`003`); later
-  files are idempotent patches.
+- Each file is the canonical (final) shape of its tables, with every column/index/constraint
+  folded into the `create table if not exists`. Files are numbered only to order FK dependencies
+  (`sorted(glob)`), not as a migration history — there are no incremental patch files. When you
+  evolve a table, edit its `create table` in place (dev rebuilds the DB); add an idempotent
+  `alter ... if [not] exists` only when an existing deployment must be preserved.
 
 ## Auth model
 
@@ -54,6 +57,6 @@ PageIndex / ngent / Codex are upstream/optional integrations, not the source of 
 
 ## Key designs
 
-- `docs/KNOWLEDGE_BASE_STORAGE_AND_BUILD_SPEC.md` (architecture + technical spec, reflects shipped code) — design rationale in `docs/KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md` + `docs/KNOWLEDGE_BASE_IMPLEMENTATION_PLAN.md`
+- `docs/KNOWLEDGE_BASE_STORAGE_AND_BUILD_SPEC.md` (architecture + technical spec, reflects shipped code) — design rationale in `docs/KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md`
 - `docs/USER_TENANT_RBAC_DESIGN.md`
 - API reference under `docs/api/`.

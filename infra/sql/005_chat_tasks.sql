@@ -1,3 +1,5 @@
+-- Async chat tasks and their event log. A task is the queued/running unit behind a chat answer;
+-- chat_task_events records its lifecycle (including multi-hop retrieval steps).
 create table if not exists chat_tasks (
   id text primary key,
   tenant_id text not null references tenants(id) on delete cascade,
@@ -7,6 +9,8 @@ create table if not exists chat_tasks (
   knowledge_base_ids jsonb not null default '[]'::jsonb,
   llm_model text,
   query_rewrite boolean not null default false,
+  multi_hop_config jsonb,
+  priority text not null default 'low' check (priority in ('high', 'low')),
   status text not null check (status in ('queued', 'running', 'cancel_requested', 'succeeded', 'failed', 'cancelled')),
   error_message text,
   active_subscriber_id text,
@@ -23,11 +27,17 @@ create index if not exists idx_chat_tasks_status_created
 create index if not exists idx_chat_tasks_tenant_user
   on chat_tasks (tenant_id, user_id, created_at desc);
 
+create index if not exists idx_chat_tasks_priority_status_created
+  on chat_tasks (priority, status, created_at asc);
+
 create table if not exists chat_task_events (
   id text primary key,
   task_id text not null references chat_tasks(id) on delete cascade,
   tenant_id text not null references tenants(id) on delete cascade,
-  event_type text not null check (event_type in ('queued', 'picked', 'retrieval', 'stop', 'error', 'cancel_requested', 'cancelled')),
+  event_type text not null check (event_type in (
+    'queued', 'picked', 'retrieval', 'stop', 'error', 'cancel_requested', 'cancelled',
+    'multi_hop_start', 'multi_hop_complete', 'multi_hop_fallback'
+  )),
   payload jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
