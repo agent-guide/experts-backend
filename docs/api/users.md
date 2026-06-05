@@ -41,6 +41,180 @@ Response `201`:
 }
 ```
 
+## GET /
+
+List ordinary users for platform-side user management. This list excludes users
+that currently have platform roles; use `GET /platform` for platform personnel.
+
+Auth:
+
+```text
+Authorization: Bearer <accessToken>
+```
+
+Required platform permission:
+
+```text
+platform:user_manage
+```
+
+Response `200`:
+
+```json
+{
+  "items": [
+    {
+      "id": "user_123",
+      "email": "user@example.com",
+      "name": "Test User",
+      "status": "active",
+      "platformRoles": [],
+      "tenantCount": 2,
+      "createdAt": "2026-06-03T00:00:00+00:00",
+      "updatedAt": "2026-06-03T00:00:00+00:00"
+    }
+  ]
+}
+```
+
+## GET /{user_id}
+
+Get a user's profile, platform roles and tenant memberships.
+
+Auth:
+
+```text
+Authorization: Bearer <accessToken>
+```
+
+Required platform permission:
+
+```text
+platform:user_manage
+```
+
+Response `200`:
+
+```json
+{
+  "id": "user_123",
+  "email": "user@example.com",
+  "name": "Test User",
+  "status": "active",
+  "platformRoles": [],
+  "platformPermissions": [],
+  "tenants": [
+    {
+      "id": "tenant_1",
+      "name": "A Company",
+      "type": "team",
+      "slug": "a-company",
+      "status": "active",
+      "role": "admin",
+      "joinedAt": "2026-06-03T00:00:00+00:00"
+    }
+  ],
+  "createdAt": "2026-06-03T00:00:00+00:00",
+  "updatedAt": "2026-06-03T00:00:00+00:00"
+}
+```
+
+Missing users return `404 USER_NOT_FOUND`.
+
+## PATCH /{user_id}
+
+Update a user's basic profile.
+
+Auth:
+
+```text
+Authorization: Bearer <accessToken>
+```
+
+Required platform permission:
+
+```text
+platform:user_manage
+```
+
+Request:
+
+```json
+{
+  "name": "Updated User"
+}
+```
+
+Response `200`: the user detail shape from `GET /{user_id}`.
+
+## PATCH /{user_id}/status
+
+Enable or disable a user.
+
+Auth:
+
+```text
+Authorization: Bearer <accessToken>
+```
+
+Required platform permission:
+
+```text
+platform:user_manage
+```
+
+Request:
+
+```json
+{
+  "status": "disabled"
+}
+```
+
+Allowed status values:
+
+- `active`
+- `disabled`
+
+Response `200`: the user detail shape from `GET /{user_id}`.
+
+Disabling the last remaining platform `admin` is rejected with
+`409 PLATFORM_LAST_ADMIN`.
+
+## GET /{user_id}/tenants
+
+List the tenants a user belongs to.
+
+Auth:
+
+```text
+Authorization: Bearer <accessToken>
+```
+
+Required platform permission:
+
+```text
+platform:user_manage
+```
+
+Response `200`:
+
+```json
+{
+  "items": [
+    {
+      "id": "tenant_1",
+      "name": "A Company",
+      "type": "team",
+      "slug": "a-company",
+      "status": "active",
+      "role": "member",
+      "joinedAt": "2026-06-03T00:00:00+00:00"
+    }
+  ]
+}
+```
+
 ## POST /platform/activate
 
 Activate a pre-created platform user by activation token.

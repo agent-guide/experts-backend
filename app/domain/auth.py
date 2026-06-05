@@ -1,4 +1,5 @@
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -15,6 +16,8 @@ class PlatformRole(StrEnum):
 
 
 Permission = str
+UserStatus = Literal["pending_activation", "active", "disabled"]
+MutableUserStatus = Literal["active", "disabled"]
 
 
 def tenant_role_permissions(role: TenantRole) -> set[Permission]:
@@ -137,6 +140,14 @@ class CreatePlatformUserResponse(BaseModel):
     activationExpiresAt: str
 
 
+class UpdateUserRequest(BaseModel):
+    name: str | None = None
+
+
+class UpdateUserStatusRequest(BaseModel):
+    status: MutableUserStatus
+
+
 class GrantTenantRoleRequest(BaseModel):
     role: TenantRole
 
@@ -153,6 +164,47 @@ class PlatformRoleSummary(BaseModel):
 
 class ListPlatformRolesResponse(BaseModel):
     items: list[PlatformRoleSummary]
+
+
+class UserTenantSummary(BaseModel):
+    id: str
+    name: str
+    type: str
+    slug: str
+    status: str
+    role: TenantRole
+    joinedAt: str
+
+
+class UserSummary(BaseModel):
+    id: str
+    email: str
+    name: str
+    status: UserStatus
+    platformRoles: list[PlatformRole]
+    tenantCount: int
+    createdAt: str
+    updatedAt: str
+
+
+class UserDetail(BaseModel):
+    id: str
+    email: str
+    name: str
+    status: UserStatus
+    platformRoles: list[PlatformRole]
+    platformPermissions: list[Permission]
+    tenants: list[UserTenantSummary]
+    createdAt: str
+    updatedAt: str
+
+
+class ListManagedUsersResponse(BaseModel):
+    items: list[UserSummary]
+
+
+class ListUserTenantsResponse(BaseModel):
+    items: list[UserTenantSummary]
 
 
 class UserAccessSummary(BaseModel):

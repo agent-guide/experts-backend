@@ -26,8 +26,17 @@ def test_openapi_loads() -> None:
     paths = response.json()["paths"]
     assert "/api/v1/auth/login" in paths
     assert "/api/v1/users/register" in paths
+    assert "/api/v1/users" in paths
+    assert "/api/v1/users/{user_id}" in paths
+    assert "/api/v1/users/{user_id}/status" in paths
+    assert "/api/v1/users/{user_id}/tenants" in paths
     assert "/api/v1/users/platform/activate" in paths
     assert "/api/v1/users/platform" in paths
+    assert "/api/v1/tenants" in paths
+    assert "/api/v1/tenants/{tenant_id}" in paths
+    assert "/api/v1/tenants/{tenant_id}/status" in paths
+    assert "/api/v1/tenants/{tenant_id}/members" in paths
+    assert "/api/v1/tenants/{tenant_id}/members/{user_id}" in paths
     assert "/api/v1/rbac/tenant/users" in paths
     assert "/api/v1/rbac/tenant/users/{user_id}/roles" in paths
     assert "/api/v1/rbac/tenant/users/{user_id}" in paths
@@ -825,6 +834,244 @@ def test_platform_user_list_requires_platform_user_manage(tmp_path: Path) -> Non
         assert tenant_register.status_code == 201
         tenant_headers = {"Authorization": f"Bearer {tenant_register.json()['accessToken']}"}
         forbidden = client.get("/api/v1/users/platform", headers=tenant_headers)
+        assert forbidden.status_code == 403
+
+
+def test_managed_users_crud_and_tenants_require_platform_user_manage(tmp_path: Path) -> None:
+    database_path = tmp_path / "managed_users.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+    )
+    test_app = create_app(settings)
+
+    with TestClient(test_app) as client:
+        _seed_tenant(settings)
+        _seed_platform_user(
+            settings,
+            "platform_admin",
+            "platform-admin@example.com",
+            "Platform Admin",
+            "admin-secret",
+            "admin",
+        )
+        _seed_tenant_user(
+            settings,
+            "tenant_user",
+            "tenant@example.com",
+            "Tenant User",
+            "tenant-secret",
+            "member",
+        )
+        with open_database_connection(settings) as connection:
+            connection.execute(
+                """
+                insert into tenants (id, type, name, slug, owner_user_id, status)
+                values ('team_extra', 'team', 'Extra Team', 'extra-team', 'tenant_user', 'active')
+                """
+            )
+            connection.execute(
+                """
+                insert into tenant_members (id, tenant_id, user_id, role)
+                values ('tenant_user_extra_member', 'team_extra', 'tenant_user', 'admin')
+                """
+            )
+            connection.commit()
+
+        admin_login = client.post(
+            "/api/v1/auth/login",
+            json={"email": "platform-admin@example.com", "password": "admin-secret"},
+        )
+        assert admin_login.status_code == 200
+        admin_headers = {"Authorization": f"Bearer {admin_login.json()['accessToken']}"}
+
+        list_response = client.get("/api/v1/users", headers=admin_headers)
+        assert list_response.status_code == 200
+        listed_by_email = {item["email"]: item for item in list_response.json()["items"]}
+        assert "tenant@example.com" in listed_by_email
+        assert "platform-admin@example.com" not in listed_by_email
+        assert listed_by_email["tenant@example.com"]["tenantCount"] == 2
+        assert listed_by_email["tenant@example.com"]["platformRoles"] == []
+
+        detail = client.get("/api/v1/users/tenant_user", headers=admin_headers)
+        assert detail.status_code == 200
+        detail_body = detail.json()
+        assert detail_body["email"] == "tenant@example.com"
+        assert {tenant["id"] for tenant in detail_body["tenants"]} == {
+            "tenant_default",
+            "team_extra",
+        }
+
+        tenants = client.get("/api/v1/users/tenant_user/tenants", headers=admin_headers)
+        assert tenants.status_code == 200
+        assert len(tenants.json()["items"]) == 2
+
+        patched = client.patch(
+            "/api/v1/users/tenant_user",
+            headers=admin_headers,
+            json={"name": "Renamed Tenant User"},
+        )
+        assert patched.status_code == 200
+        assert patched.json()["name"] == "Renamed Tenant User"
+
+        disabled = client.patch(
+            "/api/v1/users/tenant_user/status",
+            headers=admin_headers,
+            json={"status": "disabled"},
+        )
+        assert disabled.status_code == 200
+        assert disabled.json()["status"] == "disabled"
+
+        disabled_login = client.post(
+            "/api/v1/auth/login",
+            json={"email": "tenant@example.com", "password": "tenant-secret"},
+        )
+        assert disabled_login.status_code == 401
+
+        missing = client.get("/api/v1/users/missing_user", headers=admin_headers)
+        assert missing.status_code == 404
+
+        tenant_register = client.post(
+            "/api/v1/users/register",
+            json={"email": "plain@example.com", "password": "secret123", "name": "Plain User"},
+        )
+        assert tenant_register.status_code == 201
+        tenant_headers = {"Authorization": f"Bearer {tenant_register.json()['accessToken']}"}
+        forbidden = client.get("/api/v1/users", headers=tenant_headers)
+        assert forbidden.status_code == 403
+
+
+def test_platform_tenant_management_crud_members_and_guards(tmp_path: Path) -> None:
+    database_path = tmp_path / "tenant_management.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+    )
+    test_app = create_app(settings)
+
+    with TestClient(test_app) as client:
+        _seed_platform_user(
+            settings,
+            "platform_admin",
+            "platform-admin@example.com",
+            "Platform Admin",
+            "admin-secret",
+            "admin",
+        )
+        _seed_user(settings, "owner_user", "owner@example.com", "Owner User", "owner-secret")
+        _seed_user(settings, "member_user", "member@example.com", "Member User", "member-secret")
+
+        admin_login = client.post(
+            "/api/v1/auth/login",
+            json={"email": "platform-admin@example.com", "password": "admin-secret"},
+        )
+        assert admin_login.status_code == 200
+        admin_headers = {"Authorization": f"Bearer {admin_login.json()['accessToken']}"}
+
+        created = client.post(
+            "/api/v1/tenants",
+            headers=admin_headers,
+            json={"name": "Acme Team", "slug": "acme-team", "ownerUserId": "owner_user"},
+        )
+        assert created.status_code == 201, created.text
+        tenant = created.json()
+        tenant_id = tenant["id"]
+        assert tenant["type"] == "team"
+        assert tenant["slug"] == "acme-team"
+        assert tenant["ownerUserName"] == "Owner User"
+        assert tenant["memberCount"] == 1
+
+        listed = client.get("/api/v1/tenants", headers=admin_headers)
+        assert listed.status_code == 200
+        assert any(item["id"] == tenant_id for item in listed.json()["items"])
+
+        got = client.get(f"/api/v1/tenants/{tenant_id}", headers=admin_headers)
+        assert got.status_code == 200
+        assert got.json()["memberCount"] == 1
+
+        members = client.get(f"/api/v1/tenants/{tenant_id}/members", headers=admin_headers)
+        assert members.status_code == 200
+        assert members.json()["items"] == [
+            {
+                "userId": "owner_user",
+                "email": "owner@example.com",
+                "name": "Owner User",
+                "status": "active",
+                "role": "admin",
+                "joinedAt": members.json()["items"][0]["joinedAt"],
+            }
+        ]
+
+        added = client.post(
+            f"/api/v1/tenants/{tenant_id}/members",
+            headers=admin_headers,
+            json={"userId": "member_user", "role": "member"},
+        )
+        assert added.status_code == 201
+        assert added.json()["role"] == "member"
+
+        promoted = client.patch(
+            f"/api/v1/tenants/{tenant_id}/members/member_user",
+            headers=admin_headers,
+            json={"role": "admin"},
+        )
+        assert promoted.status_code == 200
+        assert promoted.json()["role"] == "admin"
+
+        patched = client.patch(
+            f"/api/v1/tenants/{tenant_id}",
+            headers=admin_headers,
+            json={"name": "Acme Renamed", "slug": "acme-renamed", "ownerUserId": "member_user"},
+        )
+        assert patched.status_code == 200
+        assert patched.json()["name"] == "Acme Renamed"
+        assert patched.json()["ownerUserName"] == "Member User"
+
+        demoted_owner = client.patch(
+            f"/api/v1/tenants/{tenant_id}/members/owner_user",
+            headers=admin_headers,
+            json={"role": "member"},
+        )
+        assert demoted_owner.status_code == 200
+        assert demoted_owner.json()["role"] == "member"
+
+        remove_last_admin = client.delete(
+            f"/api/v1/tenants/{tenant_id}/members/member_user",
+            headers=admin_headers,
+        )
+        assert remove_last_admin.status_code == 409
+
+        disabled = client.patch(
+            f"/api/v1/tenants/{tenant_id}/status",
+            headers=admin_headers,
+            json={"status": "disabled"},
+        )
+        assert disabled.status_code == 200
+        assert disabled.json()["status"] == "disabled"
+
+        duplicate = client.post(
+            "/api/v1/tenants",
+            headers=admin_headers,
+            json={"name": "Duplicate", "slug": "acme-renamed", "ownerUserId": "owner_user"},
+        )
+        assert duplicate.status_code == 409
+
+        missing_owner = client.post(
+            "/api/v1/tenants",
+            headers=admin_headers,
+            json={"name": "Missing Owner", "slug": "missing-owner", "ownerUserId": "missing"},
+        )
+        assert missing_owner.status_code == 404
+
+        tenant_register = client.post(
+            "/api/v1/users/register",
+            json={"email": "plain@example.com", "password": "secret123", "name": "Plain User"},
+        )
+        assert tenant_register.status_code == 201
+        tenant_headers = {"Authorization": f"Bearer {tenant_register.json()['accessToken']}"}
+        forbidden = client.get("/api/v1/tenants", headers=tenant_headers)
         assert forbidden.status_code == 403
 
 

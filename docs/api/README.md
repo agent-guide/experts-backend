@@ -57,6 +57,7 @@ token claims; they are derived server-side from the current role mapping.
 
 - [Auth](./auth.md)
 - [Users](./users.md)
+- [Tenants](./tenants.md)
 - [RBAC](./rbac.md)
 - [Knowledge Bases](./knowledge-bases.md) (platform-owned; minimal shape, single `status`)
 - [Documents](./documents.md) (nested under a knowledge base; MinIO direct upload)

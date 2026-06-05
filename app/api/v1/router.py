@@ -10,12 +10,14 @@ from app.api.v1.routers import (
     ops,
     rbac,
     skills,
+    tenants,
     users,
 )
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(users.router, prefix="/users", tags=["users"])
+api_router.include_router(tenants.router, prefix="/tenants", tags=["tenants"])
 api_router.include_router(rbac.router, prefix="/rbac", tags=["rbac"])
 api_router.include_router(models.router, prefix="/models", tags=["models"])
 api_router.include_router(ops.router, prefix="/ops", tags=["ops"])

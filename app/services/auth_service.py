@@ -24,7 +24,10 @@ from app.domain.auth import (
     PlatformRole,
     Principal,
     TenantRole,
+    UserDetail,
     UserAccessSummary,
+    UserSummary,
+    UserTenantSummary,
     platform_role_permissions,
     tenant_role_permissions,
 )
@@ -478,6 +481,109 @@ class AuthService:
                 if (user := _map_user_summary(row)) is not None
             ]
 
+    def list_managed_users(self) -> list[UserSummary]:
+        """List non-platform users for ordinary user management."""
+        with open_database_connection(self.settings) as connection:
+            rows = _fetch_all(
+                connection,
+                """
+                select
+                  u.id,
+                  u.email,
+                  u.name,
+                  u.status,
+                  u.created_at,
+                  u.updated_at,
+                  count(tm.id) as tenant_count
+                from users u
+                left join tenant_members tm on tm.user_id = u.id
+                where not exists (
+                  select 1 from platform_user_roles pur where pur.user_id = u.id
+                )
+                group by u.id, u.email, u.name, u.status, u.created_at, u.updated_at
+                order by u.created_at desc, u.id asc
+                """,
+            )
+
+            return [
+                UserSummary(
+                    id=str(row["id"]),
+                    email=str(row["email"]),
+                    name=str(row["name"]),
+                    status=str(row["status"]),
+                    platformRoles=[],
+                    tenantCount=int(row["tenant_count"]),
+                    createdAt=str(row["created_at"]),
+                    updatedAt=str(row["updated_at"]),
+                )
+                for row in rows
+            ]
+
+    def get_managed_user(self, user_id: str) -> UserDetail:
+        with open_database_connection(self.settings) as connection:
+            user = self._find_user_by_id(connection, user_id)
+            if not user:
+                raise ApiError(404, "USER_NOT_FOUND", "User not found")
+            return self._user_detail(connection, user)
+
+    def update_user(self, user_id: str, *, name: str | None) -> UserDetail:
+        with open_database_connection(self.settings) as connection:
+            user = self._find_user_by_id(connection, user_id)
+            if not user:
+                raise ApiError(404, "USER_NOT_FOUND", "User not found")
+            next_name = name if name is not None else user.name
+            _execute(
+                connection,
+                """
+                update users
+                set name = ?, updated_at = CURRENT_TIMESTAMP
+                where id = ?
+                """,
+                (next_name, user_id),
+            )
+            _commit(connection)
+            updated = self._find_user_by_id(connection, user_id)
+            if not updated:
+                raise ApiError(404, "USER_NOT_FOUND", "User not found")
+            return self._user_detail(connection, updated)
+
+    def update_user_status(self, user_id: str, *, status: str) -> UserDetail:
+        with open_database_connection(self.settings) as connection:
+            _begin_write_transaction(connection)
+            user = self._find_user_by_id(connection, user_id)
+            if not user:
+                raise ApiError(404, "USER_NOT_FOUND", "User not found")
+
+            roles = self._list_platform_roles(connection, user_id)
+            if (
+                status == "disabled"
+                and PlatformRole.ADMIN in roles
+                and self._count_platform_admins(connection) <= 1
+            ):
+                raise ApiError(409, "PLATFORM_LAST_ADMIN", "Cannot disable the last platform admin")
+
+            _execute(
+                connection,
+                """
+                update users
+                set status = ?, updated_at = CURRENT_TIMESTAMP
+                where id = ?
+                """,
+                (status, user_id),
+            )
+            _commit(connection)
+            updated = self._find_user_by_id(connection, user_id)
+            if not updated:
+                raise ApiError(404, "USER_NOT_FOUND", "User not found")
+            return self._user_detail(connection, updated)
+
+    def list_user_tenants(self, user_id: str) -> list[UserTenantSummary]:
+        with open_database_connection(self.settings) as connection:
+            user = self._find_user_by_id(connection, user_id)
+            if not user:
+                raise ApiError(404, "USER_NOT_FOUND", "User not found")
+            return self._list_user_tenants(connection, user_id)
+
     def _issue_token_pair(
         self, connection: DatabaseConnection, user: UserRecord, active_tenant_id: str | None
     ) -> dict[str, object]:
@@ -628,6 +734,56 @@ class AuthService:
             (user_id,),
         )
         return _map_user(row)
+
+    def _user_detail(self, connection: DatabaseConnection, user: UserRecord) -> UserDetail:
+        platform_roles = self._list_platform_roles(connection, user.id)
+        return UserDetail(
+            id=user.id,
+            email=user.email,
+            name=user.name,
+            status=user.status,
+            platformRoles=platform_roles,
+            platformPermissions=sorted(
+                {perm for role in platform_roles for perm in platform_role_permissions(role)}
+            ),
+            tenants=self._list_user_tenants(connection, user.id),
+            createdAt=user.created_at,
+            updatedAt=user.updated_at,
+        )
+
+    def _list_user_tenants(
+        self, connection: DatabaseConnection, user_id: str
+    ) -> list[UserTenantSummary]:
+        rows = _fetch_all(
+            connection,
+            """
+            select
+              t.id,
+              t.name,
+              t.type,
+              t.slug,
+              t.status,
+              tm.role,
+              tm.created_at as joined_at
+            from tenant_members tm
+            inner join tenants t on t.id = tm.tenant_id
+            where tm.user_id = ?
+            order by tm.created_at desc, t.id asc
+            """,
+            (user_id,),
+        )
+        return [
+            UserTenantSummary(
+                id=str(row["id"]),
+                name=str(row["name"]),
+                type=str(row["type"]),
+                slug=str(row["slug"]),
+                status=str(row["status"]),
+                role=TenantRole(str(row["role"])),
+                joinedAt=str(row["joined_at"]),
+            )
+            for row in rows
+        ]
 
     def _user_access_summary(
         self, connection: DatabaseConnection, user: UserRecord, active_tenant_id: str | None
