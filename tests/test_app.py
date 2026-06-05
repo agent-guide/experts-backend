@@ -464,6 +464,45 @@ def test_rbac_platform_admin_grants_and_revokes_platform_role(tmp_path: Path) ->
     assert roles == []
 
 
+def test_rbac_platform_roles_list_requires_platform_role_grant(tmp_path: Path) -> None:
+    database_path = tmp_path / "rbac_platform_roles.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+    )
+    test_app = create_app(settings)
+
+    with TestClient(test_app) as client:
+        _seed_platform_user(
+            settings, "platform_admin", "padmin@example.com", "Platform Admin", "admin-secret", "admin"
+        )
+
+        admin_login = client.post(
+            "/api/v1/auth/login",
+            json={"email": "padmin@example.com", "password": "admin-secret"},
+        )
+        admin_headers = {"Authorization": f"Bearer {admin_login.json()['accessToken']}"}
+
+        response = client.get("/api/v1/rbac/platform/roles", headers=admin_headers)
+        assert response.status_code == 200
+        by_role = {item["role"]: item for item in response.json()["items"]}
+        assert set(by_role) == {"admin", "expert", "operator"}
+        assert by_role["admin"]["name"] == "admin"
+        assert "platform:role_grant" in by_role["admin"]["permissions"]
+        assert "kb:create" in by_role["expert"]["permissions"]
+        assert "kb:read" in by_role["operator"]["permissions"]
+
+        tenant_register = client.post(
+            "/api/v1/users/register",
+            json={"email": "tenant@example.com", "password": "secret123", "name": "Tenant User"},
+        )
+        assert tenant_register.status_code == 201
+        tenant_headers = {"Authorization": f"Bearer {tenant_register.json()['accessToken']}"}
+        forbidden = client.get("/api/v1/rbac/platform/roles", headers=tenant_headers)
+        assert forbidden.status_code == 403
+
+
 def test_rbac_platform_last_admin_guard(tmp_path: Path) -> None:
     database_path = tmp_path / "rbac_platform_last_admin.sqlite3"
     settings = Settings(
@@ -726,6 +765,63 @@ def test_platform_admin_creates_platform_user_invitation_and_user_activates(
     assert user["status"] == "active"
     assert roles == ["expert"]
     assert token["used_at"] is not None
+
+
+def test_platform_user_list_requires_platform_user_manage(tmp_path: Path) -> None:
+    database_path = tmp_path / "platform_user_list.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+    )
+    test_app = create_app(settings)
+
+    with TestClient(test_app) as client:
+        _seed_platform_user(
+            settings,
+            "platform_admin",
+            "platform-admin@example.com",
+            "Platform Admin",
+            "admin-secret",
+            "admin",
+        )
+
+        admin_login = client.post(
+            "/api/v1/auth/login",
+            json={"email": "platform-admin@example.com", "password": "admin-secret"},
+        )
+        assert admin_login.status_code == 200
+        admin_headers = {"Authorization": f"Bearer {admin_login.json()['accessToken']}"}
+
+        create_response = client.post(
+            "/api/v1/users/platform",
+            headers=admin_headers,
+            json={
+                "email": "invited-expert@example.com",
+                "name": "Invited Expert",
+                "roles": ["expert"],
+            },
+        )
+        assert create_response.status_code == 201
+
+        list_response = client.get("/api/v1/users/platform", headers=admin_headers)
+        assert list_response.status_code == 200
+        by_email = {item["email"]: item for item in list_response.json()["items"]}
+        assert by_email["platform-admin@example.com"]["platformRoles"] == ["admin"]
+        assert by_email["invited-expert@example.com"]["name"] == "Invited Expert"
+        assert by_email["invited-expert@example.com"]["status"] == "pending_activation"
+        assert by_email["invited-expert@example.com"]["platformRoles"] == ["expert"]
+        assert "kb:create" in by_email["invited-expert@example.com"]["platformPermissions"]
+        assert by_email["invited-expert@example.com"]["tenantRoles"] == []
+
+        tenant_register = client.post(
+            "/api/v1/users/register",
+            json={"email": "tenant@example.com", "password": "secret123", "name": "Tenant User"},
+        )
+        assert tenant_register.status_code == 201
+        tenant_headers = {"Authorization": f"Bearer {tenant_register.json()['accessToken']}"}
+        forbidden = client.get("/api/v1/users/platform", headers=tenant_headers)
+        assert forbidden.status_code == 403
 
 
 def test_skills_upload_list_get_file_update_and_delete(tmp_path: Path) -> None:
@@ -1207,6 +1303,8 @@ def test_kb_crud_has_no_tenant(tmp_path: Path) -> None:
         assert created.status_code == 201, created.text
         body = created.json()
         assert "tenantId" not in body
+        assert body["ownerUserId"] == "expert_user"
+        assert body["ownerUserName"] == "expert_user name"
         # Removed fields are gone from the contract entirely.
         for gone in ("scope", "visibility", "buildProvider", "buildStatus", "activeBuildId"):
             assert gone not in body
@@ -1217,7 +1315,8 @@ def test_kb_crud_has_no_tenant(tmp_path: Path) -> None:
         assert got.status_code == 200
         listed = client.get("/api/v1/knowledge-bases", headers=headers)
         assert listed.status_code == 200
-        assert any(item["id"] == kb_id for item in listed.json()["items"])
+        listed_item = next(item for item in listed.json()["items"] if item["id"] == kb_id)
+        assert listed_item["ownerUserName"] == "expert_user name"
 
         patched = client.patch(
             f"/api/v1/knowledge-bases/{kb_id}", headers=headers, json={"name": "KB Renamed"}

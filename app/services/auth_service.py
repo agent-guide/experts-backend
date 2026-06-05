@@ -460,6 +460,24 @@ class AuthService:
                 if (user := _map_user_summary(row)) is not None
             ]
 
+    def list_platform_users(self) -> list[UserAccessSummary]:
+        with open_database_connection(self.settings) as connection:
+            rows = _fetch_all(
+                connection,
+                """
+                select distinct u.id, u.email, u.name, u.status, u.created_at, u.updated_at
+                from users u
+                inner join platform_user_roles pur on pur.user_id = u.id
+                order by u.created_at desc, u.id asc
+                """,
+            )
+
+            return [
+                self._user_access_summary(connection, user, None)
+                for row in rows
+                if (user := _map_user_summary(row)) is not None
+            ]
+
     def _issue_token_pair(
         self, connection: DatabaseConnection, user: UserRecord, active_tenant_id: str | None
     ) -> dict[str, object]:

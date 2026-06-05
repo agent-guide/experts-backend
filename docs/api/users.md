@@ -74,6 +74,45 @@ Response `200`:
 }
 ```
 
+## GET /platform
+
+List platform users. The response includes users that currently have at least
+one platform role, including pending invitation users.
+
+Auth:
+
+```text
+Authorization: Bearer <accessToken>
+```
+
+Required platform permission:
+
+```text
+platform:user_manage
+```
+
+Response `200`:
+
+```json
+{
+  "items": [
+    {
+      "id": "user_123",
+      "email": "expert@example.com",
+      "name": "Expert User",
+      "status": "pending_activation",
+      "activeTenantId": null,
+      "tenantRoles": [],
+      "tenantPermissions": [],
+      "platformRoles": ["expert"],
+      "platformPermissions": ["doc:create", "doc:read", "kb:create"],
+      "createdAt": "2026-06-03T00:00:00+00:00",
+      "updatedAt": "2026-06-03T00:00:00+00:00"
+    }
+  ]
+}
+```
+
 ## POST /platform
 
 Create a platform user and issue a one-time activation token.

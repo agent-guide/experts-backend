@@ -116,6 +116,53 @@ Responses:
 409 TENANT_LAST_ADMIN attempted to remove the last tenant admin
 ```
 
+## GET /platform/roles
+
+List available platform roles and their derived permissions.
+
+Auth:
+
+```text
+Authorization: Bearer <accessToken>
+```
+
+Required platform permission:
+
+```text
+platform:role_grant
+```
+
+Response `200`:
+
+```json
+{
+  "items": [
+    {
+      "role": "admin",
+      "name": "admin",
+      "permissions": [
+        "doc:create",
+        "doc:delete",
+        "doc:read",
+        "doc:update",
+        "kb:build",
+        "kb:create",
+        "kb:delete",
+        "kb:read",
+        "kb:update",
+        "platform:entitlement_grant",
+        "platform:role_grant",
+        "platform:tenant_manage",
+        "platform:user_manage",
+        "skill:read",
+        "skill:write",
+        "system:ops"
+      ]
+    }
+  ]
+}
+```
+
 ## POST /platform/users/{user_id}/roles
 
 Grant a platform role.

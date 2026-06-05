@@ -29,3 +29,6 @@ target-version = "py311"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+[tool.setuptools.packages.find]
+include = ["app*"]
+exclude = ["infra*", "tests*"]

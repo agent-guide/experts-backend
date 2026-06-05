@@ -1,5 +1,22 @@
+# Python
 .venv/
 __pycache__/
 .pytest_cache/
 .ruff_cache/
 *.pyc
+
+# Packaging build artifacts
+*.egg-info/
+
+# Environment files (secrets)
+.env
+.env.local
+
+# Local data / databases
+.data/
+data/
+*.sqlite3
+
+# Editor / OS
+.vscode/
+.DS_Store

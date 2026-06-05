@@ -119,3 +119,64 @@ boundaries. PageIndex and ngent integrations are intentionally thin adapters for
 future hardening.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+## Windows Quick Start
+
+Run the following commands from the project root:
+
+```bat
+cd /d D:\my_python\maiyun\amazon-experts-backend
+py -m venv .venv
+```
+
+Activate the virtual environment in `cmd`:
+
+```bat
+.venv\Scripts\activate
+```
+
+Activate the virtual environment in PowerShell:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+If PowerShell blocks activation because of the execution policy, allow scripts for
+the current shell session only:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+```
+
+After activation, the prompt should start with `(.venv)`.
+
+Install the project dependencies:
+
+```bat
+python -m pip install --upgrade pip
+python -m pip install -e .
+```
+
+Install development dependencies when running tests or lint locally:
+
+```bat
+python -m pip install -e ".[dev]"
+```
+
+Create a local environment file:
+
+```bat
+copy .env.example .env
+```
+
+Start the FastAPI development server:
+
+```bat
+python -m uvicorn app.main:app --reload
+```
+
+Run the test suite:
+
+```bat
+python -m pytest tests/test_app.py -q
+```

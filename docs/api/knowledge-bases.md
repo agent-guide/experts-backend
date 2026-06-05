@@ -26,6 +26,7 @@ to PageIndex). See [Knowledge Base Storage and Build Design](../KNOWLEDGE_BASE_S
 {
   "id": "kb_123",
   "ownerUserId": "user_123",
+  "ownerUserName": "Jane Expert",
   "name": "Amazon Reviews",
   "description": "Review analysis corpus",
   "status": "active",
@@ -44,6 +45,8 @@ The shape is intentionally minimal:
   decided purely by the platform permission on each route. Any future sharing rules belong in
   a dedicated table, not in this business table.
 - `ownerUserId` is **creator attribution only**, not an access-control input.
+- `ownerUserName` is the current display name for `ownerUserId`; it may be `null` if the
+  owner user is absent.
 
 ## Authorization
 
@@ -77,7 +80,16 @@ List active knowledge bases. Required permission: `kb:read`.
 Response:
 
 ```json
-{ "items": [ { "id": "kb_123", "...": "..." } ] }
+{
+  "items": [
+    {
+      "id": "kb_123",
+      "ownerUserId": "user_123",
+      "ownerUserName": "Jane Expert",
+      "...": "..."
+    }
+  ]
+}
 ```
 
 ## GET /{knowledge_base_id}

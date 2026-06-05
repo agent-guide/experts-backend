@@ -4,6 +4,7 @@ from app.api.deps import get_auth_service, require_platform_permission
 from app.domain.auth import (
     CreatePlatformUserRequest,
     CreatePlatformUserResponse,
+    ListUsersResponse,
     PlatformUserActivateRequest,
     Principal,
     RegisterRequest,
@@ -24,6 +25,14 @@ async def activate_platform_user(
     auth: AuthService = Depends(get_auth_service),
 ) -> dict:
     return auth.activate_platform_user(body.token, body.newPassword, body.name)
+
+
+@router.get("/platform", response_model=ListUsersResponse)
+async def list_platform_users(
+    principal: Principal = Depends(require_platform_permission("platform:user_manage")),
+    auth: AuthService = Depends(get_auth_service),
+) -> ListUsersResponse:
+    return ListUsersResponse(items=auth.list_platform_users())
 
 
 @router.post("/platform", response_model=CreatePlatformUserResponse, status_code=201)

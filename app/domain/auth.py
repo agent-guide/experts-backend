@@ -145,6 +145,16 @@ class GrantPlatformRoleRequest(BaseModel):
     role: PlatformRole
 
 
+class PlatformRoleSummary(BaseModel):
+    role: PlatformRole
+    name: str
+    permissions: list[Permission]
+
+
+class ListPlatformRolesResponse(BaseModel):
+    items: list[PlatformRoleSummary]
+
+
 class UserAccessSummary(BaseModel):
     id: str
     email: str

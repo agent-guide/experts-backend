@@ -7,8 +7,12 @@ from app.domain.knowledge import KnowledgeBase
 from app.services._sql import execute, fetch_all, fetch_one, json_load, json_param, rowcount
 
 
-_COLUMNS = (
+_INSERT_COLUMNS = (
     "id, owner_user_id, name, description, status, metadata, created_at, updated_at"
+)
+_SELECT_COLUMNS = (
+    "kb.id, kb.owner_user_id, u.name as owner_user_name, kb.name, kb.description, "
+    "kb.status, kb.metadata, kb.created_at, kb.updated_at"
 )
 
 
@@ -20,7 +24,7 @@ class KnowledgeBaseRepository:
         execute(
             self.connection,
             f"""
-            insert into knowledge_bases ({_COLUMNS})
+            insert into knowledge_bases ({_INSERT_COLUMNS})
             values (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -39,8 +43,13 @@ class KnowledgeBaseRepository:
     def get(self, knowledge_base_id: str) -> KnowledgeBase | None:
         row = fetch_one(
             self.connection,
-            f"select {_COLUMNS} from knowledge_bases "
-            "where id = ? and deleted_at is null limit 1",
+            f"""
+            select {_SELECT_COLUMNS}
+            from knowledge_bases kb
+            left join users u on u.id = kb.owner_user_id
+            where kb.id = ? and kb.deleted_at is null
+            limit 1
+            """,
             (knowledge_base_id,),
         )
         return _map_kb(row)
@@ -109,9 +118,11 @@ class KnowledgeBaseRepository:
         rows = fetch_all(
             self.connection,
             f"""
-            select {_COLUMNS} from knowledge_bases
-            where status = 'active' and deleted_at is null
-            order by created_at desc, id asc
+            select {_SELECT_COLUMNS}
+            from knowledge_bases kb
+            left join users u on u.id = kb.owner_user_id
+            where kb.status = 'active' and kb.deleted_at is null
+            order by kb.created_at desc, kb.id asc
             """,
         )
         return [kb for kb in (_map_kb(row) for row in rows) if kb is not None]
@@ -123,6 +134,9 @@ def _map_kb(row: dict[str, Any] | None) -> KnowledgeBase | None:
     return KnowledgeBase(
         id=str(row["id"]),
         ownerUserId=str(row["owner_user_id"]) if row["owner_user_id"] is not None else None,
+        ownerUserName=(
+            str(row["owner_user_name"]) if row.get("owner_user_name") is not None else None
+        ),
         name=str(row["name"]),
         description=str(row["description"]) if row["description"] is not None else None,
         status=str(row["status"]),

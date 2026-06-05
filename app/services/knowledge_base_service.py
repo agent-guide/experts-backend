@@ -35,8 +35,9 @@ class KnowledgeBaseService:
             updatedAt=now,
         )
         self.repo.create(kb)
+        created = self.repo.get(kb.id) or kb
         self.connection.commit()
-        return kb
+        return created
 
     def get(self, principal: Principal, knowledge_base_id: str) -> KnowledgeBase:
         kb = self.repo.get(knowledge_base_id)

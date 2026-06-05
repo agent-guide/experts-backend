@@ -31,6 +31,7 @@ class KnowledgeBase(BaseModel):
     id: str
     # Creator attribution only. Access is governed by platform permissions, not ownership.
     ownerUserId: str | None = None
+    ownerUserName: str | None = None
     name: str
     description: str | None = None
     status: KbStatus
