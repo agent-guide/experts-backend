@@ -46,7 +46,7 @@ FastAPI Expert Next API
         +-- NgentClient
         |      +-- codex ACP runtime
         |      +-- chat sessions as ngent threads
-        |      +-- chat tasks as ngent turns
+        |      +-- chat turns as ngent turns
         |      +-- SSE event passthrough/adaptation
         |
         +-- CodexSkillsClient
@@ -142,19 +142,23 @@ Current API shell:
 
 - `POST /api/v1/chat/sessions`
 - `GET /api/v1/chat/sessions`
+- `GET /api/v1/chat/sessions/{id}`
+- `DELETE /api/v1/chat/sessions/{id}`
 - `GET /api/v1/chat/sessions/{id}/messages`
 - `PATCH /api/v1/chat/sessions/{id}/title`
 - `PATCH /api/v1/chat/sessions/{id}/pin`
-- `POST /api/v1/chat/tasks`
-- `POST /api/v1/chat/tasks/{id}/cancel`
-- `GET /api/v1/chat/tasks/{id}/position`
-- `GET /api/v1/chat/tasks/{id}/events`
+- `POST /api/v1/chat/sessions/{id}/turns` (create + stream)
+- `POST /api/v1/chat/turns/{id}/cancel`
+- `GET /api/v1/chat/turns/{id}/events`
+- `POST /api/v1/chat/permissions/{id}`
 
 Mapping:
 
-- Old chat session -> ngent thread.
-- Old chat task -> ngent turn.
-- Old SSE task events -> ngent turn event stream, adapted to existing event names
+- Chat session -> ngent thread.
+- Chat turn -> ngent turn.
+- Turn creation streams SSE in one shot (no separate create/subscribe step); the
+  `GET /turns/{id}/events` endpoint is for reconnect/replay only.
+- SSE turn events -> ngent turn event stream, adapted to existing event names
   when necessary.
 - `llmModel`, `queryRewrite`, `multiHop`, and `knowledgeBaseIds` are passed as
   `agentOptions` until a stricter ngent contract is finalized.

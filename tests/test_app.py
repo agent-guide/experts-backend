@@ -36,7 +36,7 @@ def test_openapi_loads() -> None:
     assert "/api/v1/admin/users" not in paths
     assert "/api/v1/knowledge-bases" in paths
     assert "/api/v1/knowledge-bases/official" not in paths
-    assert "/api/v1/chat/tasks" in paths
+    assert "/api/v1/chat/sessions/{session_id}/turns" in paths
     assert "/api/v1/skills" in paths
 
 
@@ -53,16 +53,20 @@ def test_sqlite_migration_uses_infra_sql(tmp_path: Path) -> None:
                 "select name from sqlite_master where type = 'table'"
             ).fetchall()
         }
-        chat_task_columns = {
-            row["name"] for row in connection.execute("pragma table_info(chat_tasks)").fetchall()
+        chat_turn_columns = {
+            row["name"] for row in connection.execute("pragma table_info(chat_turns)").fetchall()
         }
 
     assert "tenants" in tables
     assert "knowledge_bases" in tables
-    assert "chat_tasks" in tables
-    assert "chat_task_events" in tables
-    assert "priority" in chat_task_columns
-    assert "multi_hop_config" in chat_task_columns
+    assert "chat_sessions" in tables
+    assert "chat_turns" in tables
+    # Old proxy-era tables were removed once the local store became the system of record.
+    assert "chat_tasks" not in tables
+    assert "chat_task_events" not in tables
+    assert "chat_messages" not in tables
+    assert "request_text" in chat_turn_columns
+    assert "response_text" in chat_turn_columns
 
 
 def test_app_startup_migrates_sqlite(tmp_path: Path) -> None:

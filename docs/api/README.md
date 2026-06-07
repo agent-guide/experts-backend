@@ -74,7 +74,8 @@ Successful responses generally return JSON, except:
 
 - `204` responses have no body.
 - `GET /skills/{slug}/file` returns `text/markdown`.
-- `GET /chat/tasks/{task_id}/events` returns `text/event-stream`.
+- `POST /chat/sessions/{session_id}/turns` and `GET /chat/turns/{turn_id}/events`
+  return `text/event-stream`.
 
 Errors are raised through the project API error handler and include an error
 code and message.

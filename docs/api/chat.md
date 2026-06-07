@@ -19,9 +19,17 @@ Required tenant permission for all endpoints:
 chat:ask
 ```
 
-Execution is delegated to ngent.
-Expert Next API forwards the active tenant to ngent as `X-Tenant-Id`; ngent must
-scope session/task operations to that tenant.
+Execution is delegated to ngent, but the **local database is the system of record**.
+A **session** maps to an ngent thread and a **turn** maps to an ngent turn; both are
+mirrored into `chat_sessions` / `chat_turns` so reads are tenant/user-scoped and survive
+ngent (whose store is single-node, unbacked, and enforces no isolation). Every endpoint
+authorizes by local ownership (the caller's tenant + user) before touching ngent. Session
+and turn ids equal the ngent thread/turn ids.
+
+Turn creation is **single-step streaming**: `POST /sessions/{session_id}/turns` returns
+an SSE stream directly (the `turnId` arrives in the first `turn_started` event). There is
+no separate "create then subscribe" step. Use `GET /turns/{turn_id}/events` only to
+reconnect/replay an existing turn.
 
 ## POST /sessions
 
@@ -36,13 +44,16 @@ Request:
 }
 ```
 
-Response `201`:
+Response `201` (a session object):
 
 ```json
 {
   "id": "thread_1",
   "title": "Review analysis",
-  "knowledgeBaseIds": ["kb_1"]
+  "knowledgeBaseIds": ["kb_1"],
+  "isPinned": false,
+  "createdAt": "2026-06-07T00:00:00+00:00",
+  "updatedAt": "2026-06-07T00:00:00+00:00"
 }
 ```
 
@@ -69,17 +80,47 @@ Response `200`:
 
 ## GET /sessions/{session_id}/messages
 
-List messages or turns for a session.
+List the turns of a session (the conversational record), read from the local store.
 
 Response:
 
 ```json
 {
-  "items": []
+  "items": [
+    {
+      "id": "turn_1",
+      "sessionId": "thread_1",
+      "requestText": "Analyze recent review trends",
+      "responseText": "...",
+      "model": "codex/gpt-5",
+      "status": "completed",
+      "stopReason": "end_turn",
+      "errorMessage": null,
+      "createdAt": "2026-06-07T00:00:00+00:00",
+      "completedAt": "2026-06-07T00:00:05+00:00"
+    }
+  ]
 }
 ```
 
-Items are adapted from ngent thread history.
+## GET /sessions/{session_id}
+
+Get a single session.
+
+Response is a session object.
+
+## DELETE /sessions/{session_id}
+
+Delete a session (proxies ngent `DELETE /v1/threads/{id}`).
+
+Response `200`:
+
+```json
+{
+  "id": "thread_1",
+  "status": "deleted"
+}
+```
 
 ## PATCH /sessions/{session_id}/title
 
@@ -116,15 +157,14 @@ Current response:
 }
 ```
 
-## POST /tasks
+## POST /sessions/{session_id}/turns
 
-Create a chat task.
+Create a turn and stream its events. The session (thread) id is taken from the path.
 
 Request:
 
 ```json
 {
-  "sessionId": "thread_1",
   "question": "Analyze recent review trends",
   "knowledgeBaseIds": ["kb_1"],
   "llmModel": "codex/gpt-5",
@@ -135,46 +175,43 @@ Request:
 }
 ```
 
-Response `202`:
+Response content type:
 
-```json
-{
-  "taskId": "turn_1",
-  "status": "queued",
-  "queuePosition": null
-}
+```text
+text/event-stream
 ```
 
-## POST /tasks/{task_id}/cancel
+The response is the live SSE stream proxied from ngent
+`POST /v1/threads/{id}/turns`. The first event is `turn_started`, carrying `turnId`,
+followed by `message_delta` / tool / `turn_completed` events. A mid-turn
+`permission_required` event must be answered via `POST /permissions/{permission_id}`.
 
-Cancel a chat task.
+While proxying, the backend tees the stream and persists the assembled turn record
+(`request_text`, `response_text`, `status`, `stop_reason`, ...) to `chat_turns`. If the
+client disconnects before `turn_completed`, the local turn may remain `running` (ngent
+finishes server-side); this is reconciled on the next read in a later iteration.
+
+## POST /turns/{turn_id}/cancel
+
+Cancel a running turn.
 
 Response:
 
 ```json
 {
-  "taskId": "turn_1",
-  "status": "cancel_requested"
+  "turnId": "turn_1",
+  "status": "cancelling"
 }
 ```
 
-## GET /tasks/{task_id}/position
+## GET /turns/{turn_id}/events
 
-Get queue position.
+Replay and live-stream a turn's events. Use this to reconnect to a turn created by
+`POST /sessions/{session_id}/turns`.
 
-Current response:
+Query parameters:
 
-```json
-{
-  "taskId": "turn_1",
-  "position": null,
-  "queueDepth": null
-}
-```
-
-## GET /tasks/{task_id}/events
-
-Stream task events.
+- `after` (optional, integer ≥ 0): resume from this event `seq`, skipping already-seen events.
 
 Response content type:
 
@@ -182,4 +219,20 @@ Response content type:
 text/event-stream
 ```
 
-The stream is proxied from ngent turn events.
+The stream is proxied from ngent `GET /v1/turns/{id}/events`.
+
+## POST /permissions/{permission_id}
+
+Resolve a `permission_required` event raised mid-turn (e.g. a tool approval). Proxies
+ngent `POST /v1/permissions/{permissionId}`.
+
+Request (one of `outcome` / `optionId` is required):
+
+```json
+{
+  "outcome": "approved",
+  "optionId": "opt_1"
+}
+```
+
+`outcome` is one of `approved`, `declined`, `cancelled`.

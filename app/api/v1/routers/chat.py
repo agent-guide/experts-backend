@@ -1,59 +1,75 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 
-from app.api.deps import get_ngent_client, require_tenant_permission
+from app.api.deps import get_database, get_ngent_client, require_tenant_permission
 from app.clients.ngent import NgentClient
+from app.db import DatabaseConnection
 from app.domain.auth import Principal
-from app.domain.chat import ChatTaskRequest, CreateSessionRequest, PinSessionRequest, RenameSessionRequest
+from app.domain.chat import (
+    ChatTurnRequest,
+    CreateSessionRequest,
+    PinSessionRequest,
+    RenameSessionRequest,
+    ResolvePermissionRequest,
+)
+from app.services.chat_service import ChatService
 
 router = APIRouter()
+
+
+def get_chat_service(
+    connection: DatabaseConnection = Depends(get_database),
+    ngent: NgentClient = Depends(get_ngent_client),
+) -> ChatService:
+    return ChatService(connection, ngent)
+
+
+# --- Sessions -----------------------------------------------------------------
 
 
 @router.post("/sessions", status_code=201)
 async def create_session(
     body: CreateSessionRequest,
     principal: Principal = Depends(require_tenant_permission("chat:ask")),
-    ngent: NgentClient = Depends(get_ngent_client),
+    service: ChatService = Depends(get_chat_service),
 ) -> dict:
-    data = await ngent.request(
-        "POST",
-        "/v1/threads",
-        tenant_id=principal.active_tenant_id,
-        json={
-            "agent": ngent.default_agent,
-            "cwd": ngent.default_cwd,
-            "title": body.title,
-            "agentOptions": {"knowledgeBaseIds": body.knowledgeBaseIds},
-        },
-    )
-    return {
-        "id": data["threadId"],
-        "title": body.title,
-        "knowledgeBaseIds": body.knowledgeBaseIds,
-    }
+    return (await service.create_session(principal, body)).model_dump()
 
 
 @router.get("/sessions")
 async def list_sessions(
     principal: Principal = Depends(require_tenant_permission("chat:ask")),
-    ngent: NgentClient = Depends(get_ngent_client),
+    service: ChatService = Depends(get_chat_service),
 ) -> dict:
-    data = await ngent.request("GET", "/v1/threads", tenant_id=principal.active_tenant_id)
-    return {"items": [_thread_to_session(item) for item in data.get("threads", [])]}
+    return {"items": [s.model_dump() for s in service.list_sessions(principal)]}
+
+
+@router.get("/sessions/{session_id}")
+async def get_session(
+    session_id: str,
+    principal: Principal = Depends(require_tenant_permission("chat:ask")),
+    service: ChatService = Depends(get_chat_service),
+) -> dict:
+    return service.get_session(principal, session_id).model_dump()
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(
+    session_id: str,
+    principal: Principal = Depends(require_tenant_permission("chat:ask")),
+    service: ChatService = Depends(get_chat_service),
+) -> dict:
+    await service.delete_session(principal, session_id)
+    return {"id": session_id, "status": "deleted"}
 
 
 @router.get("/sessions/{session_id}/messages")
 async def list_messages(
     session_id: str,
     principal: Principal = Depends(require_tenant_permission("chat:ask")),
-    ngent: NgentClient = Depends(get_ngent_client),
+    service: ChatService = Depends(get_chat_service),
 ) -> dict:
-    data = await ngent.request(
-        "GET",
-        f"/v1/threads/{session_id}/history?includeEvents=1",
-        tenant_id=principal.active_tenant_id,
-    )
-    return {"items": data.get("turns", [])}
+    return {"items": service.list_messages(principal, session_id)}
 
 
 @router.patch("/sessions/{session_id}/title")
@@ -61,94 +77,67 @@ async def rename_session(
     session_id: str,
     body: RenameSessionRequest,
     principal: Principal = Depends(require_tenant_permission("chat:ask")),
-    ngent: NgentClient = Depends(get_ngent_client),
+    service: ChatService = Depends(get_chat_service),
 ) -> dict:
-    data = await ngent.request(
-        "PATCH",
-        f"/v1/threads/{session_id}",
-        tenant_id=principal.active_tenant_id,
-        json={"title": body.title},
-    )
-    return _thread_to_session(data["thread"])
+    return (await service.rename_session(principal, session_id, body.title)).model_dump()
 
 
 @router.patch("/sessions/{session_id}/pin")
 async def pin_session(
     session_id: str,
     body: PinSessionRequest,
-    _: Principal = Depends(require_tenant_permission("chat:ask")),
-) -> dict:
-    return {"id": session_id, "isPinned": body.isPinned}
-
-
-@router.post("/tasks", status_code=202)
-async def create_chat_task(
-    body: ChatTaskRequest,
     principal: Principal = Depends(require_tenant_permission("chat:ask")),
-    ngent: NgentClient = Depends(get_ngent_client),
+    service: ChatService = Depends(get_chat_service),
 ) -> dict:
-    data = await ngent.request(
-        "POST",
-        f"/v1/threads/{body.sessionId}/turns",
-        tenant_id=principal.active_tenant_id,
-        json={
-            "prompt": {"text": body.question},
-            "stream": True,
-            "agentOptions": {
-                "modelId": body.llmModel,
-                "knowledgeBaseIds": body.knowledgeBaseIds,
-                "queryRewrite": body.queryRewrite,
-                "multiHop": body.multiHop,
-            },
-        },
-    )
-    return {
-        "taskId": data.get("turnId"),
-        "status": data.get("status", "queued"),
-        "queuePosition": None,
-    }
+    return service.pin_session(principal, session_id, body.isPinned).model_dump()
 
 
-@router.post("/tasks/{task_id}/cancel")
-async def cancel_chat_task(
-    task_id: str,
+# --- Turns --------------------------------------------------------------------
+
+
+@router.post("/sessions/{session_id}/turns")
+async def create_turn(
+    session_id: str,
+    body: ChatTurnRequest,
     principal: Principal = Depends(require_tenant_permission("chat:ask")),
-    ngent: NgentClient = Depends(get_ngent_client),
-) -> dict:
-    data = await ngent.request(
-        "POST", f"/v1/turns/{task_id}/cancel", tenant_id=principal.active_tenant_id
-    )
-    return {"taskId": task_id, "status": data.get("status", "cancel_requested")}
-
-
-@router.get("/tasks/{task_id}/position")
-async def chat_task_position(task_id: str, _: Principal = Depends(require_tenant_permission("chat:ask"))) -> dict:
-    return {"taskId": task_id, "position": None, "queueDepth": None}
-
-
-@router.get("/tasks/{task_id}/events")
-async def chat_task_events(
-    task_id: str,
-    principal: Principal = Depends(require_tenant_permission("chat:ask")),
-    ngent: NgentClient = Depends(get_ngent_client),
+    service: ChatService = Depends(get_chat_service),
 ) -> StreamingResponse:
-    tenant_id = principal.active_tenant_id
-
-    async def events():
-        async for line in ngent.stream(
-            "GET", f"/v1/turns/{task_id}/events", tenant_id=tenant_id
-        ):
-            yield f"{line}\n"
-
-    return StreamingResponse(events(), media_type="text/event-stream")
+    # ngent creates and streams a turn in one shot; the turnId arrives in the first
+    # `turn_started` event. The service tees the SSE stream: forwards it to the caller while
+    # persisting the assembled turn record locally.
+    return StreamingResponse(
+        service.stream_turn(principal, session_id, body),
+        media_type="text/event-stream",
+    )
 
 
-def _thread_to_session(thread: dict) -> dict:
-    return {
-        "id": thread.get("threadId"),
-        "title": thread.get("title"),
-        "knowledgeBaseIds": thread.get("agentOptions", {}).get("knowledgeBaseIds", []),
-        "createdAt": thread.get("createdAt"),
-        "updatedAt": thread.get("updatedAt"),
-        "isPinned": False,
-    }
+@router.post("/turns/{turn_id}/cancel")
+async def cancel_turn(
+    turn_id: str,
+    principal: Principal = Depends(require_tenant_permission("chat:ask")),
+    service: ChatService = Depends(get_chat_service),
+) -> dict:
+    return await service.cancel_turn(principal, turn_id)
+
+
+@router.get("/turns/{turn_id}/events")
+async def turn_events(
+    turn_id: str,
+    principal: Principal = Depends(require_tenant_permission("chat:ask")),
+    service: ChatService = Depends(get_chat_service),
+    after: int | None = Query(default=None, ge=0),
+) -> StreamingResponse:
+    # Replay + live stream. `after` resumes from a given event seq for reconnects.
+    events = await service.stream_turn_events(principal, turn_id, after)
+    return StreamingResponse(events, media_type="text/event-stream")
+
+
+@router.post("/permissions/{permission_id}")
+async def resolve_permission(
+    permission_id: str,
+    body: ResolvePermissionRequest,
+    principal: Principal = Depends(require_tenant_permission("chat:ask")),
+    service: ChatService = Depends(get_chat_service),
+) -> dict:
+    # Resolves a `permission_required` event raised mid-turn (e.g. tool approval).
+    return await service.resolve_permission(principal, permission_id, body)

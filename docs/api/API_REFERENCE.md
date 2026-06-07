@@ -136,6 +136,26 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ## chat
 
+### POST `/api/v1/chat/permissions/{permission_id}`
+
+- Summary: Resolve Permission
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| path | permission_id | yes | string | - |
+| header | x-tenant-id | no | string \| null | - |
+| header | Authorization | no | string \| null | - |
+| body | application/json | yes | Body_resolve_permission_api_v1_chat_permissions__permission_id__post | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | object |
+| 422 | application/json | HTTPValidationError |
+
 ### GET `/api/v1/chat/sessions`
 
 - Summary: List Sessions
@@ -174,6 +194,46 @@ This document is generated from the FastAPI OpenAPI schema.
 | 201 | application/json | object |
 | 422 | application/json | HTTPValidationError |
 
+### DELETE `/api/v1/chat/sessions/{session_id}`
+
+- Summary: Delete Session
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| path | session_id | yes | string | - |
+| header | x-tenant-id | no | string \| null | - |
+| header | Authorization | no | string \| null | - |
+| body | application/json | no | Settings | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | object |
+| 422 | application/json | HTTPValidationError |
+
+### GET `/api/v1/chat/sessions/{session_id}`
+
+- Summary: Get Session
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| path | session_id | yes | string | - |
+| header | x-tenant-id | no | string \| null | - |
+| header | Authorization | no | string \| null | - |
+| body | application/json | no | Settings | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | object |
+| 422 | application/json | HTTPValidationError |
+
 ### GET `/api/v1/chat/sessions/{session_id}/messages`
 
 - Summary: List Messages
@@ -205,7 +265,7 @@ This document is generated from the FastAPI OpenAPI schema.
 | path | session_id | yes | string | - |
 | header | x-tenant-id | no | string \| null | - |
 | header | Authorization | no | string \| null | - |
-| body | application/json | yes | PinSessionRequest | - |
+| body | application/json | yes | Body_pin_session_api_v1_chat_sessions__session_id__pin_patch | - |
 
 #### Response
 
@@ -234,34 +294,35 @@ This document is generated from the FastAPI OpenAPI schema.
 | 200 | application/json | object |
 | 422 | application/json | HTTPValidationError |
 
-### POST `/api/v1/chat/tasks`
+### POST `/api/v1/chat/sessions/{session_id}/turns`
 
-- Summary: Create Chat Task
+- Summary: Create Turn
 
 #### Input Parameters
 
 | Location | Name | Required | Type | Description |
 | --- | --- | --- | --- | --- |
+| path | session_id | yes | string | - |
 | header | x-tenant-id | no | string \| null | - |
 | header | Authorization | no | string \| null | - |
-| body | application/json | yes | Body_create_chat_task_api_v1_chat_tasks_post | - |
+| body | application/json | yes | Body_create_turn_api_v1_chat_sessions__session_id__turns_post | - |
 
 #### Response
 
 | Status | Content Type | Schema |
 | --- | --- | --- |
-| 202 | application/json | object |
+| 200 | application/json | - |
 | 422 | application/json | HTTPValidationError |
 
-### POST `/api/v1/chat/tasks/{task_id}/cancel`
+### POST `/api/v1/chat/turns/{turn_id}/cancel`
 
-- Summary: Cancel Chat Task
+- Summary: Cancel Turn
 
 #### Input Parameters
 
 | Location | Name | Required | Type | Description |
 | --- | --- | --- | --- | --- |
-| path | task_id | yes | string | - |
+| path | turn_id | yes | string | - |
 | header | x-tenant-id | no | string \| null | - |
 | header | Authorization | no | string \| null | - |
 | body | application/json | no | Settings | - |
@@ -273,15 +334,16 @@ This document is generated from the FastAPI OpenAPI schema.
 | 200 | application/json | object |
 | 422 | application/json | HTTPValidationError |
 
-### GET `/api/v1/chat/tasks/{task_id}/events`
+### GET `/api/v1/chat/turns/{turn_id}/events`
 
-- Summary: Chat Task Events
+- Summary: Turn Events
 
 #### Input Parameters
 
 | Location | Name | Required | Type | Description |
 | --- | --- | --- | --- | --- |
-| path | task_id | yes | string | - |
+| path | turn_id | yes | string | - |
+| query | after | no | integer \| null | - |
 | header | x-tenant-id | no | string \| null | - |
 | header | Authorization | no | string \| null | - |
 | body | application/json | no | Settings | - |
@@ -291,25 +353,6 @@ This document is generated from the FastAPI OpenAPI schema.
 | Status | Content Type | Schema |
 | --- | --- | --- |
 | 200 | application/json | - |
-| 422 | application/json | HTTPValidationError |
-
-### GET `/api/v1/chat/tasks/{task_id}/position`
-
-- Summary: Chat Task Position
-
-#### Input Parameters
-
-| Location | Name | Required | Type | Description |
-| --- | --- | --- | --- | --- |
-| path | task_id | yes | string | - |
-| header | x-tenant-id | no | string \| null | - |
-| header | Authorization | no | string \| null | - |
-
-#### Response
-
-| Status | Content Type | Schema |
-| --- | --- | --- |
-| 200 | application/json | object |
 | 422 | application/json | HTTPValidationError |
 
 ## docs
@@ -637,6 +680,23 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ## rbac
 
+### GET `/api/v1/rbac/platform/roles`
+
+- Summary: List Platform Roles
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| header | Authorization | no | string \| null | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | ListPlatformRolesResponse |
+| 422 | application/json | HTTPValidationError |
+
 ### POST `/api/v1/rbac/platform/users/{user_id}/roles`
 
 - Summary: Grant Platform Role
@@ -850,6 +910,23 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ## users
 
+### GET `/api/v1/users/platform`
+
+- Summary: List Platform Users
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| header | Authorization | no | string \| null | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | ListUsersResponse |
+| 422 | application/json | HTTPValidationError |
+
 ### POST `/api/v1/users/platform`
 
 - Summary: Create Platform User
@@ -904,13 +981,6 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ## Schemas
 
-### `Body_create_chat_task_api_v1_chat_tasks_post`
-
-| Field | Required | Type | Description |
-| --- | --- | --- | --- |
-| body | yes | ChatTaskRequest | - |
-| settings | no | Settings | - |
-
 ### `Body_create_session_api_v1_chat_sessions_post`
 
 | Field | Required | Type | Description |
@@ -918,11 +988,32 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | body | yes | CreateSessionRequest | - |
 | settings | no | Settings | - |
 
+### `Body_create_turn_api_v1_chat_sessions__session_id__turns_post`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| body | yes | ChatTurnRequest | - |
+| settings | no | Settings | - |
+
+### `Body_pin_session_api_v1_chat_sessions__session_id__pin_patch`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| body | yes | PinSessionRequest | - |
+| settings | no | Settings | - |
+
 ### `Body_rename_session_api_v1_chat_sessions__session_id__title_patch`
 
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
 | body | yes | RenameSessionRequest | - |
+| settings | no | Settings | - |
+
+### `Body_resolve_permission_api_v1_chat_permissions__permission_id__post`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| body | yes | ResolvePermissionRequest | - |
 | settings | no | Settings | - |
 
 ### `Body_upload_skill_api_v1_skills_post`
@@ -940,11 +1031,10 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | documentIds | no | array[string] | - |
 | config | no | object | - |
 
-### `ChatTaskRequest`
+### `ChatTurnRequest`
 
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
-| sessionId | yes | string | - |
 | question | yes | string | - |
 | knowledgeBaseIds | no | array[string] | - |
 | llmModel | no | string \| null | - |
@@ -1050,6 +1140,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | --- | --- | --- | --- |
 | id | yes | string | - |
 | ownerUserId | no | string \| null | - |
+| ownerUserName | no | string \| null | - |
 | name | yes | string | - |
 | description | no | string \| null | - |
 | status | yes | string | - |
@@ -1062,6 +1153,12 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
 | items | yes | array[KnowledgeBase] | - |
+
+### `ListPlatformRolesResponse`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| items | yes | array[PlatformRoleSummary] | - |
 
 ### `ListUsersResponse`
 
@@ -1093,6 +1190,14 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 `{"type": "string", "enum": ["admin", "expert", "operator"], "title": "PlatformRole"}`
 
+### `PlatformRoleSummary`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| role | yes | PlatformRole | - |
+| name | yes | string | - |
+| permissions | yes | array[string] | - |
+
 ### `PlatformUserActivateRequest`
 
 | Field | Required | Type | Description |
@@ -1121,6 +1226,13 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
 | title | yes | string | - |
+
+### `ResolvePermissionRequest`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| outcome | no | string \| null | - |
+| optionId | no | string \| null | - |
 
 ### `Settings`
 
@@ -1256,3 +1368,5 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | loc | yes | array[string \| integer] | - |
 | msg | yes | string | - |
 | type | yes | string | - |
+| input | no | {"title": "Input"} | - |
+| ctx | no | object | - |

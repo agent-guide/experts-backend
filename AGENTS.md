@@ -50,6 +50,21 @@ PageIndex / ngent / Codex are upstream/optional integrations, not the source of 
   `deleted_at is null`. GC has no scheduler/entry point yet — call it directly. complete-upload
   guards concurrent completion via the `documents` PK and maps the collision to 409, not 500.
 
+## Chat (ngent integration)
+
+- **ngent is a compute engine, not the source of truth.** Its store is single-node SQLite,
+  unbacked, and enforces **no tenant/user isolation** (any bearer token can read/delete any
+  thread/turn by id). So the **local DB is the system of record**: `chat_sessions` / `chat_turns`
+  mirror ngent's thread/turn shape plus ownership (`tenant_id`, `user_id`) and product fields
+  (pin) ngent lacks. Session/turn ids equal ngent's thread/turn ids.
+- Every chat endpoint authorizes by **local ownership** (caller's tenant+user) before calling
+  ngent — never trust ngent to scope. Flat `/turns/{id}/*` ops check `chat_turns` ownership.
+- Turn creation is **single-step streaming**: `POST /sessions/{id}/turns` returns the ngent SSE
+  stream directly; `ChatService.stream_turn` tees it — forwards to the caller while parsing
+  `turn_started` (captures turnId → insert) / `message_delta` (assemble) / `turn_completed`
+  (finalize). Client disconnect before completion can leave a turn `running` (known gap; reconcile
+  on read later). Only the assembled turn is stored — no per-event log table yet.
+
 ## Tests & lint
 
 - `python -m pytest tests/test_app.py -q` and `ruff check app/ tests/`. Run both before finishing.
