@@ -33,13 +33,14 @@ class ChatService:
 
     async def create_session(self, principal: Principal, request: CreateSessionRequest) -> ChatSession:
         agent_options = {"knowledgeBaseIds": request.knowledgeBaseIds}
+        cwd = self.ngent.prepare_cwd(str(principal.active_tenant_id))
         data = await self.ngent.request(
             "POST",
             "/v1/threads",
             tenant_id=principal.active_tenant_id,
             json={
                 "agent": self.ngent.default_agent,
-                "cwd": self.ngent.default_cwd,
+                "cwd": cwd,
                 "title": request.title,
                 "agentOptions": agent_options,
             },

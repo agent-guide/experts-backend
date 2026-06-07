@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     ngent_client_id: str = "amazon-experts-backend"
     ngent_default_agent: str = "codex"
     ngent_default_cwd: str = Field(default_factory=lambda: str(Path.cwd()))
+    # Base directory for per-tenant ngent working dirs. When set, each session's cwd is
+    # <ngent_cwd_base>/<tenant_id> (created on demand); when empty, ngent_default_cwd is shared.
+    # Must resolve under ngent's allowedRoots; backend and ngent must share the filesystem.
+    ngent_cwd_base: str | None = None
 
     codex_home: str = Field(default_factory=lambda: str(Path.home() / ".codex"))
     codex_skills_dir: str | None = None

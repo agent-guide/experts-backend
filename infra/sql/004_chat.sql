@@ -20,6 +20,11 @@ create table if not exists chat_sessions (
 create index if not exists idx_chat_sessions_tenant_user
   on chat_sessions (tenant_id, user_id, is_pinned desc, pinned_at desc, updated_at desc);
 
+-- Preserve deployments whose chat_sessions predates these columns (the create table above is a
+-- no-op once the table exists, so new columns are backfilled here).
+alter table chat_sessions add column if not exists agent_options jsonb not null default '{}'::jsonb;
+alter table chat_sessions add column if not exists summary text;
+
 -- chat_messages was removed: turn-level conversation records now live in chat_turns (005), and
 -- ngent owns the fine-grained event stream.
 drop table if exists chat_messages;

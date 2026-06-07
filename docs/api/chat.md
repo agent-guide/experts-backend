@@ -35,6 +35,11 @@ reconnect/replay an existing turn.
 
 Create a chat session.
 
+The session's working directory (the ngent thread `cwd`) is resolved per tenant: when
+`EXPERT_NEXT_NGENT_CWD_BASE` is configured, it is `<base>/<tenant_id>` (created on demand);
+otherwise the shared `EXPERT_NEXT_NGENT_DEFAULT_CWD` is used. The path must resolve under
+ngent's `allowedRoots`.
+
 Request:
 
 ```json
