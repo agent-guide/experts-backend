@@ -55,6 +55,8 @@ def platform_role_permissions(role: PlatformRole) -> set[Permission]:
             "doc:delete",
             "skill:read",
             "skill:write",
+            "expert:read",
+            "expert:write",
         }
     if role == PlatformRole.OPERATOR:
         return {
@@ -64,6 +66,7 @@ def platform_role_permissions(role: PlatformRole) -> set[Permission]:
             "system:ops",
             "kb:read",
             "skill:read",
+            "expert:read",
         }
     if role == PlatformRole.ADMIN:
         return {
@@ -82,6 +85,8 @@ def platform_role_permissions(role: PlatformRole) -> set[Permission]:
             "doc:delete",
             "skill:read",
             "skill:write",
+            "expert:read",
+            "expert:write",
             "system:ops",
         }
     return set()

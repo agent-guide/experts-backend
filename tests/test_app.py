@@ -37,6 +37,15 @@ def test_openapi_loads() -> None:
     assert "/api/v1/tenants/{tenant_id}/status" in paths
     assert "/api/v1/tenants/{tenant_id}/members" in paths
     assert "/api/v1/tenants/{tenant_id}/members/{user_id}" in paths
+    assert "/api/v1/expert-categories" in paths
+    assert "/api/v1/expert-categories/{category_id}" in paths
+    assert "/api/v1/experts" in paths
+    assert "/api/v1/experts/search/name" in paths
+    assert "/api/v1/experts/search/category" in paths
+    assert "/api/v1/experts/search/status" in paths
+    assert "/api/v1/experts/stats/summary" in paths
+    assert "/api/v1/experts/{expert_id}" in paths
+    assert "/api/v1/experts/{expert_id}/status" in paths
     assert "/api/v1/rbac/tenant/users" in paths
     assert "/api/v1/rbac/tenant/users/{user_id}/roles" in paths
     assert "/api/v1/rbac/tenant/users/{user_id}" in paths
@@ -76,6 +85,10 @@ def test_sqlite_migration_uses_infra_sql(tmp_path: Path) -> None:
     assert "chat_messages" not in tables
     assert "request_text" in chat_turn_columns
     assert "response_text" in chat_turn_columns
+    assert "expert_categories" in tables
+    assert "experts" in tables
+    assert "expert_skills" in tables
+    assert "expert_knowledge_bases" in tables
 
 
 def test_app_startup_migrates_sqlite(tmp_path: Path) -> None:
@@ -1073,6 +1086,447 @@ def test_platform_tenant_management_crud_members_and_guards(tmp_path: Path) -> N
         tenant_headers = {"Authorization": f"Bearer {tenant_register.json()['accessToken']}"}
         forbidden = client.get("/api/v1/tenants", headers=tenant_headers)
         assert forbidden.status_code == 403
+
+
+def test_expert_category_crud_permissions_and_delete_guard(tmp_path: Path) -> None:
+    database_path = tmp_path / "expert_categories.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+    )
+    test_app = create_app(settings)
+
+    with TestClient(test_app) as client:
+        _seed_platform_user(
+            settings,
+            "platform_admin",
+            "platform-admin@example.com",
+            "Platform Admin",
+            "admin-secret",
+            "admin",
+        )
+        _seed_platform_user(
+            settings,
+            "operator_user",
+            "operator@example.com",
+            "Operator User",
+            "operator-secret",
+            "operator",
+        )
+
+        admin_login = client.post(
+            "/api/v1/auth/login",
+            json={"email": "platform-admin@example.com", "password": "admin-secret"},
+        )
+        admin_headers = {"Authorization": f"Bearer {admin_login.json()['accessToken']}"}
+
+        created = client.post(
+            "/api/v1/expert-categories",
+            headers=admin_headers,
+            json={"name": "Amazon Operations", "description": "Marketplace experts"},
+        )
+        assert created.status_code == 201, created.text
+        category = created.json()
+        assert category["name"] == "Amazon Operations"
+        assert category["description"] == "Marketplace experts"
+
+        listed = client.get("/api/v1/expert-categories", headers=admin_headers)
+        assert listed.status_code == 200
+        assert any(item["id"] == category["id"] for item in listed.json()["items"])
+
+        got = client.get(f"/api/v1/expert-categories/{category['id']}", headers=admin_headers)
+        assert got.status_code == 200
+        assert got.json()["id"] == category["id"]
+
+        patched = client.patch(
+            f"/api/v1/expert-categories/{category['id']}",
+            headers=admin_headers,
+            json={"name": "Amazon Growth", "description": None},
+        )
+        assert patched.status_code == 200
+        assert patched.json()["name"] == "Amazon Growth"
+        assert patched.json()["description"] == "Marketplace experts"
+
+        duplicate = client.post(
+            "/api/v1/expert-categories",
+            headers=admin_headers,
+            json={"name": "Amazon Growth"},
+        )
+        assert duplicate.status_code == 409
+
+        operator_login = client.post(
+            "/api/v1/auth/login",
+            json={"email": "operator@example.com", "password": "operator-secret"},
+        )
+        operator_headers = {"Authorization": f"Bearer {operator_login.json()['accessToken']}"}
+        operator_list = client.get("/api/v1/expert-categories", headers=operator_headers)
+        assert operator_list.status_code == 200
+        operator_create = client.post(
+            "/api/v1/expert-categories",
+            headers=operator_headers,
+            json={"name": "Operator Category"},
+        )
+        assert operator_create.status_code == 403
+
+        with open_database_connection(settings) as connection:
+            connection.execute(
+                """
+                insert into experts (id, category_id, name, ability_intro, status)
+                values ('expert_in_use', ?, 'In Use', 'Used by delete guard.', 'draft')
+                """,
+                (category["id"],),
+            )
+            connection.commit()
+
+        in_use_delete = client.delete(
+            f"/api/v1/expert-categories/{category['id']}", headers=admin_headers
+        )
+        assert in_use_delete.status_code == 409
+
+        with open_database_connection(settings) as connection:
+            connection.execute("delete from experts where id = 'expert_in_use'")
+            connection.commit()
+
+        deleted = client.delete(
+            f"/api/v1/expert-categories/{category['id']}", headers=admin_headers
+        )
+        assert deleted.status_code == 204
+        missing = client.get(f"/api/v1/expert-categories/{category['id']}", headers=admin_headers)
+        assert missing.status_code == 404
+
+
+def test_expert_crud_relations_status_and_permissions(tmp_path: Path) -> None:
+    database_path = tmp_path / "experts.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+    )
+    test_app = create_app(settings)
+
+    with TestClient(test_app) as client:
+        _seed_platform_user(
+            settings,
+            "platform_admin",
+            "platform-admin@example.com",
+            "Platform Admin",
+            "admin-secret",
+            "admin",
+        )
+        _seed_platform_user(
+            settings,
+            "operator_user",
+            "operator@example.com",
+            "Operator User",
+            "operator-secret",
+            "operator",
+        )
+        with open_database_connection(settings) as connection:
+            connection.execute(
+                """
+                insert into expert_categories (id, name, description)
+                values ('expert_cat_ops', 'Operations', 'Operations experts')
+                """
+            )
+            connection.execute(
+                """
+                insert into expert_categories (id, name, description)
+                values ('expert_cat_growth', 'Growth', 'Growth experts')
+                """
+            )
+            connection.execute(
+                """
+                insert into skills (
+                  id, slug, name, description, allowed_tools, file_paths, tags, storage_uri
+                )
+                values (
+                  'skill_ops', 'ops-skill', 'Ops Skill', 'Ops helper', '[]', '[]', '[]',
+                  'local://ops-skill'
+                )
+                """
+            )
+            connection.execute(
+                """
+                insert into skills (
+                  id, slug, name, description, allowed_tools, file_paths, tags, storage_uri
+                )
+                values (
+                  'skill_growth', 'growth-skill', 'Growth Skill', 'Growth helper', '[]',
+                  '[]', '[]', 'local://growth-skill'
+                )
+                """
+            )
+            connection.execute(
+                """
+                insert into knowledge_bases (id, owner_user_id, name, status, metadata)
+                values ('kb_ops', 'platform_admin', 'Ops KB', 'active', '{}')
+                """
+            )
+            connection.execute(
+                """
+                insert into knowledge_bases (id, owner_user_id, name, status, metadata)
+                values ('kb_growth', 'platform_admin', 'Growth KB', 'active', '{}')
+                """
+            )
+            connection.commit()
+
+        admin_login = client.post(
+            "/api/v1/auth/login",
+            json={"email": "platform-admin@example.com", "password": "admin-secret"},
+        )
+        admin_headers = {"Authorization": f"Bearer {admin_login.json()['accessToken']}"}
+
+        created = client.post(
+            "/api/v1/experts",
+            headers=admin_headers,
+            json={
+                "name": "Listing Expert",
+                "categoryId": "expert_cat_ops",
+                "abilityIntro": "Helps optimize listings.",
+                "tags": ["listing", "ops", "listing"],
+                "status": "draft",
+                "skillIds": ["skill_ops"],
+                "knowledgeBaseIds": ["kb_ops"],
+                "guideQuestions": ["How to improve listing?", "Why did traffic drop?"],
+                "summonButtonText": "Ask expert",
+            },
+        )
+        assert created.status_code == 201, created.text
+        expert = created.json()
+        expert_id = expert["id"]
+        assert expert["categoryName"] == "Operations"
+        assert expert["tags"] == ["listing", "ops"]
+        assert expert["skillIds"] == ["skill_ops"]
+        assert expert["knowledgeBaseIds"] == ["kb_ops"]
+
+        listed = client.get("/api/v1/experts", headers=admin_headers)
+        assert listed.status_code == 200
+        assert any(item["id"] == expert_id for item in listed.json()["items"])
+
+        got = client.get(f"/api/v1/experts/{expert_id}", headers=admin_headers)
+        assert got.status_code == 200
+        assert got.json()["guideQuestions"] == [
+            "How to improve listing?",
+            "Why did traffic drop?",
+        ]
+
+        patched = client.patch(
+            f"/api/v1/experts/{expert_id}",
+            headers=admin_headers,
+            json={
+                "name": "Growth Expert",
+                "categoryId": "expert_cat_growth",
+                "abilityIntro": "Helps grow conversion.",
+                "tags": ["growth"],
+                "skillIds": ["skill_growth"],
+                "knowledgeBaseIds": ["kb_growth"],
+                "guideQuestions": [],
+                "summonButtonText": "Start",
+            },
+        )
+        assert patched.status_code == 200
+        patched_body = patched.json()
+        assert patched_body["name"] == "Growth Expert"
+        assert patched_body["categoryName"] == "Growth"
+        assert patched_body["skillIds"] == ["skill_growth"]
+        assert patched_body["knowledgeBaseIds"] == ["kb_growth"]
+        assert patched_body["guideQuestions"] == []
+
+        published = client.patch(
+            f"/api/v1/experts/{expert_id}/status",
+            headers=admin_headers,
+            json={"status": "published"},
+        )
+        assert published.status_code == 200
+        assert published.json()["status"] == "published"
+
+        missing_skill = client.post(
+            "/api/v1/experts",
+            headers=admin_headers,
+            json={
+                "name": "Broken Expert",
+                "categoryId": "expert_cat_ops",
+                "abilityIntro": "Broken.",
+                "skillIds": ["missing_skill"],
+            },
+        )
+        assert missing_skill.status_code == 404
+
+        too_many_questions = client.post(
+            "/api/v1/experts",
+            headers=admin_headers,
+            json={
+                "name": "Too Many Questions",
+                "categoryId": "expert_cat_ops",
+                "abilityIntro": "Too many.",
+                "guideQuestions": ["q1", "q2", "q3", "q4"],
+            },
+        )
+        assert too_many_questions.status_code == 422
+
+        operator_login = client.post(
+            "/api/v1/auth/login",
+            json={"email": "operator@example.com", "password": "operator-secret"},
+        )
+        operator_headers = {"Authorization": f"Bearer {operator_login.json()['accessToken']}"}
+        operator_list = client.get("/api/v1/experts", headers=operator_headers)
+        assert operator_list.status_code == 200
+        operator_create = client.post(
+            "/api/v1/experts",
+            headers=operator_headers,
+            json={
+                "name": "Operator Expert",
+                "categoryId": "expert_cat_ops",
+                "abilityIntro": "Not allowed.",
+            },
+        )
+        assert operator_create.status_code == 403
+
+        deleted = client.delete(f"/api/v1/experts/{expert_id}", headers=admin_headers)
+        assert deleted.status_code == 204
+        missing = client.get(f"/api/v1/experts/{expert_id}", headers=admin_headers)
+        assert missing.status_code == 404
+        with open_database_connection(settings) as connection:
+            links = connection.execute(
+                "select id from expert_skills where expert_id = ?", (expert_id,)
+            ).fetchall()
+        assert links == []
+
+
+def test_expert_stats_summary_counts_statuses(tmp_path: Path) -> None:
+    database_path = tmp_path / "expert_stats.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+    )
+    test_app = create_app(settings)
+
+    with TestClient(test_app) as client:
+        _seed_platform_user(
+            settings,
+            "platform_admin",
+            "platform-admin@example.com",
+            "Platform Admin",
+            "admin-secret",
+            "admin",
+        )
+        with open_database_connection(settings) as connection:
+            connection.execute(
+                """
+                insert into expert_categories (id, name, description)
+                values ('expert_cat_stats', 'Stats', 'Stats experts')
+                """
+            )
+            for expert_id, status in [
+                ("expert_published_1", "published"),
+                ("expert_published_2", "published"),
+                ("expert_draft", "draft"),
+                ("expert_unlisted", "unlisted"),
+            ]:
+                connection.execute(
+                    """
+                    insert into experts (id, category_id, name, ability_intro, status)
+                    values (?, 'expert_cat_stats', ?, 'Stats helper.', ?)
+                    """,
+                    (expert_id, expert_id, status),
+                )
+            connection.commit()
+
+        admin_login = client.post(
+            "/api/v1/auth/login",
+            json={"email": "platform-admin@example.com", "password": "admin-secret"},
+        )
+        admin_headers = {"Authorization": f"Bearer {admin_login.json()['accessToken']}"}
+
+        response = client.get("/api/v1/experts/stats/summary", headers=admin_headers)
+        assert response.status_code == 200
+        assert response.json() == {
+            "total": 4,
+            "published": 2,
+            "draft": 1,
+            "unlisted": 1,
+        }
+
+
+def test_expert_search_by_name_category_and_status(tmp_path: Path) -> None:
+    database_path = tmp_path / "expert_search.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+    )
+    test_app = create_app(settings)
+
+    with TestClient(test_app) as client:
+        _seed_platform_user(
+            settings,
+            "platform_admin",
+            "platform-admin@example.com",
+            "Platform Admin",
+            "admin-secret",
+            "admin",
+        )
+        with open_database_connection(settings) as connection:
+            connection.execute(
+                """
+                insert into expert_categories (id, name, description)
+                values ('expert_cat_ops', 'Operations', null)
+                """
+            )
+            connection.execute(
+                """
+                insert into expert_categories (id, name, description)
+                values ('expert_cat_ads', 'Advertising', null)
+                """
+            )
+            for expert_id, category_id, name, status in [
+                ("expert_listing", "expert_cat_ops", "Listing Expert", "published"),
+                ("expert_store", "expert_cat_ops", "Store Operations Expert", "draft"),
+                ("expert_ads", "expert_cat_ads", "Advertising Expert", "unlisted"),
+            ]:
+                connection.execute(
+                    """
+                    insert into experts (id, category_id, name, ability_intro, status)
+                    values (?, ?, ?, 'Search helper.', ?)
+                    """,
+                    (expert_id, category_id, name, status),
+                )
+            connection.commit()
+
+        admin_login = client.post(
+            "/api/v1/auth/login",
+            json={"email": "platform-admin@example.com", "password": "admin-secret"},
+        )
+        admin_headers = {"Authorization": f"Bearer {admin_login.json()['accessToken']}"}
+
+        by_name = client.get(
+            "/api/v1/experts/search/name",
+            headers=admin_headers,
+            params={"name": "listing"},
+        )
+        assert by_name.status_code == 200
+        assert [item["id"] for item in by_name.json()["items"]] == ["expert_listing"]
+
+        by_category = client.get(
+            "/api/v1/experts/search/category",
+            headers=admin_headers,
+            params={"categoryId": "expert_cat_ops"},
+        )
+        assert by_category.status_code == 200
+        assert {item["id"] for item in by_category.json()["items"]} == {
+            "expert_listing",
+            "expert_store",
+        }
+
+        by_status = client.get(
+            "/api/v1/experts/search/status",
+            headers=admin_headers,
+            params={"status": "unlisted"},
+        )
+        assert by_status.status_code == 200
+        assert [item["id"] for item in by_status.json()["items"]] == ["expert_ads"]
 
 
 def test_skills_upload_list_get_file_update_and_delete(tmp_path: Path) -> None:

@@ -12,6 +12,18 @@ Health check:
 GET /health
 ```
 
+Swagger UI is available when the FastAPI app is running:
+
+```text
+GET /docs
+```
+
+The generated OpenAPI schema is also checked in at:
+
+```text
+docs/api/openapi.json
+```
+
 ## Authentication
 
 Most APIs require:
@@ -61,6 +73,7 @@ token claims; they are derived server-side from the current role mapping.
 - [RBAC](./rbac.md)
 - [Knowledge Bases](./knowledge-bases.md) (platform-owned; minimal shape, single `status`)
 - [Documents](./documents.md) (nested under a knowledge base; MinIO direct upload)
+- [Experts](./experts.md) (platform-owned expert categories and experts)
 - [Build](./builds.md) (Phase 2 placeholder)
 - [Chat](./chat.md)
 - [Skills](./skills.md)

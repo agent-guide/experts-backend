@@ -15,7 +15,8 @@ capabilities to external systems:
 ```bash
 cd amazon-experts-backend
 python3 -m venv .venv
-. .venv/bin/activate
+. .venv/bin/activate    
+.\.venv\Scripts\Activate
 pip install -e ".[dev]"
 python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 15000
 ```
