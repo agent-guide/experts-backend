@@ -198,6 +198,20 @@ Status values:
 
 List experts. Required permission: `expert:read`.
 
+Query parameters (all optional, combinable):
+
+| Parameter | Description |
+| --- | --- |
+| `name` | Case-insensitive partial expert name. |
+| `categoryId` | Expert category ID. |
+| `status` | `published`, `draft`, or `unlisted`. |
+
+Example:
+
+```text
+GET /api/v1/experts?categoryId=expert_cat_123&status=published
+```
+
 Response `200`:
 
 ```json
@@ -222,60 +236,6 @@ Response `200`:
 }
 ```
 
-## GET /api/v1/experts/search/name
-
-Search experts by name. Required permission: `expert:read`.
-
-Query parameters:
-
-| Parameter | Required | Description |
-| --- | --- | --- |
-| `name` | yes | Case-insensitive partial expert name. |
-
-Example:
-
-```text
-GET /api/v1/experts/search/name?name=listing
-```
-
-Response `200`: the expert list shape.
-
-## GET /api/v1/experts/search/category
-
-Search experts by category. Required permission: `expert:read`.
-
-Query parameters:
-
-| Parameter | Required | Description |
-| --- | --- | --- |
-| `categoryId` | yes | Expert category ID. |
-
-Example:
-
-```text
-GET /api/v1/experts/search/category?categoryId=expert_cat_123
-```
-
-Response `200`: the expert list shape.
-
-## GET /api/v1/experts/search/status
-
-Search experts by status. Required permission: `expert:read`.
-
-Query parameters:
-
-| Parameter | Required | Description |
-| --- | --- | --- |
-| `status` | yes | `published`, `draft`, or `unlisted`. |
-
-Example:
-
-```text
-GET /api/v1/experts/search/status?status=published
-```
-
-Response `200`: the expert list shape.
-
 ## GET /api/v1/experts/stats/summary
 
 Return dashboard statistics for expert status cards. Required permission:
@@ -294,10 +254,10 @@ Response `200`:
 
 Field mapping:
 
-- `total` = 专家总数
-- `published` = 已上架
-- `draft` = 草稿
-- `unlisted` = 已下架
+- `total` = total number of experts
+- `published` = published count
+- `draft` = draft count
+- `unlisted` = unlisted count
 
 ## GET /api/v1/experts/{expert_id}
 
@@ -337,7 +297,8 @@ Request:
 
 `status` defaults to `draft`. `tags`, `skillIds`, `knowledgeBaseIds`, and
 `guideQuestions` default to empty arrays. `guideQuestions` accepts at most three
-items.
+items. `tags`, `skillIds`, `knowledgeBaseIds`, and `guideQuestions` are
+de-duplicated and empty strings are dropped, preserving first-seen order.
 
 Response `201`: the expert shape.
 

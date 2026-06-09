@@ -180,6 +180,9 @@ def _open_sqlite(database_url: str) -> SqliteConnection:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(path, check_same_thread=False)
     connection.row_factory = sqlite3.Row
+    # Foreign keys are off by default per SQLite connection. Enable them so runtime FK behavior
+    # (e.g. ON DELETE CASCADE) matches PostgreSQL, where constraints are always enforced.
+    connection.execute("pragma foreign_keys = on")
     return connection
 
 

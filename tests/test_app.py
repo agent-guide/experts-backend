@@ -40,9 +40,6 @@ def test_openapi_loads() -> None:
     assert "/api/v1/expert-categories" in paths
     assert "/api/v1/expert-categories/{category_id}" in paths
     assert "/api/v1/experts" in paths
-    assert "/api/v1/experts/search/name" in paths
-    assert "/api/v1/experts/search/category" in paths
-    assert "/api/v1/experts/search/status" in paths
     assert "/api/v1/experts/stats/summary" in paths
     assert "/api/v1/experts/{expert_id}" in paths
     assert "/api/v1/experts/{expert_id}/status" in paths
@@ -1341,6 +1338,19 @@ def test_expert_crud_relations_status_and_permissions(tmp_path: Path) -> None:
         assert published.status_code == 200
         assert published.json()["status"] == "published"
 
+        # A soft-deleted knowledge base must drop out of the expert's knowledgeBaseIds
+        # (the join-table ON DELETE CASCADE only fires at GC purge time).
+        with open_database_connection(settings) as connection:
+            connection.execute(
+                "update knowledge_bases set deleted_at = '2026-06-09T00:00:00+00:00'"
+                " where id = ?",
+                ("kb_growth",),
+            )
+            connection.commit()
+        after_soft_delete = client.get(f"/api/v1/experts/{expert_id}", headers=admin_headers)
+        assert after_soft_delete.status_code == 200
+        assert after_soft_delete.json()["knowledgeBaseIds"] == []
+
         missing_skill = client.post(
             "/api/v1/experts",
             headers=admin_headers,
@@ -1502,7 +1512,7 @@ def test_expert_search_by_name_category_and_status(tmp_path: Path) -> None:
         admin_headers = {"Authorization": f"Bearer {admin_login.json()['accessToken']}"}
 
         by_name = client.get(
-            "/api/v1/experts/search/name",
+            "/api/v1/experts",
             headers=admin_headers,
             params={"name": "listing"},
         )
@@ -1510,7 +1520,7 @@ def test_expert_search_by_name_category_and_status(tmp_path: Path) -> None:
         assert [item["id"] for item in by_name.json()["items"]] == ["expert_listing"]
 
         by_category = client.get(
-            "/api/v1/experts/search/category",
+            "/api/v1/experts",
             headers=admin_headers,
             params={"categoryId": "expert_cat_ops"},
         )
@@ -1521,12 +1531,21 @@ def test_expert_search_by_name_category_and_status(tmp_path: Path) -> None:
         }
 
         by_status = client.get(
-            "/api/v1/experts/search/status",
+            "/api/v1/experts",
             headers=admin_headers,
             params={"status": "unlisted"},
         )
         assert by_status.status_code == 200
         assert [item["id"] for item in by_status.json()["items"]] == ["expert_ads"]
+
+        # Filters compose on the single list endpoint.
+        combined = client.get(
+            "/api/v1/experts",
+            headers=admin_headers,
+            params={"categoryId": "expert_cat_ops", "status": "published"},
+        )
+        assert combined.status_code == 200
+        assert [item["id"] for item in combined.json()["items"]] == ["expert_listing"]
 
 
 def test_skills_upload_list_get_file_update_and_delete(tmp_path: Path) -> None:

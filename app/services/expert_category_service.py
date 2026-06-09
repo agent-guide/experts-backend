@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
 from uuid import uuid4
 
 from app.core.errors import ApiError
@@ -10,41 +9,28 @@ from app.domain.experts import (
     ExpertCategory,
     UpdateExpertCategoryRequest,
 )
-from app.services._sql import execute, fetch_all, fetch_one, is_unique_violation, rowcount
+from app.services._sql import is_unique_violation
+from app.services.expert_category_repository import ExpertCategoryRepository
 
 
 class ExpertCategoryService:
     def __init__(self, connection: DatabaseConnection) -> None:
         self.connection = connection
+        self.repo = ExpertCategoryRepository(connection)
 
     def list(self) -> list[ExpertCategory]:
-        rows = fetch_all(
-            self.connection,
-            """
-            select id, name, description, created_at, updated_at
-            from expert_categories
-            order by created_at desc, id asc
-            """,
-        )
-        return [_map_category(row) for row in rows]
+        return self.repo.list()
 
     def get(self, category_id: str) -> ExpertCategory:
-        row = self._category_row(category_id)
-        if not row:
+        category = self.repo.get(category_id)
+        if not category:
             raise ApiError(404, "EXPERT_CATEGORY_NOT_FOUND", "Expert category not found")
-        return _map_category(row)
+        return category
 
     def create(self, request: CreateExpertCategoryRequest) -> ExpertCategory:
         category_id = f"expert_cat_{uuid4().hex}"
         try:
-            execute(
-                self.connection,
-                """
-                insert into expert_categories (id, name, description)
-                values (?, ?, ?)
-                """,
-                (category_id, request.name, request.description),
-            )
+            self.repo.insert(category_id, request.name, request.description)
             self.connection.commit()
         except Exception as exc:
             if is_unique_violation(exc):
@@ -63,15 +49,7 @@ class ExpertCategoryService:
             request.description if request.description is not None else current.description
         )
         try:
-            execute(
-                self.connection,
-                """
-                update expert_categories
-                set name = ?, description = ?, updated_at = CURRENT_TIMESTAMP
-                where id = ?
-                """,
-                (next_name, next_description, category_id),
-            )
+            self.repo.update(category_id, next_name, next_description)
             self.connection.commit()
         except Exception as exc:
             if is_unique_violation(exc):
@@ -83,44 +61,12 @@ class ExpertCategoryService:
 
     def delete(self, category_id: str) -> None:
         self.get(category_id)
-        in_use = fetch_one(
-            self.connection,
-            "select id from experts where category_id = ? limit 1",
-            (category_id,),
-        )
-        if in_use:
+        if self.repo.is_used_by_expert(category_id):
             raise ApiError(
                 409,
                 "EXPERT_CATEGORY_IN_USE",
                 "Expert category is used by one or more experts",
             )
-        cursor = execute(
-            self.connection,
-            "delete from expert_categories where id = ?",
-            (category_id,),
-        )
-        if rowcount(cursor) <= 0:
+        if self.repo.delete(category_id) <= 0:
             raise ApiError(404, "EXPERT_CATEGORY_NOT_FOUND", "Expert category not found")
         self.connection.commit()
-
-    def _category_row(self, category_id: str) -> dict[str, Any] | None:
-        return fetch_one(
-            self.connection,
-            """
-            select id, name, description, created_at, updated_at
-            from expert_categories
-            where id = ?
-            limit 1
-            """,
-            (category_id,),
-        )
-
-
-def _map_category(row: dict[str, Any]) -> ExpertCategory:
-    return ExpertCategory(
-        id=str(row["id"]),
-        name=str(row["name"]),
-        description=str(row["description"]) if row["description"] is not None else None,
-        createdAt=str(row["created_at"]),
-        updatedAt=str(row["updated_at"]),
-    )

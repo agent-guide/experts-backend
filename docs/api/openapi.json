@@ -1,17 +1,17 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Amazon Experts 后端接口文档",
-    "description": "Amazon Experts 后端服务的 Swagger/OpenAPI 文档。平台侧接口不需要 x-tenant-id；租户侧接口需要在请求头中传入 x-tenant-id。",
+    "title": "Amazon Experts Backend API",
+    "description": "Swagger/OpenAPI documentation for the Amazon Experts backend service. Platform APIs do not require x-tenant-id; tenant APIs require x-tenant-id in the request header.",
     "version": "0.1.0"
   },
   "paths": {
     "/health": {
       "get": {
         "tags": [
-          "健康检查"
+          "health"
         ],
-        "summary": "健康检查",
+        "summary": "Health check",
         "operationId": "health_health_get",
         "responses": {
           "200": {
@@ -34,9 +34,9 @@
     "/api/v1/auth/login": {
       "post": {
         "tags": [
-          "认证"
+          "auth"
         ],
-        "summary": "用户登录",
+        "summary": "User login",
         "operationId": "login_api_v1_auth_login_post",
         "requestBody": {
           "content": {
@@ -54,6 +54,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Login Api V1 Auth Login Post"
                 }
@@ -76,9 +77,9 @@
     "/api/v1/auth/refresh": {
       "post": {
         "tags": [
-          "认证"
+          "auth"
         ],
-        "summary": "刷新访问令牌",
+        "summary": "Refresh access token",
         "operationId": "refresh_api_v1_auth_refresh_post",
         "requestBody": {
           "content": {
@@ -96,6 +97,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Refresh Api V1 Auth Refresh Post"
                 }
@@ -118,9 +120,9 @@
     "/api/v1/auth/logout": {
       "post": {
         "tags": [
-          "认证"
+          "auth"
         ],
-        "summary": "退出登录",
+        "summary": "Logout",
         "operationId": "logout_api_v1_auth_logout_post",
         "requestBody": {
           "content": {
@@ -152,9 +154,9 @@
     "/api/v1/users/register": {
       "post": {
         "tags": [
-          "用户管理"
+          "users"
         ],
-        "summary": "注册普通用户",
+        "summary": "Register a regular user",
         "operationId": "register_api_v1_users_register_post",
         "requestBody": {
           "content": {
@@ -172,6 +174,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Register Api V1 Users Register Post"
                 }
@@ -194,9 +197,9 @@
     "/api/v1/users": {
       "get": {
         "tags": [
-          "用户管理"
+          "users"
         ],
-        "summary": "获取普通用户列表",
+        "summary": "List regular users",
         "operationId": "list_users_api_v1_users_get",
         "parameters": [
           {
@@ -243,9 +246,9 @@
     "/api/v1/users/platform/activate": {
       "post": {
         "tags": [
-          "用户管理"
+          "users"
         ],
-        "summary": "激活平台用户",
+        "summary": "Activate a platform user",
         "operationId": "activate_platform_user_api_v1_users_platform_activate_post",
         "requestBody": {
           "content": {
@@ -263,6 +266,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Activate Platform User Api V1 Users Platform Activate Post"
                 }
@@ -285,9 +289,9 @@
     "/api/v1/users/platform": {
       "get": {
         "tags": [
-          "用户管理"
+          "users"
         ],
-        "summary": "获取平台用户列表",
+        "summary": "List platform users",
         "operationId": "list_platform_users_api_v1_users_platform_get",
         "parameters": [
           {
@@ -332,9 +336,9 @@
       },
       "post": {
         "tags": [
-          "用户管理"
+          "users"
         ],
-        "summary": "创建平台用户",
+        "summary": "Create a platform user",
         "operationId": "create_platform_user_api_v1_users_platform_post",
         "parameters": [
           {
@@ -391,9 +395,9 @@
     "/api/v1/users/{user_id}/tenants": {
       "get": {
         "tags": [
-          "用户管理"
+          "users"
         ],
-        "summary": "获取用户所属租户",
+        "summary": "List the user's tenants",
         "operationId": "list_user_tenants_api_v1_users__user_id__tenants_get",
         "parameters": [
           {
@@ -449,9 +453,9 @@
     "/api/v1/users/{user_id}": {
       "get": {
         "tags": [
-          "用户管理"
+          "users"
         ],
-        "summary": "获取用户详情",
+        "summary": "Get user details",
         "operationId": "get_user_api_v1_users__user_id__get",
         "parameters": [
           {
@@ -505,9 +509,9 @@
       },
       "patch": {
         "tags": [
-          "用户管理"
+          "users"
         ],
-        "summary": "更新用户基础信息",
+        "summary": "Update user profile",
         "operationId": "update_user_api_v1_users__user_id__patch",
         "parameters": [
           {
@@ -573,9 +577,9 @@
     "/api/v1/users/{user_id}/status": {
       "patch": {
         "tags": [
-          "用户管理"
+          "users"
         ],
-        "summary": "更新用户状态",
+        "summary": "Update user status",
         "operationId": "update_user_status_api_v1_users__user_id__status_patch",
         "parameters": [
           {
@@ -641,9 +645,9 @@
     "/api/v1/tenants": {
       "get": {
         "tags": [
-          "租户管理"
+          "tenants"
         ],
-        "summary": "获取租户列表",
+        "summary": "List tenants",
         "operationId": "list_tenants_api_v1_tenants_get",
         "parameters": [
           {
@@ -688,9 +692,9 @@
       },
       "post": {
         "tags": [
-          "租户管理"
+          "tenants"
         ],
-        "summary": "创建租户",
+        "summary": "Create a tenant",
         "operationId": "create_tenant_api_v1_tenants_post",
         "parameters": [
           {
@@ -747,9 +751,9 @@
     "/api/v1/tenants/{tenant_id}": {
       "get": {
         "tags": [
-          "租户管理"
+          "tenants"
         ],
-        "summary": "获取租户详情",
+        "summary": "Get tenant details",
         "operationId": "get_tenant_api_v1_tenants__tenant_id__get",
         "parameters": [
           {
@@ -803,9 +807,9 @@
       },
       "patch": {
         "tags": [
-          "租户管理"
+          "tenants"
         ],
-        "summary": "更新租户信息",
+        "summary": "Update tenant",
         "operationId": "update_tenant_api_v1_tenants__tenant_id__patch",
         "parameters": [
           {
@@ -871,9 +875,9 @@
     "/api/v1/tenants/{tenant_id}/status": {
       "patch": {
         "tags": [
-          "租户管理"
+          "tenants"
         ],
-        "summary": "更新租户状态",
+        "summary": "Update tenant status",
         "operationId": "update_tenant_status_api_v1_tenants__tenant_id__status_patch",
         "parameters": [
           {
@@ -939,9 +943,9 @@
     "/api/v1/tenants/{tenant_id}/members": {
       "get": {
         "tags": [
-          "租户管理"
+          "tenants"
         ],
-        "summary": "获取租户成员列表",
+        "summary": "List tenant members",
         "operationId": "list_tenant_members_api_v1_tenants__tenant_id__members_get",
         "parameters": [
           {
@@ -995,9 +999,9 @@
       },
       "post": {
         "tags": [
-          "租户管理"
+          "tenants"
         ],
-        "summary": "添加租户成员",
+        "summary": "Add a tenant member",
         "operationId": "add_tenant_member_api_v1_tenants__tenant_id__members_post",
         "parameters": [
           {
@@ -1063,9 +1067,9 @@
     "/api/v1/tenants/{tenant_id}/members/{user_id}": {
       "patch": {
         "tags": [
-          "租户管理"
+          "tenants"
         ],
-        "summary": "更新租户成员角色",
+        "summary": "Update tenant member role",
         "operationId": "update_tenant_member_api_v1_tenants__tenant_id__members__user_id__patch",
         "parameters": [
           {
@@ -1138,9 +1142,9 @@
       },
       "delete": {
         "tags": [
-          "租户管理"
+          "tenants"
         ],
-        "summary": "移除租户成员",
+        "summary": "Remove a tenant member",
         "operationId": "remove_tenant_member_api_v1_tenants__tenant_id__members__user_id__delete",
         "parameters": [
           {
@@ -1198,9 +1202,9 @@
     "/api/v1/expert-categories": {
       "get": {
         "tags": [
-          "专家分类"
+          "expert-categories"
         ],
-        "summary": "获取专家分类列表",
+        "summary": "List expert categories",
         "operationId": "list_expert_categories_api_v1_expert_categories_get",
         "parameters": [
           {
@@ -1245,9 +1249,9 @@
       },
       "post": {
         "tags": [
-          "专家分类"
+          "expert-categories"
         ],
-        "summary": "创建专家分类",
+        "summary": "Create an expert category",
         "operationId": "create_expert_category_api_v1_expert_categories_post",
         "parameters": [
           {
@@ -1304,9 +1308,9 @@
     "/api/v1/expert-categories/{category_id}": {
       "get": {
         "tags": [
-          "专家分类"
+          "expert-categories"
         ],
-        "summary": "获取专家分类详情",
+        "summary": "Get expert category details",
         "operationId": "get_expert_category_api_v1_expert_categories__category_id__get",
         "parameters": [
           {
@@ -1360,9 +1364,9 @@
       },
       "patch": {
         "tags": [
-          "专家分类"
+          "expert-categories"
         ],
-        "summary": "更新专家分类",
+        "summary": "Update an expert category",
         "operationId": "update_expert_category_api_v1_expert_categories__category_id__patch",
         "parameters": [
           {
@@ -1426,9 +1430,9 @@
       },
       "delete": {
         "tags": [
-          "专家分类"
+          "expert-categories"
         ],
-        "summary": "删除专家分类",
+        "summary": "Delete an expert category",
         "operationId": "delete_expert_category_api_v1_expert_categories__category_id__delete",
         "parameters": [
           {
@@ -1477,11 +1481,66 @@
     "/api/v1/experts": {
       "get": {
         "tags": [
-          "专家管理"
+          "experts"
         ],
-        "summary": "获取专家列表",
+        "summary": "List experts",
         "operationId": "list_experts_api_v1_experts_get",
         "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Name"
+            }
+          },
+          {
+            "name": "categoryId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Categoryid"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "published",
+                    "draft",
+                    "unlisted"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
           {
             "name": "Authorization",
             "in": "header",
@@ -1524,9 +1583,9 @@
       },
       "post": {
         "tags": [
-          "专家管理"
+          "experts"
         ],
-        "summary": "创建专家",
+        "summary": "Create an expert",
         "operationId": "create_expert_api_v1_experts_post",
         "parameters": [
           {
@@ -1580,193 +1639,12 @@
         }
       }
     },
-    "/api/v1/experts/search/name": {
-      "get": {
-        "tags": [
-          "专家管理"
-        ],
-        "summary": "按专家名称搜索专家",
-        "operationId": "search_experts_by_name_api_v1_experts_search_name_get",
-        "parameters": [
-          {
-            "name": "name",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "title": "Name"
-            }
-          },
-          {
-            "name": "Authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ExpertListResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/experts/search/category": {
-      "get": {
-        "tags": [
-          "专家管理"
-        ],
-        "summary": "按专家分类搜索专家",
-        "operationId": "search_experts_by_category_api_v1_experts_search_category_get",
-        "parameters": [
-          {
-            "name": "categoryId",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "title": "Categoryid"
-            }
-          },
-          {
-            "name": "Authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ExpertListResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/experts/search/status": {
-      "get": {
-        "tags": [
-          "专家管理"
-        ],
-        "summary": "按专家状态搜索专家",
-        "operationId": "search_experts_by_status_api_v1_experts_search_status_get",
-        "parameters": [
-          {
-            "name": "status",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "enum": [
-                "published",
-                "draft",
-                "unlisted"
-              ],
-              "type": "string",
-              "title": "Status"
-            }
-          },
-          {
-            "name": "Authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ExpertListResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/experts/stats/summary": {
       "get": {
         "tags": [
-          "专家管理"
+          "experts"
         ],
-        "summary": "获取专家统计数据",
+        "summary": "Get expert statistics",
         "operationId": "get_expert_stats_api_v1_experts_stats_summary_get",
         "parameters": [
           {
@@ -1813,9 +1691,9 @@
     "/api/v1/experts/{expert_id}": {
       "get": {
         "tags": [
-          "专家管理"
+          "experts"
         ],
-        "summary": "获取专家详情",
+        "summary": "Get expert details",
         "operationId": "get_expert_api_v1_experts__expert_id__get",
         "parameters": [
           {
@@ -1869,9 +1747,9 @@
       },
       "patch": {
         "tags": [
-          "专家管理"
+          "experts"
         ],
-        "summary": "更新专家信息",
+        "summary": "Update an expert",
         "operationId": "update_expert_api_v1_experts__expert_id__patch",
         "parameters": [
           {
@@ -1935,9 +1813,9 @@
       },
       "delete": {
         "tags": [
-          "专家管理"
+          "experts"
         ],
-        "summary": "删除专家",
+        "summary": "Delete an expert",
         "operationId": "delete_expert_api_v1_experts__expert_id__delete",
         "parameters": [
           {
@@ -1986,9 +1864,9 @@
     "/api/v1/experts/{expert_id}/status": {
       "patch": {
         "tags": [
-          "专家管理"
+          "experts"
         ],
-        "summary": "更新专家状态",
+        "summary": "Update expert status",
         "operationId": "update_expert_status_api_v1_experts__expert_id__status_patch",
         "parameters": [
           {
@@ -2054,9 +1932,9 @@
     "/api/v1/rbac/tenant/users": {
       "get": {
         "tags": [
-          "权限管理"
+          "rbac"
         ],
-        "summary": "获取当前租户用户列表",
+        "summary": "List current tenant users",
         "operationId": "list_tenant_users_api_v1_rbac_tenant_users_get",
         "parameters": [
           {
@@ -2119,9 +1997,9 @@
     "/api/v1/rbac/tenant/users/{user_id}/roles": {
       "post": {
         "tags": [
-          "权限管理"
+          "rbac"
         ],
-        "summary": "授予或更新租户角色",
+        "summary": "Grant or update tenant role",
         "operationId": "grant_tenant_role_api_v1_rbac_tenant_users__user_id__roles_post",
         "parameters": [
           {
@@ -2196,9 +2074,9 @@
     "/api/v1/rbac/tenant/users/{user_id}": {
       "delete": {
         "tags": [
-          "权限管理"
+          "rbac"
         ],
-        "summary": "移除当前租户成员",
+        "summary": "Remove current tenant member",
         "operationId": "revoke_tenant_member_api_v1_rbac_tenant_users__user_id__delete",
         "parameters": [
           {
@@ -2263,9 +2141,9 @@
     "/api/v1/rbac/platform/roles": {
       "get": {
         "tags": [
-          "权限管理"
+          "rbac"
         ],
-        "summary": "获取平台角色列表",
+        "summary": "List platform roles",
         "operationId": "list_platform_roles_api_v1_rbac_platform_roles_get",
         "parameters": [
           {
@@ -2312,9 +2190,9 @@
     "/api/v1/rbac/platform/users/{user_id}/roles": {
       "post": {
         "tags": [
-          "权限管理"
+          "rbac"
         ],
-        "summary": "授予平台角色",
+        "summary": "Grant platform role",
         "operationId": "grant_platform_role_api_v1_rbac_platform_users__user_id__roles_post",
         "parameters": [
           {
@@ -2373,9 +2251,9 @@
     "/api/v1/rbac/platform/users/{user_id}/roles/{role}": {
       "delete": {
         "tags": [
-          "权限管理"
+          "rbac"
         ],
-        "summary": "撤销平台角色",
+        "summary": "Revoke platform role",
         "operationId": "revoke_platform_role_api_v1_rbac_platform_users__user_id__roles__role__delete",
         "parameters": [
           {
@@ -2432,9 +2310,9 @@
     "/api/v1/models/llm": {
       "get": {
         "tags": [
-          "模型"
+          "models"
         ],
-        "summary": "获取大语言模型列表",
+        "summary": "List LLM models",
         "operationId": "list_llm_models_api_v1_models_llm_get",
         "parameters": [
           {
@@ -2477,6 +2355,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response List Llm Models Api V1 Models Llm Get"
                 }
               }
@@ -2498,9 +2377,9 @@
     "/api/v1/models/embedding": {
       "get": {
         "tags": [
-          "模型"
+          "models"
         ],
-        "summary": "获取嵌入模型信息",
+        "summary": "Get embedding model info",
         "operationId": "get_embedding_model_api_v1_models_embedding_get",
         "parameters": [
           {
@@ -2543,6 +2422,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Get Embedding Model Api V1 Models Embedding Get"
                 }
               }
@@ -2564,9 +2444,9 @@
     "/api/v1/ops/metrics": {
       "get": {
         "tags": [
-          "运维"
+          "ops"
         ],
-        "summary": "获取系统指标",
+        "summary": "Get system metrics",
         "operationId": "metrics_api_v1_ops_metrics_get",
         "parameters": [
           {
@@ -2593,6 +2473,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Metrics Api V1 Ops Metrics Get"
                 }
               }
@@ -2614,9 +2495,9 @@
     "/api/v1/ops/storage/gc": {
       "post": {
         "tags": [
-          "运维"
+          "ops"
         ],
-        "summary": "执行对象存储清理",
+        "summary": "Run object storage GC",
         "description": "Run the object-storage garbage collection passes and report what each reclaimed.\n\nThe reclamation methods on DocumentService are otherwise only reachable from code; this is the\noperational entry point (call it from a cron via the `system:ops` permission). Each pass is\nidempotent and best-effort by object key, so repeated runs are safe and a partial failure is\nretried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section 11.",
         "operationId": "run_storage_gc_api_v1_ops_storage_gc_post",
         "parameters": [
@@ -2644,6 +2525,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Run Storage Gc Api V1 Ops Storage Gc Post"
                 }
               }
@@ -2665,9 +2547,9 @@
     "/api/v1/chat/sessions": {
       "post": {
         "tags": [
-          "聊天"
+          "chat"
         ],
-        "summary": "创建聊天会话",
+        "summary": "Create a chat session",
         "operationId": "create_session_api_v1_chat_sessions_post",
         "parameters": [
           {
@@ -2720,6 +2602,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Create Session Api V1 Chat Sessions Post"
                 }
               }
@@ -2739,9 +2622,9 @@
       },
       "get": {
         "tags": [
-          "聊天"
+          "chat"
         ],
-        "summary": "获取聊天会话列表",
+        "summary": "List chat sessions",
         "operationId": "list_sessions_api_v1_chat_sessions_get",
         "parameters": [
           {
@@ -2794,19 +2677,20 @@
                   "cors_origins": [
                     "*"
                   ],
-                  "database_url": "sqlite:///./.data/amazon-experts-backend.sqlite3",
+                  "database_url": "sqlite:///./data/amazon-experts-backend.sqlite3",
                   "database_auto_migrate": true,
-                  "database_schema_dir": "D:/my_python/maiyun/amazon-experts-backend/infra/sql",
+                  "database_schema_dir": "./infra/sql",
                   "pageindex_base_url": "",
                   "pageindex_api_key": "",
-                  "ngent_base_url": "http://127.0.0.1:14500",
+                  "ngent_base_url": "http://127.0.0.1:8686",
                   "ngent_auth_token": "",
                   "ngent_client_id": "amazon-experts-backend",
                   "ngent_default_agent": "codex",
                   "ngent_default_cwd": "/Users/simpcl/work/ted/expert",
-                  "codex_home": "C:\\Users\\liyan\\.codex",
+                  "ngent_cwd_base": "/Users/simpcl/work/ted/expert/tenants",
+                  "codex_home": "/Users/simpcl/.codex",
                   "skill_storage_backend": "local",
-                  "skill_storage_local_dir": "./.data/skills",
+                  "skill_storage_local_dir": "./data/skills",
                   "skill_storage_prefix": "skills",
                   "minio_endpoint": "127.0.0.1:9000",
                   "minio_access_key": "minioadmin",
@@ -2826,7 +2710,244 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response List Sessions Api V1 Chat Sessions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/chat/sessions/{session_id}": {
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Get Session",
+        "operationId": "get_session_api_v1_chat_sessions__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "x-tenant-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Settings",
+                "default": {
+                  "app_env": "development",
+                  "jwt_secret": "change-me",
+                  "jwt_issuer": "amazon-experts-backend",
+                  "jwt_audience": "expert-web",
+                  "access_token_ttl_seconds": 900,
+                  "refresh_token_ttl_seconds": 604800,
+                  "platform_activation_token_ttl_seconds": 604800,
+                  "default_tenant_id": "tenant_default",
+                  "cors_origins": [
+                    "*"
+                  ],
+                  "database_url": "sqlite:///./data/amazon-experts-backend.sqlite3",
+                  "database_auto_migrate": true,
+                  "database_schema_dir": "./infra/sql",
+                  "pageindex_base_url": "",
+                  "pageindex_api_key": "",
+                  "ngent_base_url": "http://127.0.0.1:8686",
+                  "ngent_auth_token": "",
+                  "ngent_client_id": "amazon-experts-backend",
+                  "ngent_default_agent": "codex",
+                  "ngent_default_cwd": "/Users/simpcl/work/ted/expert",
+                  "ngent_cwd_base": "/Users/simpcl/work/ted/expert/tenants",
+                  "codex_home": "/Users/simpcl/.codex",
+                  "skill_storage_backend": "local",
+                  "skill_storage_local_dir": "./data/skills",
+                  "skill_storage_prefix": "skills",
+                  "minio_endpoint": "127.0.0.1:9000",
+                  "minio_access_key": "minioadmin",
+                  "minio_secret_key": "minioadmin",
+                  "minio_bucket": "expert-skills",
+                  "minio_secure": false,
+                  "presigned_url_ttl_seconds": 900
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Session Api V1 Chat Sessions  Session Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Delete Session",
+        "operationId": "delete_session_api_v1_chat_sessions__session_id__delete",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "x-tenant-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Settings",
+                "default": {
+                  "app_env": "development",
+                  "jwt_secret": "change-me",
+                  "jwt_issuer": "amazon-experts-backend",
+                  "jwt_audience": "expert-web",
+                  "access_token_ttl_seconds": 900,
+                  "refresh_token_ttl_seconds": 604800,
+                  "platform_activation_token_ttl_seconds": 604800,
+                  "default_tenant_id": "tenant_default",
+                  "cors_origins": [
+                    "*"
+                  ],
+                  "database_url": "sqlite:///./data/amazon-experts-backend.sqlite3",
+                  "database_auto_migrate": true,
+                  "database_schema_dir": "./infra/sql",
+                  "pageindex_base_url": "",
+                  "pageindex_api_key": "",
+                  "ngent_base_url": "http://127.0.0.1:8686",
+                  "ngent_auth_token": "",
+                  "ngent_client_id": "amazon-experts-backend",
+                  "ngent_default_agent": "codex",
+                  "ngent_default_cwd": "/Users/simpcl/work/ted/expert",
+                  "ngent_cwd_base": "/Users/simpcl/work/ted/expert/tenants",
+                  "codex_home": "/Users/simpcl/.codex",
+                  "skill_storage_backend": "local",
+                  "skill_storage_local_dir": "./data/skills",
+                  "skill_storage_prefix": "skills",
+                  "minio_endpoint": "127.0.0.1:9000",
+                  "minio_access_key": "minioadmin",
+                  "minio_secret_key": "minioadmin",
+                  "minio_bucket": "expert-skills",
+                  "minio_secure": false,
+                  "presigned_url_ttl_seconds": 900
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Delete Session Api V1 Chat Sessions  Session Id  Delete"
                 }
               }
             }
@@ -2847,9 +2968,9 @@
     "/api/v1/chat/sessions/{session_id}/messages": {
       "get": {
         "tags": [
-          "聊天"
+          "chat"
         ],
-        "summary": "获取聊天消息列表",
+        "summary": "List chat messages",
         "operationId": "list_messages_api_v1_chat_sessions__session_id__messages_get",
         "parameters": [
           {
@@ -2911,19 +3032,20 @@
                   "cors_origins": [
                     "*"
                   ],
-                  "database_url": "sqlite:///./.data/amazon-experts-backend.sqlite3",
+                  "database_url": "sqlite:///./data/amazon-experts-backend.sqlite3",
                   "database_auto_migrate": true,
-                  "database_schema_dir": "D:/my_python/maiyun/amazon-experts-backend/infra/sql",
+                  "database_schema_dir": "./infra/sql",
                   "pageindex_base_url": "",
                   "pageindex_api_key": "",
-                  "ngent_base_url": "http://127.0.0.1:14500",
+                  "ngent_base_url": "http://127.0.0.1:8686",
                   "ngent_auth_token": "",
                   "ngent_client_id": "amazon-experts-backend",
                   "ngent_default_agent": "codex",
                   "ngent_default_cwd": "/Users/simpcl/work/ted/expert",
-                  "codex_home": "C:\\Users\\liyan\\.codex",
+                  "ngent_cwd_base": "/Users/simpcl/work/ted/expert/tenants",
+                  "codex_home": "/Users/simpcl/.codex",
                   "skill_storage_backend": "local",
-                  "skill_storage_local_dir": "./.data/skills",
+                  "skill_storage_local_dir": "./data/skills",
                   "skill_storage_prefix": "skills",
                   "minio_endpoint": "127.0.0.1:9000",
                   "minio_access_key": "minioadmin",
@@ -2943,6 +3065,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response List Messages Api V1 Chat Sessions  Session Id  Messages Get"
                 }
               }
@@ -2964,9 +3087,9 @@
     "/api/v1/chat/sessions/{session_id}/title": {
       "patch": {
         "tags": [
-          "聊天"
+          "chat"
         ],
-        "summary": "重命名聊天会话",
+        "summary": "Rename a chat session",
         "operationId": "rename_session_api_v1_chat_sessions__session_id__title_patch",
         "parameters": [
           {
@@ -3028,6 +3151,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Rename Session Api V1 Chat Sessions  Session Id  Title Patch"
                 }
               }
@@ -3049,9 +3173,9 @@
     "/api/v1/chat/sessions/{session_id}/pin": {
       "patch": {
         "tags": [
-          "聊天"
+          "chat"
         ],
-        "summary": "置顶或取消置顶聊天会话",
+        "summary": "Pin or unpin a chat session",
         "operationId": "pin_session_api_v1_chat_sessions__session_id__pin_patch",
         "parameters": [
           {
@@ -3101,7 +3225,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PinSessionRequest"
+                "$ref": "#/components/schemas/Body_pin_session_api_v1_chat_sessions__session_id__pin_patch"
               }
             }
           }
@@ -3113,6 +3237,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Pin Session Api V1 Chat Sessions  Session Id  Pin Patch"
                 }
               }
@@ -3131,14 +3256,23 @@
         }
       }
     },
-    "/api/v1/chat/tasks": {
+    "/api/v1/chat/sessions/{session_id}/turns": {
       "post": {
         "tags": [
-          "聊天"
+          "chat"
         ],
-        "summary": "创建聊天任务",
-        "operationId": "create_chat_task_api_v1_chat_tasks_post",
+        "summary": "Create Turn",
+        "operationId": "create_turn_api_v1_chat_sessions__session_id__turns_post",
         "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
           {
             "name": "x-tenant-id",
             "in": "header",
@@ -3177,20 +3311,17 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Body_create_chat_task_api_v1_chat_tasks_post"
+                "$ref": "#/components/schemas/Body_create_turn_api_v1_chat_sessions__session_id__turns_post"
               }
             }
           }
         },
         "responses": {
-          "202": {
+          "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "title": "Response Create Chat Task Api V1 Chat Tasks Post"
-                }
+                "schema": {}
               }
             }
           },
@@ -3207,21 +3338,21 @@
         }
       }
     },
-    "/api/v1/chat/tasks/{task_id}/cancel": {
+    "/api/v1/chat/turns/{turn_id}/cancel": {
       "post": {
         "tags": [
-          "聊天"
+          "chat"
         ],
-        "summary": "取消聊天任务",
-        "operationId": "cancel_chat_task_api_v1_chat_tasks__task_id__cancel_post",
+        "summary": "Cancel Turn",
+        "operationId": "cancel_turn_api_v1_chat_turns__turn_id__cancel_post",
         "parameters": [
           {
-            "name": "task_id",
+            "name": "turn_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Task Id"
+              "title": "Turn Id"
             }
           },
           {
@@ -3274,19 +3405,20 @@
                   "cors_origins": [
                     "*"
                   ],
-                  "database_url": "sqlite:///./.data/amazon-experts-backend.sqlite3",
+                  "database_url": "sqlite:///./data/amazon-experts-backend.sqlite3",
                   "database_auto_migrate": true,
-                  "database_schema_dir": "D:/my_python/maiyun/amazon-experts-backend/infra/sql",
+                  "database_schema_dir": "./infra/sql",
                   "pageindex_base_url": "",
                   "pageindex_api_key": "",
-                  "ngent_base_url": "http://127.0.0.1:14500",
+                  "ngent_base_url": "http://127.0.0.1:8686",
                   "ngent_auth_token": "",
                   "ngent_client_id": "amazon-experts-backend",
                   "ngent_default_agent": "codex",
                   "ngent_default_cwd": "/Users/simpcl/work/ted/expert",
-                  "codex_home": "C:\\Users\\liyan\\.codex",
+                  "ngent_cwd_base": "/Users/simpcl/work/ted/expert/tenants",
+                  "codex_home": "/Users/simpcl/.codex",
                   "skill_storage_backend": "local",
-                  "skill_storage_local_dir": "./.data/skills",
+                  "skill_storage_local_dir": "./data/skills",
                   "skill_storage_prefix": "skills",
                   "minio_endpoint": "127.0.0.1:9000",
                   "minio_access_key": "minioadmin",
@@ -3306,7 +3438,8 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "title": "Response Cancel Chat Task Api V1 Chat Tasks  Task Id  Cancel Post"
+                  "additionalProperties": true,
+                  "title": "Response Cancel Turn Api V1 Chat Turns  Turn Id  Cancel Post"
                 }
               }
             }
@@ -3324,96 +3457,38 @@
         }
       }
     },
-    "/api/v1/chat/tasks/{task_id}/position": {
+    "/api/v1/chat/turns/{turn_id}/events": {
       "get": {
         "tags": [
-          "聊天"
+          "chat"
         ],
-        "summary": "获取聊天任务排队位置",
-        "operationId": "chat_task_position_api_v1_chat_tasks__task_id__position_get",
+        "summary": "Turn Events",
+        "operationId": "turn_events_api_v1_chat_turns__turn_id__events_get",
         "parameters": [
           {
-            "name": "task_id",
+            "name": "turn_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Task Id"
+              "title": "Turn Id"
             }
           },
           {
-            "name": "x-tenant-id",
-            "in": "header",
+            "name": "after",
+            "in": "query",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "integer",
+                  "minimum": 0
                 },
                 {
                   "type": "null"
                 }
               ],
-              "title": "X-Tenant-Id"
-            }
-          },
-          {
-            "name": "Authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "title": "Response Chat Task Position Api V1 Chat Tasks  Task Id  Position Get"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/chat/tasks/{task_id}/events": {
-      "get": {
-        "tags": [
-          "聊天"
-        ],
-        "summary": "订阅聊天任务事件",
-        "operationId": "chat_task_events_api_v1_chat_tasks__task_id__events_get",
-        "parameters": [
-          {
-            "name": "task_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Task Id"
+              "title": "After"
             }
           },
           {
@@ -3466,19 +3541,20 @@
                   "cors_origins": [
                     "*"
                   ],
-                  "database_url": "sqlite:///./.data/amazon-experts-backend.sqlite3",
+                  "database_url": "sqlite:///./data/amazon-experts-backend.sqlite3",
                   "database_auto_migrate": true,
-                  "database_schema_dir": "D:/my_python/maiyun/amazon-experts-backend/infra/sql",
+                  "database_schema_dir": "./infra/sql",
                   "pageindex_base_url": "",
                   "pageindex_api_key": "",
-                  "ngent_base_url": "http://127.0.0.1:14500",
+                  "ngent_base_url": "http://127.0.0.1:8686",
                   "ngent_auth_token": "",
                   "ngent_client_id": "amazon-experts-backend",
                   "ngent_default_agent": "codex",
                   "ngent_default_cwd": "/Users/simpcl/work/ted/expert",
-                  "codex_home": "C:\\Users\\liyan\\.codex",
+                  "ngent_cwd_base": "/Users/simpcl/work/ted/expert/tenants",
+                  "codex_home": "/Users/simpcl/.codex",
                   "skill_storage_backend": "local",
-                  "skill_storage_local_dir": "./.data/skills",
+                  "skill_storage_local_dir": "./data/skills",
                   "skill_storage_prefix": "skills",
                   "minio_endpoint": "127.0.0.1:9000",
                   "minio_access_key": "minioadmin",
@@ -3513,12 +3589,98 @@
         }
       }
     },
+    "/api/v1/chat/permissions/{permission_id}": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Resolve Permission",
+        "operationId": "resolve_permission_api_v1_chat_permissions__permission_id__post",
+        "parameters": [
+          {
+            "name": "permission_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Permission Id"
+            }
+          },
+          {
+            "name": "x-tenant-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_resolve_permission_api_v1_chat_permissions__permission_id__post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Resolve Permission Api V1 Chat Permissions  Permission Id  Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/knowledge-bases": {
       "post": {
         "tags": [
-          "知识库"
+          "knowledge-bases"
         ],
-        "summary": "创建知识库",
+        "summary": "Create a knowledge base",
         "operationId": "create_knowledge_base_api_v1_knowledge_bases_post",
         "parameters": [
           {
@@ -3573,9 +3735,9 @@
       },
       "get": {
         "tags": [
-          "知识库"
+          "knowledge-bases"
         ],
-        "summary": "获取知识库列表",
+        "summary": "List knowledge bases",
         "operationId": "list_knowledge_bases_api_v1_knowledge_bases_get",
         "parameters": [
           {
@@ -3622,9 +3784,9 @@
     "/api/v1/knowledge-bases/{knowledge_base_id}": {
       "get": {
         "tags": [
-          "知识库"
+          "knowledge-bases"
         ],
-        "summary": "获取知识库详情",
+        "summary": "Get knowledge base details",
         "operationId": "get_knowledge_base_api_v1_knowledge_bases__knowledge_base_id__get",
         "parameters": [
           {
@@ -3678,9 +3840,9 @@
       },
       "patch": {
         "tags": [
-          "知识库"
+          "knowledge-bases"
         ],
-        "summary": "更新知识库",
+        "summary": "Update a knowledge base",
         "operationId": "update_knowledge_base_api_v1_knowledge_bases__knowledge_base_id__patch",
         "parameters": [
           {
@@ -3744,9 +3906,9 @@
       },
       "delete": {
         "tags": [
-          "知识库"
+          "knowledge-bases"
         ],
-        "summary": "删除知识库",
+        "summary": "Delete a knowledge base",
         "operationId": "delete_knowledge_base_api_v1_knowledge_bases__knowledge_base_id__delete",
         "parameters": [
           {
@@ -3795,9 +3957,9 @@
     "/api/v1/knowledge-bases/{knowledge_base_id}/docs/upload-url": {
       "post": {
         "tags": [
-          "文档"
+          "docs"
         ],
-        "summary": "创建文档上传地址",
+        "summary": "Create a document upload URL",
         "operationId": "create_upload_url_api_v1_knowledge_bases__knowledge_base_id__docs_upload_url_post",
         "parameters": [
           {
@@ -3863,9 +4025,9 @@
     "/api/v1/knowledge-bases/{knowledge_base_id}/docs/complete-upload": {
       "post": {
         "tags": [
-          "文档"
+          "docs"
         ],
-        "summary": "完成文档上传",
+        "summary": "Complete a document upload",
         "operationId": "complete_upload_api_v1_knowledge_bases__knowledge_base_id__docs_complete_upload_post",
         "parameters": [
           {
@@ -3931,9 +4093,9 @@
     "/api/v1/knowledge-bases/{knowledge_base_id}/docs": {
       "get": {
         "tags": [
-          "文档"
+          "docs"
         ],
-        "summary": "获取知识库文档列表",
+        "summary": "List knowledge base documents",
         "operationId": "list_documents_api_v1_knowledge_bases__knowledge_base_id__docs_get",
         "parameters": [
           {
@@ -3989,9 +4151,9 @@
     "/api/v1/knowledge-bases/{knowledge_base_id}/docs/{document_id}": {
       "get": {
         "tags": [
-          "文档"
+          "docs"
         ],
-        "summary": "获取文档详情",
+        "summary": "Get document details",
         "operationId": "get_document_api_v1_knowledge_bases__knowledge_base_id__docs__document_id__get",
         "parameters": [
           {
@@ -4054,9 +4216,9 @@
       },
       "patch": {
         "tags": [
-          "文档"
+          "docs"
         ],
-        "summary": "更新文档信息",
+        "summary": "Update document metadata",
         "operationId": "update_document_api_v1_knowledge_bases__knowledge_base_id__docs__document_id__patch",
         "parameters": [
           {
@@ -4129,9 +4291,9 @@
       },
       "delete": {
         "tags": [
-          "文档"
+          "docs"
         ],
-        "summary": "删除文档",
+        "summary": "Delete a document",
         "operationId": "delete_document_api_v1_knowledge_bases__knowledge_base_id__docs__document_id__delete",
         "parameters": [
           {
@@ -4189,9 +4351,9 @@
     "/api/v1/knowledge-bases/{knowledge_base_id}/docs/{document_id}/download-url": {
       "get": {
         "tags": [
-          "文档"
+          "docs"
         ],
-        "summary": "获取文档下载地址",
+        "summary": "Get a document download URL",
         "operationId": "get_download_url_api_v1_knowledge_bases__knowledge_base_id__docs__document_id__download_url_get",
         "parameters": [
           {
@@ -4256,9 +4418,9 @@
     "/api/v1/knowledge-bases/{knowledge_base_id}/build": {
       "post": {
         "tags": [
-          "构建"
+          "builds"
         ],
-        "summary": "触发知识库构建",
+        "summary": "Trigger a knowledge base build",
         "operationId": "trigger_build_api_v1_knowledge_bases__knowledge_base_id__build_post",
         "parameters": [
           {
@@ -4304,6 +4466,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Trigger Build Api V1 Knowledge Bases  Knowledge Base Id  Build Post"
                 }
               }
@@ -4325,9 +4488,9 @@
     "/api/v1/knowledge-bases/{knowledge_base_id}/builds": {
       "get": {
         "tags": [
-          "构建"
+          "builds"
         ],
-        "summary": "获取知识库构建列表",
+        "summary": "List knowledge base builds",
         "operationId": "list_builds_api_v1_knowledge_bases__knowledge_base_id__builds_get",
         "parameters": [
           {
@@ -4363,6 +4526,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response List Builds Api V1 Knowledge Bases  Knowledge Base Id  Builds Get"
                 }
               }
@@ -4384,9 +4548,9 @@
     "/api/v1/knowledge-bases/{knowledge_base_id}/builds/{build_id}": {
       "get": {
         "tags": [
-          "构建"
+          "builds"
         ],
-        "summary": "获取知识库构建详情",
+        "summary": "Get knowledge base build details",
         "operationId": "get_build_api_v1_knowledge_bases__knowledge_base_id__builds__build_id__get",
         "parameters": [
           {
@@ -4431,6 +4595,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Get Build Api V1 Knowledge Bases  Knowledge Base Id  Builds  Build Id  Get"
                 }
               }
@@ -4452,9 +4617,9 @@
     "/api/v1/knowledge-bases/{knowledge_base_id}/builds/{build_id}/cancel": {
       "post": {
         "tags": [
-          "构建"
+          "builds"
         ],
-        "summary": "取消知识库构建",
+        "summary": "Cancel a knowledge base build",
         "operationId": "cancel_build_api_v1_knowledge_bases__knowledge_base_id__builds__build_id__cancel_post",
         "parameters": [
           {
@@ -4499,6 +4664,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Cancel Build Api V1 Knowledge Bases  Knowledge Base Id  Builds  Build Id  Cancel Post"
                 }
               }
@@ -4520,9 +4686,9 @@
     "/api/v1/skills": {
       "post": {
         "tags": [
-          "技能"
+          "skills"
         ],
-        "summary": "上传技能",
+        "summary": "Upload a skill",
         "operationId": "upload_skill_api_v1_skills_post",
         "parameters": [
           {
@@ -4577,9 +4743,9 @@
       },
       "get": {
         "tags": [
-          "技能"
+          "skills"
         ],
-        "summary": "获取技能列表",
+        "summary": "List skills",
         "operationId": "list_skills_api_v1_skills_get",
         "parameters": [
           {
@@ -4677,9 +4843,9 @@
     "/api/v1/skills/{slug}": {
       "get": {
         "tags": [
-          "技能"
+          "skills"
         ],
-        "summary": "获取技能详情",
+        "summary": "Get skill details",
         "operationId": "get_skill_api_v1_skills__slug__get",
         "parameters": [
           {
@@ -4733,9 +4899,9 @@
       },
       "put": {
         "tags": [
-          "技能"
+          "skills"
         ],
-        "summary": "更新技能",
+        "summary": "Update a skill",
         "operationId": "update_skill_api_v1_skills__slug__put",
         "parameters": [
           {
@@ -4799,9 +4965,9 @@
       },
       "delete": {
         "tags": [
-          "技能"
+          "skills"
         ],
-        "summary": "删除技能",
+        "summary": "Delete a skill",
         "operationId": "delete_skill_api_v1_skills__slug__delete",
         "parameters": [
           {
@@ -4860,9 +5026,9 @@
     "/api/v1/skills/{slug}/file": {
       "get": {
         "tags": [
-          "技能"
+          "skills"
         ],
-        "summary": "获取技能文件",
+        "summary": "Get a skill file",
         "operationId": "get_skill_file_api_v1_skills__slug__file_get",
         "parameters": [
           {
@@ -4943,54 +5109,6 @@
         ],
         "title": "AddTenantMemberRequest"
       },
-      "Body_create_chat_task_api_v1_chat_tasks_post": {
-        "properties": {
-          "body": {
-            "$ref": "#/components/schemas/ChatTaskRequest"
-          },
-          "settings": {
-            "$ref": "#/components/schemas/Settings",
-            "default": {
-              "app_env": "development",
-              "jwt_secret": "change-me",
-              "jwt_issuer": "amazon-experts-backend",
-              "jwt_audience": "expert-web",
-              "access_token_ttl_seconds": 900,
-              "refresh_token_ttl_seconds": 604800,
-              "platform_activation_token_ttl_seconds": 604800,
-              "default_tenant_id": "tenant_default",
-              "cors_origins": [
-                "*"
-              ],
-              "database_url": "sqlite:///./.data/amazon-experts-backend.sqlite3",
-              "database_auto_migrate": true,
-              "database_schema_dir": "D:/my_python/maiyun/amazon-experts-backend/infra/sql",
-              "pageindex_base_url": "",
-              "pageindex_api_key": "",
-              "ngent_base_url": "http://127.0.0.1:14500",
-              "ngent_auth_token": "",
-              "ngent_client_id": "amazon-experts-backend",
-              "ngent_default_agent": "codex",
-              "ngent_default_cwd": "/Users/simpcl/work/ted/expert",
-              "codex_home": "C:\\Users\\liyan\\.codex",
-              "skill_storage_backend": "local",
-              "skill_storage_local_dir": "./.data/skills",
-              "skill_storage_prefix": "skills",
-              "minio_endpoint": "127.0.0.1:9000",
-              "minio_access_key": "minioadmin",
-              "minio_secret_key": "minioadmin",
-              "minio_bucket": "expert-skills",
-              "minio_secure": false,
-              "presigned_url_ttl_seconds": 900
-            }
-          }
-        },
-        "type": "object",
-        "required": [
-          "body"
-        ],
-        "title": "Body_create_chat_task_api_v1_chat_tasks_post"
-      },
       "Body_create_session_api_v1_chat_sessions_post": {
         "properties": {
           "body": {
@@ -5010,19 +5128,20 @@
               "cors_origins": [
                 "*"
               ],
-              "database_url": "sqlite:///./.data/amazon-experts-backend.sqlite3",
+              "database_url": "sqlite:///./data/amazon-experts-backend.sqlite3",
               "database_auto_migrate": true,
-              "database_schema_dir": "D:/my_python/maiyun/amazon-experts-backend/infra/sql",
+              "database_schema_dir": "./infra/sql",
               "pageindex_base_url": "",
               "pageindex_api_key": "",
-              "ngent_base_url": "http://127.0.0.1:14500",
+              "ngent_base_url": "http://127.0.0.1:8686",
               "ngent_auth_token": "",
               "ngent_client_id": "amazon-experts-backend",
               "ngent_default_agent": "codex",
               "ngent_default_cwd": "/Users/simpcl/work/ted/expert",
-              "codex_home": "C:\\Users\\liyan\\.codex",
+              "ngent_cwd_base": "/Users/simpcl/work/ted/expert/tenants",
+              "codex_home": "/Users/simpcl/.codex",
               "skill_storage_backend": "local",
-              "skill_storage_local_dir": "./.data/skills",
+              "skill_storage_local_dir": "./data/skills",
               "skill_storage_prefix": "skills",
               "minio_endpoint": "127.0.0.1:9000",
               "minio_access_key": "minioadmin",
@@ -5038,6 +5157,104 @@
           "body"
         ],
         "title": "Body_create_session_api_v1_chat_sessions_post"
+      },
+      "Body_create_turn_api_v1_chat_sessions__session_id__turns_post": {
+        "properties": {
+          "body": {
+            "$ref": "#/components/schemas/ChatTurnRequest"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/Settings",
+            "default": {
+              "app_env": "development",
+              "jwt_secret": "change-me",
+              "jwt_issuer": "amazon-experts-backend",
+              "jwt_audience": "expert-web",
+              "access_token_ttl_seconds": 900,
+              "refresh_token_ttl_seconds": 604800,
+              "platform_activation_token_ttl_seconds": 604800,
+              "default_tenant_id": "tenant_default",
+              "cors_origins": [
+                "*"
+              ],
+              "database_url": "sqlite:///./data/amazon-experts-backend.sqlite3",
+              "database_auto_migrate": true,
+              "database_schema_dir": "./infra/sql",
+              "pageindex_base_url": "",
+              "pageindex_api_key": "",
+              "ngent_base_url": "http://127.0.0.1:8686",
+              "ngent_auth_token": "",
+              "ngent_client_id": "amazon-experts-backend",
+              "ngent_default_agent": "codex",
+              "ngent_default_cwd": "/Users/simpcl/work/ted/expert",
+              "ngent_cwd_base": "/Users/simpcl/work/ted/expert/tenants",
+              "codex_home": "/Users/simpcl/.codex",
+              "skill_storage_backend": "local",
+              "skill_storage_local_dir": "./data/skills",
+              "skill_storage_prefix": "skills",
+              "minio_endpoint": "127.0.0.1:9000",
+              "minio_access_key": "minioadmin",
+              "minio_secret_key": "minioadmin",
+              "minio_bucket": "expert-skills",
+              "minio_secure": false,
+              "presigned_url_ttl_seconds": 900
+            }
+          }
+        },
+        "type": "object",
+        "required": [
+          "body"
+        ],
+        "title": "Body_create_turn_api_v1_chat_sessions__session_id__turns_post"
+      },
+      "Body_pin_session_api_v1_chat_sessions__session_id__pin_patch": {
+        "properties": {
+          "body": {
+            "$ref": "#/components/schemas/PinSessionRequest"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/Settings",
+            "default": {
+              "app_env": "development",
+              "jwt_secret": "change-me",
+              "jwt_issuer": "amazon-experts-backend",
+              "jwt_audience": "expert-web",
+              "access_token_ttl_seconds": 900,
+              "refresh_token_ttl_seconds": 604800,
+              "platform_activation_token_ttl_seconds": 604800,
+              "default_tenant_id": "tenant_default",
+              "cors_origins": [
+                "*"
+              ],
+              "database_url": "sqlite:///./data/amazon-experts-backend.sqlite3",
+              "database_auto_migrate": true,
+              "database_schema_dir": "./infra/sql",
+              "pageindex_base_url": "",
+              "pageindex_api_key": "",
+              "ngent_base_url": "http://127.0.0.1:8686",
+              "ngent_auth_token": "",
+              "ngent_client_id": "amazon-experts-backend",
+              "ngent_default_agent": "codex",
+              "ngent_default_cwd": "/Users/simpcl/work/ted/expert",
+              "ngent_cwd_base": "/Users/simpcl/work/ted/expert/tenants",
+              "codex_home": "/Users/simpcl/.codex",
+              "skill_storage_backend": "local",
+              "skill_storage_local_dir": "./data/skills",
+              "skill_storage_prefix": "skills",
+              "minio_endpoint": "127.0.0.1:9000",
+              "minio_access_key": "minioadmin",
+              "minio_secret_key": "minioadmin",
+              "minio_bucket": "expert-skills",
+              "minio_secure": false,
+              "presigned_url_ttl_seconds": 900
+            }
+          }
+        },
+        "type": "object",
+        "required": [
+          "body"
+        ],
+        "title": "Body_pin_session_api_v1_chat_sessions__session_id__pin_patch"
       },
       "Body_rename_session_api_v1_chat_sessions__session_id__title_patch": {
         "properties": {
@@ -5058,19 +5275,20 @@
               "cors_origins": [
                 "*"
               ],
-              "database_url": "sqlite:///./.data/amazon-experts-backend.sqlite3",
+              "database_url": "sqlite:///./data/amazon-experts-backend.sqlite3",
               "database_auto_migrate": true,
-              "database_schema_dir": "D:/my_python/maiyun/amazon-experts-backend/infra/sql",
+              "database_schema_dir": "./infra/sql",
               "pageindex_base_url": "",
               "pageindex_api_key": "",
-              "ngent_base_url": "http://127.0.0.1:14500",
+              "ngent_base_url": "http://127.0.0.1:8686",
               "ngent_auth_token": "",
               "ngent_client_id": "amazon-experts-backend",
               "ngent_default_agent": "codex",
               "ngent_default_cwd": "/Users/simpcl/work/ted/expert",
-              "codex_home": "C:\\Users\\liyan\\.codex",
+              "ngent_cwd_base": "/Users/simpcl/work/ted/expert/tenants",
+              "codex_home": "/Users/simpcl/.codex",
               "skill_storage_backend": "local",
-              "skill_storage_local_dir": "./.data/skills",
+              "skill_storage_local_dir": "./data/skills",
               "skill_storage_prefix": "skills",
               "minio_endpoint": "127.0.0.1:9000",
               "minio_access_key": "minioadmin",
@@ -5087,11 +5305,60 @@
         ],
         "title": "Body_rename_session_api_v1_chat_sessions__session_id__title_patch"
       },
+      "Body_resolve_permission_api_v1_chat_permissions__permission_id__post": {
+        "properties": {
+          "body": {
+            "$ref": "#/components/schemas/ResolvePermissionRequest"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/Settings",
+            "default": {
+              "app_env": "development",
+              "jwt_secret": "change-me",
+              "jwt_issuer": "amazon-experts-backend",
+              "jwt_audience": "expert-web",
+              "access_token_ttl_seconds": 900,
+              "refresh_token_ttl_seconds": 604800,
+              "platform_activation_token_ttl_seconds": 604800,
+              "default_tenant_id": "tenant_default",
+              "cors_origins": [
+                "*"
+              ],
+              "database_url": "sqlite:///./data/amazon-experts-backend.sqlite3",
+              "database_auto_migrate": true,
+              "database_schema_dir": "./infra/sql",
+              "pageindex_base_url": "",
+              "pageindex_api_key": "",
+              "ngent_base_url": "http://127.0.0.1:8686",
+              "ngent_auth_token": "",
+              "ngent_client_id": "amazon-experts-backend",
+              "ngent_default_agent": "codex",
+              "ngent_default_cwd": "/Users/simpcl/work/ted/expert",
+              "ngent_cwd_base": "/Users/simpcl/work/ted/expert/tenants",
+              "codex_home": "/Users/simpcl/.codex",
+              "skill_storage_backend": "local",
+              "skill_storage_local_dir": "./data/skills",
+              "skill_storage_prefix": "skills",
+              "minio_endpoint": "127.0.0.1:9000",
+              "minio_access_key": "minioadmin",
+              "minio_secret_key": "minioadmin",
+              "minio_bucket": "expert-skills",
+              "minio_secure": false,
+              "presigned_url_ttl_seconds": 900
+            }
+          }
+        },
+        "type": "object",
+        "required": [
+          "body"
+        ],
+        "title": "Body_resolve_permission_api_v1_chat_permissions__permission_id__post"
+      },
       "Body_upload_skill_api_v1_skills_post": {
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File"
           },
           "slug": {
@@ -5127,6 +5394,7 @@
             "title": "Documentids"
           },
           "config": {
+            "additionalProperties": true,
             "type": "object",
             "title": "Config"
           }
@@ -5134,12 +5402,8 @@
         "type": "object",
         "title": "BuildRequest"
       },
-      "ChatTaskRequest": {
+      "ChatTurnRequest": {
         "properties": {
-          "sessionId": {
-            "type": "string",
-            "title": "Sessionid"
-          },
           "question": {
             "type": "string",
             "title": "Question"
@@ -5176,6 +5440,7 @@
           "multiHop": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -5187,10 +5452,9 @@
         },
         "type": "object",
         "required": [
-          "sessionId",
           "question"
         ],
-        "title": "ChatTaskRequest"
+        "title": "ChatTurnRequest"
       },
       "CompleteUploadRequest": {
         "properties": {
@@ -5342,6 +5606,7 @@
             "title": "Description"
           },
           "metadata": {
+            "additionalProperties": true,
             "type": "object",
             "title": "Metadata"
           }
@@ -5559,6 +5824,7 @@
             "title": "Indexstatus"
           },
           "metadata": {
+            "additionalProperties": true,
             "type": "object",
             "title": "Metadata"
           },
@@ -5907,6 +6173,7 @@
             "title": "Status"
           },
           "metadata": {
+            "additionalProperties": true,
             "type": "object",
             "title": "Metadata"
           },
@@ -6187,6 +6454,34 @@
         ],
         "title": "RenameSessionRequest"
       },
+      "ResolvePermissionRequest": {
+        "properties": {
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "optionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Optionid"
+          }
+        },
+        "type": "object",
+        "title": "ResolvePermissionRequest"
+      },
       "Settings": {
         "properties": {
           "app_env": {
@@ -6307,6 +6602,17 @@
           "ngent_default_cwd": {
             "type": "string",
             "title": "Ngent Default Cwd"
+          },
+          "ngent_cwd_base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ngent Cwd Base"
           },
           "codex_home": {
             "type": "string",
@@ -6746,6 +7052,7 @@
           "metadata": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -6938,6 +7245,7 @@
           "metadata": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -7407,6 +7715,13 @@
           "type": {
             "type": "string",
             "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
           }
         },
         "type": "object",
@@ -7421,60 +7736,60 @@
   },
   "tags": [
     {
-      "name": "健康检查",
-      "description": "服务存活状态检查。"
+      "name": "health",
+      "description": "Service liveness checks."
     },
     {
-      "name": "认证",
-      "description": "登录、刷新令牌和退出登录。"
+      "name": "auth",
+      "description": "Login, token refresh and logout."
     },
     {
-      "name": "用户管理",
-      "description": "普通用户、平台人员和账号生命周期管理。"
+      "name": "users",
+      "description": "Regular users, platform staff and account lifecycle."
     },
     {
-      "name": "租户管理",
-      "description": "平台侧租户、工作区和租户成员管理。"
+      "name": "tenants",
+      "description": "Tenants, workspaces and tenant members."
     },
     {
-      "name": "专家分类",
-      "description": "专家分类的创建、查询、修改和删除。"
+      "name": "expert-categories",
+      "description": "Create, query, update and delete expert categories."
     },
     {
-      "name": "专家管理",
-      "description": "专家的创建、查询、修改、删除和状态切换。"
+      "name": "experts",
+      "description": "Create, query, update, delete and switch expert status."
     },
     {
-      "name": "权限管理",
-      "description": "平台角色、租户角色和成员授权管理。"
+      "name": "rbac",
+      "description": "Platform roles, tenant roles and member authorization."
     },
     {
-      "name": "模型",
-      "description": "租户侧可用模型信息。"
+      "name": "models",
+      "description": "Models available to tenants."
     },
     {
-      "name": "运维",
-      "description": "系统运维和清理操作。"
+      "name": "ops",
+      "description": "System operations and cleanup."
     },
     {
-      "name": "聊天",
-      "description": "租户侧聊天会话、消息和任务接口。"
+      "name": "chat",
+      "description": "Tenant chat sessions, messages and tasks."
     },
     {
-      "name": "知识库",
-      "description": "平台侧知识库管理。"
+      "name": "knowledge-bases",
+      "description": "Platform knowledge base management."
     },
     {
-      "name": "文档",
-      "description": "知识库文档上传、查看、更新和删除。"
+      "name": "docs",
+      "description": "Knowledge base document upload, view, update and delete."
     },
     {
-      "name": "构建",
-      "description": "知识库构建相关占位接口。"
+      "name": "builds",
+      "description": "Knowledge base build placeholder endpoints."
     },
     {
-      "name": "技能",
-      "description": "平台侧技能上传、查看、更新和删除。"
+      "name": "skills",
+      "description": "Platform skill upload, view, update and delete."
     }
   ]
 }

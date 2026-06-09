@@ -19,37 +19,17 @@ router = APIRouter()
 
 @router.get("", response_model=ExpertListResponse)
 async def list_experts(
+    name: str | None = Query(default=None, min_length=1),
+    category_id: str | None = Query(default=None, alias="categoryId", min_length=1),
+    status: ExpertStatus | None = Query(default=None),
     principal: Principal = Depends(require_platform_permission("expert:read")),
     connection: DatabaseConnection = Depends(get_database),
 ) -> ExpertListResponse:
-    return ExpertListResponse(items=ExpertService(connection).list())
-
-
-@router.get("/search/name", response_model=ExpertListResponse)
-async def search_experts_by_name(
-    name: str = Query(min_length=1),
-    principal: Principal = Depends(require_platform_permission("expert:read")),
-    connection: DatabaseConnection = Depends(get_database),
-) -> ExpertListResponse:
-    return ExpertListResponse(items=ExpertService(connection).list(name=name))
-
-
-@router.get("/search/category", response_model=ExpertListResponse)
-async def search_experts_by_category(
-    category_id: str = Query(alias="categoryId", min_length=1),
-    principal: Principal = Depends(require_platform_permission("expert:read")),
-    connection: DatabaseConnection = Depends(get_database),
-) -> ExpertListResponse:
-    return ExpertListResponse(items=ExpertService(connection).list(category_id=category_id))
-
-
-@router.get("/search/status", response_model=ExpertListResponse)
-async def search_experts_by_status(
-    status: ExpertStatus,
-    principal: Principal = Depends(require_platform_permission("expert:read")),
-    connection: DatabaseConnection = Depends(get_database),
-) -> ExpertListResponse:
-    return ExpertListResponse(items=ExpertService(connection).list(status=status))
+    return ExpertListResponse(
+        items=ExpertService(connection).list(
+            name=name, category_id=category_id, status=status
+        )
+    )
 
 
 @router.get("/stats/summary", response_model=ExpertStatsResponse)

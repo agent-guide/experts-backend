@@ -20,6 +20,11 @@ PageIndex / ngent / Codex are upstream/optional integrations, not the source of 
 ## Database & migrations (read before touching `infra/sql/`)
 
 - Backends: SQLite (default/tests) and PostgreSQL. `app/db.py` migrates both.
+- **Foreign keys are enforced at runtime on both backends**: `_open_sqlite` sets
+  `pragma foreign_keys = on` per connection (off by default in SQLite), matching PostgreSQL.
+  So `ON DELETE CASCADE` and FK constraints fire at runtime — rely on cascade instead of
+  manually deleting child rows. Note soft-deleted parents (e.g. knowledge bases) never trigger
+  cascade; filter `deleted_at is null` on reads instead.
 - **The runner re-runs every `infra/sql/*.sql` on each boot and has NO applied-migrations
   table.** Idempotency is mandatory: use `create table if not exists` / `add column if not
   exists` / `drop ... if exists`. **Never** write an unconditional `drop table + create table`
