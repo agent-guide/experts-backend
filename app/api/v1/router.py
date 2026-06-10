@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+﻿from fastapi import APIRouter
 
 from app.api.v1.routers import (
     auth,
@@ -6,6 +6,7 @@ from app.api.v1.routers import (
     chat,
     documents,
     expert_categories,
+    expert_market,
     experts,
     knowledge_bases,
     models,
@@ -26,6 +27,11 @@ api_router.include_router(
     tags=["expert-categories"],
 )
 api_router.include_router(experts.router, prefix="/experts", tags=["experts"])
+api_router.include_router(
+    expert_market.router,
+    prefix="/expert-market",
+    tags=["expert-market"],
+)
 api_router.include_router(rbac.router, prefix="/rbac", tags=["rbac"])
 api_router.include_router(models.router, prefix="/models", tags=["models"])
 api_router.include_router(ops.router, prefix="/ops", tags=["ops"])

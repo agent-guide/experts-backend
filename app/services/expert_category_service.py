@@ -7,6 +7,7 @@ from app.db import DatabaseConnection
 from app.domain.experts import (
     CreateExpertCategoryRequest,
     ExpertCategory,
+    ExpertMarketCategory,
     UpdateExpertCategoryRequest,
 )
 from app.services._sql import is_unique_violation
@@ -20,6 +21,9 @@ class ExpertCategoryService:
 
     def list(self) -> list[ExpertCategory]:
         return self.repo.list()
+
+    def list_market_categories(self) -> list[ExpertMarketCategory]:
+        return self.repo.list_market()
 
     def get(self, category_id: str) -> ExpertCategory:
         category = self.repo.get(category_id)

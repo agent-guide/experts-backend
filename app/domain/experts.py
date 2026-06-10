@@ -28,6 +28,16 @@ class ExpertCategoryListResponse(BaseModel):
     items: list[ExpertCategory]
 
 
+class ExpertMarketCategory(BaseModel):
+    id: str
+    name: str
+    description: str | None = None
+
+
+class ExpertMarketCategoryListResponse(BaseModel):
+    items: list[ExpertMarketCategory]
+
+
 class Expert(BaseModel):
     id: str
     name: str
@@ -73,6 +83,21 @@ class UpdateExpertStatusRequest(BaseModel):
 
 class ExpertListResponse(BaseModel):
     items: list[Expert]
+
+
+class ExpertMarketExpert(BaseModel):
+    id: str
+    name: str
+    categoryId: str
+    categoryName: str
+    abilityIntro: str
+    tags: list[str] = Field(default_factory=list)
+    guideQuestions: list[str] = Field(default_factory=list, max_length=3)
+    summonButtonText: str | None = None
+
+
+class ExpertMarketExpertListResponse(BaseModel):
+    items: list[ExpertMarketExpert]
 
 
 class ExpertStatsResponse(BaseModel):

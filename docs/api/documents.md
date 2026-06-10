@@ -57,6 +57,49 @@ Response:
 
 The client then `PUT`s the file body to `uploadUrl` directly (the API does not proxy it).
 
+## POST /upload-urls
+
+Request presigned upload URLs for multiple documents. Required permission: `doc:create`.
+
+Request:
+
+```json
+{
+  "files": [
+    {
+      "fileName": "guide.pdf",
+      "mimeType": "application/pdf",
+      "fileSizeBytes": 102400
+    },
+    {
+      "fileName": "notes.txt",
+      "mimeType": "text/plain",
+      "fileSizeBytes": 4096
+    }
+  ]
+}
+```
+
+Response:
+
+```json
+{
+  "items": [
+    {
+      "uploadSessionId": "upl_123",
+      "documentId": "doc_123",
+      "method": "PUT",
+      "uploadUrl": "https://minio.example.com/expert-docs/...",
+      "headers": { "Content-Type": "application/pdf" },
+      "objectKey": "knowledge-bases/kb_123/documents/doc_123/guide.pdf",
+      "expiresAt": "2026-06-03T10:10:00Z"
+    }
+  ]
+}
+```
+
+The client then `PUT`s each file body to its corresponding `uploadUrl`.
+
 ## POST /complete-upload
 
 Confirm the upload and create the document record. Required permission: `doc:create`.
@@ -97,6 +140,49 @@ Response `201 Created`:
   "metadata": {},
   "createdAt": "2026-06-03T10:00:00Z",
   "updatedAt": "2026-06-03T10:00:00Z"
+}
+```
+
+## POST /complete-uploads
+
+Confirm multiple uploads and create their document records. Required permission:
+`doc:create`.
+
+Request:
+
+```json
+{
+  "items": [
+    {
+      "uploadSessionId": "upl_123",
+      "etag": "minio-etag",
+      "fileSizeBytes": 102400
+    }
+  ]
+}
+```
+
+Response `201 Created`:
+
+```json
+{
+  "items": [
+    {
+      "id": "doc_123",
+      "knowledgeBaseId": "kb_123",
+      "fileName": "guide.pdf",
+      "fileType": "pdf",
+      "mimeType": "application/pdf",
+      "fileSizeBytes": 102400,
+      "storageKey": "knowledge-bases/kb_123/documents/doc_123/guide.pdf",
+      "contentHash": null,
+      "parseStatus": "pending",
+      "indexStatus": "pending",
+      "metadata": {},
+      "createdAt": "2026-06-03T10:00:00Z",
+      "updatedAt": "2026-06-03T10:00:00Z"
+    }
+  ]
 }
 ```
 

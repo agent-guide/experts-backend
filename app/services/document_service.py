@@ -11,11 +11,15 @@ from app.db import DatabaseConnection
 from app.domain.auth import Principal
 from app.domain.knowledge import (
     CompleteUploadRequest,
+    CompleteUploadsRequest,
+    CompleteUploadsResponse,
     Document,
     DownloadUrlResponse,
     UpdateDocumentRequest,
     UploadUrlRequest,
     UploadUrlResponse,
+    UploadUrlsRequest,
+    UploadUrlsResponse,
 )
 from app.services._sql import is_unique_violation
 from app.services.document_repository import DocumentRepository
@@ -114,6 +118,16 @@ class DocumentService:
             expiresAt=_iso(expires),
         )
 
+    def create_upload_urls(
+        self, principal: Principal, knowledge_base_id: str, request: UploadUrlsRequest
+    ) -> UploadUrlsResponse:
+        return UploadUrlsResponse(
+            items=[
+                self.create_upload_url(principal, knowledge_base_id, file_request)
+                for file_request in request.files
+            ]
+        )
+
     def complete_upload(
         self, principal: Principal, knowledge_base_id: str, request: CompleteUploadRequest
     ) -> Document:
@@ -180,6 +194,16 @@ class DocumentService:
         self.docs.set_session_status(session.id, "completed", now)
         self.connection.commit()
         return document
+
+    def complete_uploads(
+        self, principal: Principal, knowledge_base_id: str, request: CompleteUploadsRequest
+    ) -> CompleteUploadsResponse:
+        return CompleteUploadsResponse(
+            items=[
+                self.complete_upload(principal, knowledge_base_id, item)
+                for item in request.items
+            ]
+        )
 
     # read / update / delete ------------------------------------------------------
 

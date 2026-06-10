@@ -18,11 +18,11 @@ def get_auth_service(settings: Settings = Depends(get_settings)) -> AuthService:
     return AuthService(settings)
 
 
-def get_pageindex_client(settings: Settings = get_settings()) -> PageIndexClient:
+def get_pageindex_client(settings: Settings = Depends(get_settings)) -> PageIndexClient:
     return PageIndexClient(settings)
 
 
-def get_ngent_client(settings: Settings = get_settings()) -> NgentClient:
+def get_ngent_client(settings: Settings = Depends(get_settings)) -> NgentClient:
     return NgentClient(settings)
 
 

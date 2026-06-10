@@ -125,14 +125,8 @@ class ChatService:
         self._require_session(principal, session_id)
         tenant_id = principal.active_tenant_id
         payload = {
-            "prompt": {"text": request.question},
+            "input": request.question,
             "stream": True,
-            "agentOptions": {
-                "modelId": request.llmModel,
-                "knowledgeBaseIds": request.knowledgeBaseIds,
-                "queryRewrite": request.queryRewrite,
-                "multiHop": request.multiHop,
-            },
         }
 
         # SSE parse state, accumulated while tee-ing the stream to the caller.

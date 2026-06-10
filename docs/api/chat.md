@@ -31,6 +31,9 @@ an SSE stream directly (the `turnId` arrives in the first `turn_started` event).
 no separate "create then subscribe" step. Use `GET /turns/{turn_id}/events` only to
 reconnect/replay an existing turn.
 
+There are no `/chat/tasks` endpoints in the current backend. Clients should create or
+select a session first, then post the user's message to `/sessions/{session_id}/turns`.
+
 ## POST /sessions
 
 Create a chat session.
@@ -153,12 +156,16 @@ Request:
 }
 ```
 
-Current response:
+Response is a session object:
 
 ```json
 {
-  "id": "session_1",
-  "isPinned": true
+  "id": "thread_1",
+  "title": "Review analysis",
+  "knowledgeBaseIds": ["kb_1"],
+  "isPinned": true,
+  "createdAt": "2026-06-07T00:00:00+00:00",
+  "updatedAt": "2026-06-07T00:00:05+00:00"
 }
 ```
 
@@ -191,6 +198,9 @@ The response is the live SSE stream proxied from ngent
 followed by `message_delta` / tool / `turn_completed` events. A mid-turn
 `permission_required` event must be answered via `POST /permissions/{permission_id}`.
 
+The public backend request field is `question`. Internally, the backend adapts that field
+to the current ngent turn protocol (`input` + `stream`) before proxying the request.
+
 While proxying, the backend tees the stream and persists the assembled turn record
 (`request_text`, `response_text`, `status`, `stop_reason`, ...) to `chat_turns`. If the
 client disconnects before `turn_completed`, the local turn may remain `running` (ngent
@@ -216,7 +226,7 @@ Replay and live-stream a turn's events. Use this to reconnect to a turn created 
 
 Query parameters:
 
-- `after` (optional, integer ≥ 0): resume from this event `seq`, skipping already-seen events.
+- `after` (optional, integer >= 0): resume from this event `seq`, skipping already-seen events.
 
 Response content type:
 

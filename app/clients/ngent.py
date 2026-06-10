@@ -1,4 +1,5 @@
 from pathlib import Path
+import posixpath
 from typing import Any, AsyncIterator
 
 import httpx
@@ -25,8 +26,12 @@ class NgentClient:
         (backend and ngent share the host).
         """
         if self.cwd_base and tenant_id:
+            if _is_posix_absolute(self.cwd_base):
+                return posixpath.join(self.cwd_base, tenant_id)
             path = Path(self.cwd_base).expanduser() / tenant_id
         else:
+            if _is_posix_absolute(self.default_cwd):
+                return self.default_cwd
             path = Path(self.default_cwd).expanduser()
         path = path.resolve()
         path.mkdir(parents=True, exist_ok=True)
@@ -77,3 +82,7 @@ class NgentClient:
                     )
                 async for line in response.aiter_lines():
                     yield line
+
+
+def _is_posix_absolute(path: str) -> bool:
+    return path.startswith("/") and not path.startswith("//")

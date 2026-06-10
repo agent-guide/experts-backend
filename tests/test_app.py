@@ -5,7 +5,8 @@ from zipfile import ZipFile
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.deps import get_skill_storage
+from app.api.deps import get_ngent_client, get_skill_storage
+from app.clients.ngent import NgentClient
 from app.core.config import Settings
 from app.core.security import hash_opaque_token, hash_password
 from app.db import migrate_database, open_database_connection
@@ -43,6 +44,9 @@ def test_openapi_loads() -> None:
     assert "/api/v1/experts/stats/summary" in paths
     assert "/api/v1/experts/{expert_id}" in paths
     assert "/api/v1/experts/{expert_id}/status" in paths
+    assert "/api/v1/expert-market/categories" in paths
+    assert "/api/v1/expert-market/experts" in paths
+    assert "/api/v1/expert-market/experts/{expert_id}" in paths
     assert "/api/v1/rbac/tenant/users" in paths
     assert "/api/v1/rbac/tenant/users/{user_id}/roles" in paths
     assert "/api/v1/rbac/tenant/users/{user_id}" in paths
@@ -1548,6 +1552,84 @@ def test_expert_search_by_name_category_and_status(tmp_path: Path) -> None:
         assert [item["id"] for item in combined.json()["items"]] == ["expert_listing"]
 
 
+def test_expert_market_is_public_and_only_lists_published_experts(tmp_path: Path) -> None:
+    database_path = tmp_path / "expert_market.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+    )
+    test_app = create_app(settings)
+
+    with TestClient(test_app) as client:
+        with open_database_connection(settings) as connection:
+            connection.execute(
+                """
+                insert into expert_categories (id, name, description)
+                values ('expert_cat_ops', 'Operations', 'Operations experts')
+                """
+            )
+            connection.execute(
+                """
+                insert into expert_categories (id, name, description)
+                values ('expert_cat_ads', 'Advertising', 'Advertising experts')
+                """
+            )
+            for expert_id, category_id, name, status in [
+                ("expert_listing", "expert_cat_ops", "Listing Expert", "published"),
+                ("expert_store", "expert_cat_ops", "Store Expert", "draft"),
+                ("expert_ads", "expert_cat_ads", "Ads Expert", "unlisted"),
+            ]:
+                connection.execute(
+                    """
+                    insert into experts (
+                      id, category_id, name, ability_intro, tags, status,
+                      guide_questions, summon_button_text
+                    )
+                    values (?, ?, ?, 'Public helper.', '["tag"]', ?, '["q1"]', 'Ask')
+                    """,
+                    (expert_id, category_id, name, status),
+                )
+            connection.commit()
+
+        categories = client.get("/api/v1/expert-market/categories")
+        assert categories.status_code == 200
+        assert categories.json()["items"] == [
+            {
+                "id": "expert_cat_ops",
+                "name": "Operations",
+                "description": "Operations experts",
+            }
+        ]
+
+        experts = client.get("/api/v1/expert-market/experts")
+        assert experts.status_code == 200
+        assert [item["id"] for item in experts.json()["items"]] == ["expert_listing"]
+
+        by_category = client.get(
+            "/api/v1/expert-market/experts",
+            params={"categoryId": "expert_cat_ads"},
+        )
+        assert by_category.status_code == 200
+        assert by_category.json()["items"] == []
+
+        detail = client.get("/api/v1/expert-market/experts/expert_listing")
+        assert detail.status_code == 200
+        assert detail.json() == {
+            "id": "expert_listing",
+            "name": "Listing Expert",
+            "categoryId": "expert_cat_ops",
+            "categoryName": "Operations",
+            "abilityIntro": "Public helper.",
+            "tags": ["tag"],
+            "guideQuestions": ["q1"],
+            "summonButtonText": "Ask",
+        }
+
+        hidden = client.get("/api/v1/expert-market/experts/expert_store")
+        assert hidden.status_code == 404
+
+
 def test_skills_upload_list_get_file_update_and_delete(tmp_path: Path) -> None:
     database_path = tmp_path / "skills.sqlite3"
     settings = Settings(
@@ -1858,6 +1940,98 @@ def test_skills_frontmatter_inline_lists_and_dashes(tmp_path: Path) -> None:
         assert body["allowedTools"] == ["Bash(some-tool --flag)"]
 
 
+def test_chat_turn_uses_ngent_input_protocol(tmp_path: Path) -> None:
+    database_path = tmp_path / "chat_ngent.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+        ngent_base_url="http://ngent.test",
+        ngent_default_cwd=str(tmp_path / "ngent-workspace"),
+    )
+    fake_ngent = FakeNgentClient()
+    test_app = create_app(settings)
+    test_app.dependency_overrides[get_ngent_client] = lambda: fake_ngent
+
+    with TestClient(test_app) as client:
+        _seed_tenant(settings)
+        _seed_tenant_user(
+            settings,
+            "tenant_user",
+            "tenant@example.com",
+            "Tenant User",
+            "tenant-secret",
+            "member",
+        )
+        login = client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "tenant@example.com",
+                "password": "tenant-secret",
+                "tenantId": "tenant_default",
+            },
+        )
+        assert login.status_code == 200
+        headers = {
+            "Authorization": f"Bearer {login.json()['accessToken']}",
+            "x-tenant-id": "tenant_default",
+        }
+
+        created = client.post(
+            "/api/v1/chat/sessions",
+            headers=headers,
+            json={"title": "Protocol Test"},
+        )
+        assert created.status_code == 201
+        session_id = created.json()["id"]
+
+        turn = client.post(
+            f"/api/v1/chat/sessions/{session_id}/turns",
+            headers=headers,
+            json={
+                "question": "hello",
+                "knowledgeBaseIds": ["kb_1"],
+                "llmModel": "model_1",
+                "queryRewrite": True,
+                "multiHop": {"enabled": True},
+            },
+        )
+
+        assert turn.status_code == 200
+        assert "event: turn_completed" in turn.text
+        assert fake_ngent.stream_calls == [
+            {
+                "method": "POST",
+                "path": f"/v1/threads/{session_id}/turns",
+                "tenant_id": "tenant_default",
+                "json": {"input": "hello", "stream": True},
+            }
+        ]
+        assert "prompt" not in fake_ngent.stream_calls[0]["json"]
+        assert "agentOptions" not in fake_ngent.stream_calls[0]["json"]
+
+        messages = client.get(f"/api/v1/chat/sessions/{session_id}/messages", headers=headers)
+        assert messages.status_code == 200
+        assert messages.json()["items"][0]["responseText"] == "ok"
+
+
+def test_ngent_preserves_remote_posix_cwd() -> None:
+    client = NgentClient(Settings(ngent_default_cwd="/usr/local/ngent-workspace"))
+
+    assert client.prepare_cwd("tenant_default") == "/usr/local/ngent-workspace"
+
+    tenant_client = NgentClient(
+        Settings(
+            ngent_default_cwd="/unused",
+            ngent_cwd_base="/usr/local/ngent-workspace/tenants",
+        )
+    )
+    assert (
+        tenant_client.prepare_cwd("tenant_default")
+        == "/usr/local/ngent-workspace/tenants/tenant_default"
+    )
+
+
 def _seed_tenant(settings: Settings) -> None:
     with open_database_connection(settings) as connection:
         connection.execute(
@@ -1926,6 +2100,47 @@ def _seed_platform_user(
             (f"{user_id}_platform_role", user_id, role, user_id),
         )
         connection.commit()
+
+
+class FakeNgentClient:
+    def __init__(self) -> None:
+        self.default_agent = "codex"
+        self.default_cwd = "/tmp/ngent"
+        self.stream_calls: list[dict] = []
+
+    def prepare_cwd(self, tenant_id: str | None = None) -> str:
+        return self.default_cwd
+
+    async def request(
+        self, method: str, path: str, *, tenant_id: str | None = None, **kwargs
+    ) -> dict:
+        assert method == "POST"
+        assert path == "/v1/threads"
+        assert tenant_id == "tenant_default"
+        assert kwargs["json"]["agent"] == self.default_agent
+        assert kwargs["json"]["cwd"] == self.default_cwd
+        return {"threadId": "thread_1"}
+
+    async def stream(
+        self, method: str, path: str, *, tenant_id: str | None = None, **kwargs
+    ):
+        self.stream_calls.append(
+            {
+                "method": method,
+                "path": path,
+                "tenant_id": tenant_id,
+                "json": kwargs["json"],
+            }
+        )
+        yield "event: turn_started"
+        yield 'data: {"turnId": "turn_1"}'
+        yield ""
+        yield "event: message_delta"
+        yield 'data: {"delta": "ok"}'
+        yield ""
+        yield "event: turn_completed"
+        yield 'data: {"stopReason": "end_turn"}'
+        yield ""
 
 
 def _skill_zip() -> BytesIO:
@@ -2100,6 +2315,51 @@ def test_document_upload_flow(tmp_path: Path) -> None:
         )
         assert deleted.status_code == 204
         assert client.get(f"/api/v1/knowledge-bases/{kb_id}/docs", headers=headers).json()["items"] == []
+
+
+def test_document_batch_upload_flow(tmp_path: Path) -> None:
+    settings = _kb_test_settings(tmp_path)
+    store = FakeObjectStore()
+    with TestClient(_kb_app(settings, store)) as client:
+        headers = _login(client, settings, "expert_user", "expert@example.com", "expert")
+        kb_id = client.post(
+            "/api/v1/knowledge-bases", headers=headers, json={"name": "Batch Docs KB"}
+        ).json()["id"]
+
+        url_resp = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/upload-urls",
+            headers=headers,
+            json={
+                "files": [
+                    {"fileName": "guide.pdf", "mimeType": "application/pdf", "fileSizeBytes": 1024},
+                    {"fileName": "notes.txt", "mimeType": "text/plain", "fileSizeBytes": 12},
+                ]
+            },
+        )
+        assert url_resp.status_code == 200, url_resp.text
+        uploads = url_resp.json()["items"]
+        assert len(uploads) == 2
+
+        store.put(uploads[0]["objectKey"], 1024)
+        store.put(uploads[1]["objectKey"], 12)
+
+        completed = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/complete-uploads",
+            headers=headers,
+            json={
+                "items": [
+                    {"uploadSessionId": uploads[0]["uploadSessionId"], "fileSizeBytes": 1024},
+                    {"uploadSessionId": uploads[1]["uploadSessionId"], "fileSizeBytes": 12},
+                ]
+            },
+        )
+        assert completed.status_code == 201, completed.text
+        docs = completed.json()["items"]
+        assert {doc["fileName"] for doc in docs} == {"guide.pdf", "notes.txt"}
+
+        listed = client.get(f"/api/v1/knowledge-bases/{kb_id}/docs", headers=headers)
+        assert listed.status_code == 200
+        assert len(listed.json()["items"]) == 2
 
 
 def test_complete_upload_size_mismatch_is_rejected(tmp_path: Path) -> None:

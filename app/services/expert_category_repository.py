@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.db import DatabaseConnection
-from app.domain.experts import ExpertCategory
+from app.domain.experts import ExpertCategory, ExpertMarketCategory
 from app.services._sql import execute, fetch_all, fetch_one, rowcount
 
 
@@ -23,6 +23,19 @@ class ExpertCategoryRepository:
             """,
         )
         return [_map_category(row) for row in rows]
+
+    def list_market(self) -> list[ExpertMarketCategory]:
+        rows = fetch_all(
+            self.connection,
+            """
+            select distinct c.id, c.name, c.description
+            from expert_categories c
+            inner join experts e on e.category_id = c.id
+            where e.status = 'published'
+            order by c.name asc, c.id asc
+            """,
+        )
+        return [_map_market_category(row) for row in rows]
 
     def get(self, category_id: str) -> ExpertCategory | None:
         row = fetch_one(
@@ -79,4 +92,12 @@ def _map_category(row: dict[str, Any]) -> ExpertCategory:
         description=str(row["description"]) if row["description"] is not None else None,
         createdAt=str(row["created_at"]),
         updatedAt=str(row["updated_at"]),
+    )
+
+
+def _map_market_category(row: dict[str, Any]) -> ExpertMarketCategory:
+    return ExpertMarketCategory(
+        id=str(row["id"]),
+        name=str(row["name"]),
+        description=str(row["description"]) if row["description"] is not None else None,
     )

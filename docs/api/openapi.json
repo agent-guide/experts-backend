@@ -54,7 +54,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Login Api V1 Auth Login Post"
                 }
@@ -97,7 +96,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Refresh Api V1 Auth Refresh Post"
                 }
@@ -174,7 +172,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Register Api V1 Users Register Post"
                 }
@@ -266,7 +263,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Activate Platform User Api V1 Users Platform Activate Post"
                 }
@@ -1929,6 +1925,119 @@
         }
       }
     },
+    "/api/v1/expert-market/categories": {
+      "get": {
+        "tags": [
+          "expert-market"
+        ],
+        "summary": "List public expert categories",
+        "operationId": "list_market_categories_api_v1_expert_market_categories_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpertMarketCategoryListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/expert-market/experts": {
+      "get": {
+        "tags": [
+          "expert-market"
+        ],
+        "summary": "List public experts",
+        "operationId": "list_market_experts_api_v1_expert_market_experts_get",
+        "parameters": [
+          {
+            "name": "categoryId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Categoryid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpertMarketExpertListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/expert-market/experts/{expert_id}": {
+      "get": {
+        "tags": [
+          "expert-market"
+        ],
+        "summary": "Get public expert details",
+        "operationId": "get_market_expert_api_v1_expert_market_experts__expert_id__get",
+        "parameters": [
+          {
+            "name": "expert_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Expert Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpertMarketExpert"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/rbac/tenant/users": {
       "get": {
         "tags": [
@@ -2355,7 +2464,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response List Llm Models Api V1 Models Llm Get"
                 }
               }
@@ -2422,7 +2530,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Get Embedding Model Api V1 Models Embedding Get"
                 }
               }
@@ -2473,7 +2580,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Metrics Api V1 Ops Metrics Get"
                 }
               }
@@ -2525,7 +2631,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Run Storage Gc Api V1 Ops Storage Gc Post"
                 }
               }
@@ -2590,7 +2695,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Body_create_session_api_v1_chat_sessions_post"
+                "$ref": "#/components/schemas/CreateSessionRequest"
               }
             }
           }
@@ -2602,7 +2707,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Create Session Api V1 Chat Sessions Post"
                 }
               }
@@ -2660,49 +2764,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Settings",
-                "default": {
-                  "app_env": "development",
-                  "jwt_secret": "change-me",
-                  "jwt_issuer": "amazon-experts-backend",
-                  "jwt_audience": "expert-web",
-                  "access_token_ttl_seconds": 900,
-                  "refresh_token_ttl_seconds": 604800,
-                  "platform_activation_token_ttl_seconds": 604800,
-                  "default_tenant_id": "tenant_default",
-                  "cors_origins": [
-                    "*"
-                  ],
-                  "database_url": "sqlite:///./data/amazon-experts-backend.sqlite3",
-                  "database_auto_migrate": true,
-                  "database_schema_dir": "./infra/sql",
-                  "pageindex_base_url": "",
-                  "pageindex_api_key": "",
-                  "ngent_base_url": "http://127.0.0.1:8686",
-                  "ngent_auth_token": "",
-                  "ngent_client_id": "amazon-experts-backend",
-                  "ngent_default_agent": "codex",
-                  "ngent_default_cwd": "/Users/simpcl/work/ted/expert",
-                  "ngent_cwd_base": "/Users/simpcl/work/ted/expert/tenants",
-                  "codex_home": "/Users/simpcl/.codex",
-                  "skill_storage_backend": "local",
-                  "skill_storage_local_dir": "./data/skills",
-                  "skill_storage_prefix": "skills",
-                  "minio_endpoint": "127.0.0.1:9000",
-                  "minio_access_key": "minioadmin",
-                  "minio_secret_key": "minioadmin",
-                  "minio_bucket": "expert-skills",
-                  "minio_secure": false,
-                  "presigned_url_ttl_seconds": 900
-                }
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2710,7 +2771,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response List Sessions Api V1 Chat Sessions Get"
                 }
               }
@@ -2734,7 +2794,7 @@
         "tags": [
           "chat"
         ],
-        "summary": "Get Session",
+        "summary": "Get chat session details",
         "operationId": "get_session_api_v1_chat_sessions__session_id__get",
         "parameters": [
           {
@@ -2779,49 +2839,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Settings",
-                "default": {
-                  "app_env": "development",
-                  "jwt_secret": "change-me",
-                  "jwt_issuer": "amazon-experts-backend",
-                  "jwt_audience": "expert-web",
-                  "access_token_ttl_seconds": 900,
-                  "refresh_token_ttl_seconds": 604800,
-                  "platform_activation_token_ttl_seconds": 604800,
-                  "default_tenant_id": "tenant_default",
-                  "cors_origins": [
-                    "*"
-                  ],
-                  "database_url": "sqlite:///./data/amazon-experts-backend.sqlite3",
-                  "database_auto_migrate": true,
-                  "database_schema_dir": "./infra/sql",
-                  "pageindex_base_url": "",
-                  "pageindex_api_key": "",
-                  "ngent_base_url": "http://127.0.0.1:8686",
-                  "ngent_auth_token": "",
-                  "ngent_client_id": "amazon-experts-backend",
-                  "ngent_default_agent": "codex",
-                  "ngent_default_cwd": "/Users/simpcl/work/ted/expert",
-                  "ngent_cwd_base": "/Users/simpcl/work/ted/expert/tenants",
-                  "codex_home": "/Users/simpcl/.codex",
-                  "skill_storage_backend": "local",
-                  "skill_storage_local_dir": "./data/skills",
-                  "skill_storage_prefix": "skills",
-                  "minio_endpoint": "127.0.0.1:9000",
-                  "minio_access_key": "minioadmin",
-                  "minio_secret_key": "minioadmin",
-                  "minio_bucket": "expert-skills",
-                  "minio_secure": false,
-                  "presigned_url_ttl_seconds": 900
-                }
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2829,7 +2846,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Get Session Api V1 Chat Sessions  Session Id  Get"
                 }
               }
@@ -2851,7 +2867,7 @@
         "tags": [
           "chat"
         ],
-        "summary": "Delete Session",
+        "summary": "Delete a chat session",
         "operationId": "delete_session_api_v1_chat_sessions__session_id__delete",
         "parameters": [
           {
@@ -2896,49 +2912,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Settings",
-                "default": {
-                  "app_env": "development",
-                  "jwt_secret": "change-me",
-                  "jwt_issuer": "amazon-experts-backend",
-                  "jwt_audience": "expert-web",
-                  "access_token_ttl_seconds": 900,
-                  "refresh_token_ttl_seconds": 604800,
-                  "platform_activation_token_ttl_seconds": 604800,
-                  "default_tenant_id": "tenant_default",
-                  "cors_origins": [
-                    "*"
-                  ],
-                  "database_url": "sqlite:///./data/amazon-experts-backend.sqlite3",
-                  "database_auto_migrate": true,
-                  "database_schema_dir": "./infra/sql",
-                  "pageindex_base_url": "",
-                  "pageindex_api_key": "",
-                  "ngent_base_url": "http://127.0.0.1:8686",
-                  "ngent_auth_token": "",
-                  "ngent_client_id": "amazon-experts-backend",
-                  "ngent_default_agent": "codex",
-                  "ngent_default_cwd": "/Users/simpcl/work/ted/expert",
-                  "ngent_cwd_base": "/Users/simpcl/work/ted/expert/tenants",
-                  "codex_home": "/Users/simpcl/.codex",
-                  "skill_storage_backend": "local",
-                  "skill_storage_local_dir": "./data/skills",
-                  "skill_storage_prefix": "skills",
-                  "minio_endpoint": "127.0.0.1:9000",
-                  "minio_access_key": "minioadmin",
-                  "minio_secret_key": "minioadmin",
-                  "minio_bucket": "expert-skills",
-                  "minio_secure": false,
-                  "presigned_url_ttl_seconds": 900
-                }
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2946,7 +2919,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Delete Session Api V1 Chat Sessions  Session Id  Delete"
                 }
               }
@@ -3015,49 +2987,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Settings",
-                "default": {
-                  "app_env": "development",
-                  "jwt_secret": "change-me",
-                  "jwt_issuer": "amazon-experts-backend",
-                  "jwt_audience": "expert-web",
-                  "access_token_ttl_seconds": 900,
-                  "refresh_token_ttl_seconds": 604800,
-                  "platform_activation_token_ttl_seconds": 604800,
-                  "default_tenant_id": "tenant_default",
-                  "cors_origins": [
-                    "*"
-                  ],
-                  "database_url": "sqlite:///./data/amazon-experts-backend.sqlite3",
-                  "database_auto_migrate": true,
-                  "database_schema_dir": "./infra/sql",
-                  "pageindex_base_url": "",
-                  "pageindex_api_key": "",
-                  "ngent_base_url": "http://127.0.0.1:8686",
-                  "ngent_auth_token": "",
-                  "ngent_client_id": "amazon-experts-backend",
-                  "ngent_default_agent": "codex",
-                  "ngent_default_cwd": "/Users/simpcl/work/ted/expert",
-                  "ngent_cwd_base": "/Users/simpcl/work/ted/expert/tenants",
-                  "codex_home": "/Users/simpcl/.codex",
-                  "skill_storage_backend": "local",
-                  "skill_storage_local_dir": "./data/skills",
-                  "skill_storage_prefix": "skills",
-                  "minio_endpoint": "127.0.0.1:9000",
-                  "minio_access_key": "minioadmin",
-                  "minio_secret_key": "minioadmin",
-                  "minio_bucket": "expert-skills",
-                  "minio_secure": false,
-                  "presigned_url_ttl_seconds": 900
-                }
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3065,7 +2994,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response List Messages Api V1 Chat Sessions  Session Id  Messages Get"
                 }
               }
@@ -3139,7 +3067,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Body_rename_session_api_v1_chat_sessions__session_id__title_patch"
+                "$ref": "#/components/schemas/RenameSessionRequest"
               }
             }
           }
@@ -3151,7 +3079,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Rename Session Api V1 Chat Sessions  Session Id  Title Patch"
                 }
               }
@@ -3225,7 +3152,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Body_pin_session_api_v1_chat_sessions__session_id__pin_patch"
+                "$ref": "#/components/schemas/PinSessionRequest"
               }
             }
           }
@@ -3237,7 +3164,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Pin Session Api V1 Chat Sessions  Session Id  Pin Patch"
                 }
               }
@@ -3261,7 +3187,7 @@
         "tags": [
           "chat"
         ],
-        "summary": "Create Turn",
+        "summary": "Create and stream a chat turn",
         "operationId": "create_turn_api_v1_chat_sessions__session_id__turns_post",
         "parameters": [
           {
@@ -3311,7 +3237,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Body_create_turn_api_v1_chat_sessions__session_id__turns_post"
+                "$ref": "#/components/schemas/ChatTurnRequest"
               }
             }
           }
@@ -3343,7 +3269,7 @@
         "tags": [
           "chat"
         ],
-        "summary": "Cancel Turn",
+        "summary": "Cancel a chat turn",
         "operationId": "cancel_turn_api_v1_chat_turns__turn_id__cancel_post",
         "parameters": [
           {
@@ -3388,49 +3314,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Settings",
-                "default": {
-                  "app_env": "development",
-                  "jwt_secret": "change-me",
-                  "jwt_issuer": "amazon-experts-backend",
-                  "jwt_audience": "expert-web",
-                  "access_token_ttl_seconds": 900,
-                  "refresh_token_ttl_seconds": 604800,
-                  "platform_activation_token_ttl_seconds": 604800,
-                  "default_tenant_id": "tenant_default",
-                  "cors_origins": [
-                    "*"
-                  ],
-                  "database_url": "sqlite:///./data/amazon-experts-backend.sqlite3",
-                  "database_auto_migrate": true,
-                  "database_schema_dir": "./infra/sql",
-                  "pageindex_base_url": "",
-                  "pageindex_api_key": "",
-                  "ngent_base_url": "http://127.0.0.1:8686",
-                  "ngent_auth_token": "",
-                  "ngent_client_id": "amazon-experts-backend",
-                  "ngent_default_agent": "codex",
-                  "ngent_default_cwd": "/Users/simpcl/work/ted/expert",
-                  "ngent_cwd_base": "/Users/simpcl/work/ted/expert/tenants",
-                  "codex_home": "/Users/simpcl/.codex",
-                  "skill_storage_backend": "local",
-                  "skill_storage_local_dir": "./data/skills",
-                  "skill_storage_prefix": "skills",
-                  "minio_endpoint": "127.0.0.1:9000",
-                  "minio_access_key": "minioadmin",
-                  "minio_secret_key": "minioadmin",
-                  "minio_bucket": "expert-skills",
-                  "minio_secure": false,
-                  "presigned_url_ttl_seconds": 900
-                }
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3438,7 +3321,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Cancel Turn Api V1 Chat Turns  Turn Id  Cancel Post"
                 }
               }
@@ -3462,7 +3344,7 @@
         "tags": [
           "chat"
         ],
-        "summary": "Turn Events",
+        "summary": "Stream chat turn events",
         "operationId": "turn_events_api_v1_chat_turns__turn_id__events_get",
         "parameters": [
           {
@@ -3524,49 +3406,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Settings",
-                "default": {
-                  "app_env": "development",
-                  "jwt_secret": "change-me",
-                  "jwt_issuer": "amazon-experts-backend",
-                  "jwt_audience": "expert-web",
-                  "access_token_ttl_seconds": 900,
-                  "refresh_token_ttl_seconds": 604800,
-                  "platform_activation_token_ttl_seconds": 604800,
-                  "default_tenant_id": "tenant_default",
-                  "cors_origins": [
-                    "*"
-                  ],
-                  "database_url": "sqlite:///./data/amazon-experts-backend.sqlite3",
-                  "database_auto_migrate": true,
-                  "database_schema_dir": "./infra/sql",
-                  "pageindex_base_url": "",
-                  "pageindex_api_key": "",
-                  "ngent_base_url": "http://127.0.0.1:8686",
-                  "ngent_auth_token": "",
-                  "ngent_client_id": "amazon-experts-backend",
-                  "ngent_default_agent": "codex",
-                  "ngent_default_cwd": "/Users/simpcl/work/ted/expert",
-                  "ngent_cwd_base": "/Users/simpcl/work/ted/expert/tenants",
-                  "codex_home": "/Users/simpcl/.codex",
-                  "skill_storage_backend": "local",
-                  "skill_storage_local_dir": "./data/skills",
-                  "skill_storage_prefix": "skills",
-                  "minio_endpoint": "127.0.0.1:9000",
-                  "minio_access_key": "minioadmin",
-                  "minio_secret_key": "minioadmin",
-                  "minio_bucket": "expert-skills",
-                  "minio_secure": false,
-                  "presigned_url_ttl_seconds": 900
-                }
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3594,7 +3433,7 @@
         "tags": [
           "chat"
         ],
-        "summary": "Resolve Permission",
+        "summary": "Resolve a chat permission request",
         "operationId": "resolve_permission_api_v1_chat_permissions__permission_id__post",
         "parameters": [
           {
@@ -3644,7 +3483,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Body_resolve_permission_api_v1_chat_permissions__permission_id__post"
+                "$ref": "#/components/schemas/ResolvePermissionRequest"
               }
             }
           }
@@ -3656,7 +3495,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Resolve Permission Api V1 Chat Permissions  Permission Id  Post"
                 }
               }
@@ -4022,6 +3860,74 @@
         }
       }
     },
+    "/api/v1/knowledge-bases/{knowledge_base_id}/docs/upload-urls": {
+      "post": {
+        "tags": [
+          "docs"
+        ],
+        "summary": "Create document upload URLs",
+        "operationId": "create_upload_urls_api_v1_knowledge_bases__knowledge_base_id__docs_upload_urls_post",
+        "parameters": [
+          {
+            "name": "knowledge_base_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Knowledge Base Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadUrlsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadUrlsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/knowledge-bases/{knowledge_base_id}/docs/complete-upload": {
       "post": {
         "tags": [
@@ -4073,6 +3979,74 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Document"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/knowledge-bases/{knowledge_base_id}/docs/complete-uploads": {
+      "post": {
+        "tags": [
+          "docs"
+        ],
+        "summary": "Complete document uploads",
+        "operationId": "complete_uploads_api_v1_knowledge_bases__knowledge_base_id__docs_complete_uploads_post",
+        "parameters": [
+          {
+            "name": "knowledge_base_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Knowledge Base Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteUploadsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompleteUploadsResponse"
                 }
               }
             }
@@ -4466,7 +4440,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Trigger Build Api V1 Knowledge Bases  Knowledge Base Id  Build Post"
                 }
               }
@@ -4526,7 +4499,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response List Builds Api V1 Knowledge Bases  Knowledge Base Id  Builds Get"
                 }
               }
@@ -4595,7 +4567,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Get Build Api V1 Knowledge Bases  Knowledge Base Id  Builds  Build Id  Get"
                 }
               }
@@ -4664,7 +4635,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Cancel Build Api V1 Knowledge Bases  Knowledge Base Id  Builds  Build Id  Cancel Post"
                 }
               }
@@ -5109,256 +5079,11 @@
         ],
         "title": "AddTenantMemberRequest"
       },
-      "Body_create_session_api_v1_chat_sessions_post": {
-        "properties": {
-          "body": {
-            "$ref": "#/components/schemas/CreateSessionRequest"
-          },
-          "settings": {
-            "$ref": "#/components/schemas/Settings",
-            "default": {
-              "app_env": "development",
-              "jwt_secret": "change-me",
-              "jwt_issuer": "amazon-experts-backend",
-              "jwt_audience": "expert-web",
-              "access_token_ttl_seconds": 900,
-              "refresh_token_ttl_seconds": 604800,
-              "platform_activation_token_ttl_seconds": 604800,
-              "default_tenant_id": "tenant_default",
-              "cors_origins": [
-                "*"
-              ],
-              "database_url": "sqlite:///./data/amazon-experts-backend.sqlite3",
-              "database_auto_migrate": true,
-              "database_schema_dir": "./infra/sql",
-              "pageindex_base_url": "",
-              "pageindex_api_key": "",
-              "ngent_base_url": "http://127.0.0.1:8686",
-              "ngent_auth_token": "",
-              "ngent_client_id": "amazon-experts-backend",
-              "ngent_default_agent": "codex",
-              "ngent_default_cwd": "/Users/simpcl/work/ted/expert",
-              "ngent_cwd_base": "/Users/simpcl/work/ted/expert/tenants",
-              "codex_home": "/Users/simpcl/.codex",
-              "skill_storage_backend": "local",
-              "skill_storage_local_dir": "./data/skills",
-              "skill_storage_prefix": "skills",
-              "minio_endpoint": "127.0.0.1:9000",
-              "minio_access_key": "minioadmin",
-              "minio_secret_key": "minioadmin",
-              "minio_bucket": "expert-skills",
-              "minio_secure": false,
-              "presigned_url_ttl_seconds": 900
-            }
-          }
-        },
-        "type": "object",
-        "required": [
-          "body"
-        ],
-        "title": "Body_create_session_api_v1_chat_sessions_post"
-      },
-      "Body_create_turn_api_v1_chat_sessions__session_id__turns_post": {
-        "properties": {
-          "body": {
-            "$ref": "#/components/schemas/ChatTurnRequest"
-          },
-          "settings": {
-            "$ref": "#/components/schemas/Settings",
-            "default": {
-              "app_env": "development",
-              "jwt_secret": "change-me",
-              "jwt_issuer": "amazon-experts-backend",
-              "jwt_audience": "expert-web",
-              "access_token_ttl_seconds": 900,
-              "refresh_token_ttl_seconds": 604800,
-              "platform_activation_token_ttl_seconds": 604800,
-              "default_tenant_id": "tenant_default",
-              "cors_origins": [
-                "*"
-              ],
-              "database_url": "sqlite:///./data/amazon-experts-backend.sqlite3",
-              "database_auto_migrate": true,
-              "database_schema_dir": "./infra/sql",
-              "pageindex_base_url": "",
-              "pageindex_api_key": "",
-              "ngent_base_url": "http://127.0.0.1:8686",
-              "ngent_auth_token": "",
-              "ngent_client_id": "amazon-experts-backend",
-              "ngent_default_agent": "codex",
-              "ngent_default_cwd": "/Users/simpcl/work/ted/expert",
-              "ngent_cwd_base": "/Users/simpcl/work/ted/expert/tenants",
-              "codex_home": "/Users/simpcl/.codex",
-              "skill_storage_backend": "local",
-              "skill_storage_local_dir": "./data/skills",
-              "skill_storage_prefix": "skills",
-              "minio_endpoint": "127.0.0.1:9000",
-              "minio_access_key": "minioadmin",
-              "minio_secret_key": "minioadmin",
-              "minio_bucket": "expert-skills",
-              "minio_secure": false,
-              "presigned_url_ttl_seconds": 900
-            }
-          }
-        },
-        "type": "object",
-        "required": [
-          "body"
-        ],
-        "title": "Body_create_turn_api_v1_chat_sessions__session_id__turns_post"
-      },
-      "Body_pin_session_api_v1_chat_sessions__session_id__pin_patch": {
-        "properties": {
-          "body": {
-            "$ref": "#/components/schemas/PinSessionRequest"
-          },
-          "settings": {
-            "$ref": "#/components/schemas/Settings",
-            "default": {
-              "app_env": "development",
-              "jwt_secret": "change-me",
-              "jwt_issuer": "amazon-experts-backend",
-              "jwt_audience": "expert-web",
-              "access_token_ttl_seconds": 900,
-              "refresh_token_ttl_seconds": 604800,
-              "platform_activation_token_ttl_seconds": 604800,
-              "default_tenant_id": "tenant_default",
-              "cors_origins": [
-                "*"
-              ],
-              "database_url": "sqlite:///./data/amazon-experts-backend.sqlite3",
-              "database_auto_migrate": true,
-              "database_schema_dir": "./infra/sql",
-              "pageindex_base_url": "",
-              "pageindex_api_key": "",
-              "ngent_base_url": "http://127.0.0.1:8686",
-              "ngent_auth_token": "",
-              "ngent_client_id": "amazon-experts-backend",
-              "ngent_default_agent": "codex",
-              "ngent_default_cwd": "/Users/simpcl/work/ted/expert",
-              "ngent_cwd_base": "/Users/simpcl/work/ted/expert/tenants",
-              "codex_home": "/Users/simpcl/.codex",
-              "skill_storage_backend": "local",
-              "skill_storage_local_dir": "./data/skills",
-              "skill_storage_prefix": "skills",
-              "minio_endpoint": "127.0.0.1:9000",
-              "minio_access_key": "minioadmin",
-              "minio_secret_key": "minioadmin",
-              "minio_bucket": "expert-skills",
-              "minio_secure": false,
-              "presigned_url_ttl_seconds": 900
-            }
-          }
-        },
-        "type": "object",
-        "required": [
-          "body"
-        ],
-        "title": "Body_pin_session_api_v1_chat_sessions__session_id__pin_patch"
-      },
-      "Body_rename_session_api_v1_chat_sessions__session_id__title_patch": {
-        "properties": {
-          "body": {
-            "$ref": "#/components/schemas/RenameSessionRequest"
-          },
-          "settings": {
-            "$ref": "#/components/schemas/Settings",
-            "default": {
-              "app_env": "development",
-              "jwt_secret": "change-me",
-              "jwt_issuer": "amazon-experts-backend",
-              "jwt_audience": "expert-web",
-              "access_token_ttl_seconds": 900,
-              "refresh_token_ttl_seconds": 604800,
-              "platform_activation_token_ttl_seconds": 604800,
-              "default_tenant_id": "tenant_default",
-              "cors_origins": [
-                "*"
-              ],
-              "database_url": "sqlite:///./data/amazon-experts-backend.sqlite3",
-              "database_auto_migrate": true,
-              "database_schema_dir": "./infra/sql",
-              "pageindex_base_url": "",
-              "pageindex_api_key": "",
-              "ngent_base_url": "http://127.0.0.1:8686",
-              "ngent_auth_token": "",
-              "ngent_client_id": "amazon-experts-backend",
-              "ngent_default_agent": "codex",
-              "ngent_default_cwd": "/Users/simpcl/work/ted/expert",
-              "ngent_cwd_base": "/Users/simpcl/work/ted/expert/tenants",
-              "codex_home": "/Users/simpcl/.codex",
-              "skill_storage_backend": "local",
-              "skill_storage_local_dir": "./data/skills",
-              "skill_storage_prefix": "skills",
-              "minio_endpoint": "127.0.0.1:9000",
-              "minio_access_key": "minioadmin",
-              "minio_secret_key": "minioadmin",
-              "minio_bucket": "expert-skills",
-              "minio_secure": false,
-              "presigned_url_ttl_seconds": 900
-            }
-          }
-        },
-        "type": "object",
-        "required": [
-          "body"
-        ],
-        "title": "Body_rename_session_api_v1_chat_sessions__session_id__title_patch"
-      },
-      "Body_resolve_permission_api_v1_chat_permissions__permission_id__post": {
-        "properties": {
-          "body": {
-            "$ref": "#/components/schemas/ResolvePermissionRequest"
-          },
-          "settings": {
-            "$ref": "#/components/schemas/Settings",
-            "default": {
-              "app_env": "development",
-              "jwt_secret": "change-me",
-              "jwt_issuer": "amazon-experts-backend",
-              "jwt_audience": "expert-web",
-              "access_token_ttl_seconds": 900,
-              "refresh_token_ttl_seconds": 604800,
-              "platform_activation_token_ttl_seconds": 604800,
-              "default_tenant_id": "tenant_default",
-              "cors_origins": [
-                "*"
-              ],
-              "database_url": "sqlite:///./data/amazon-experts-backend.sqlite3",
-              "database_auto_migrate": true,
-              "database_schema_dir": "./infra/sql",
-              "pageindex_base_url": "",
-              "pageindex_api_key": "",
-              "ngent_base_url": "http://127.0.0.1:8686",
-              "ngent_auth_token": "",
-              "ngent_client_id": "amazon-experts-backend",
-              "ngent_default_agent": "codex",
-              "ngent_default_cwd": "/Users/simpcl/work/ted/expert",
-              "ngent_cwd_base": "/Users/simpcl/work/ted/expert/tenants",
-              "codex_home": "/Users/simpcl/.codex",
-              "skill_storage_backend": "local",
-              "skill_storage_local_dir": "./data/skills",
-              "skill_storage_prefix": "skills",
-              "minio_endpoint": "127.0.0.1:9000",
-              "minio_access_key": "minioadmin",
-              "minio_secret_key": "minioadmin",
-              "minio_bucket": "expert-skills",
-              "minio_secure": false,
-              "presigned_url_ttl_seconds": 900
-            }
-          }
-        },
-        "type": "object",
-        "required": [
-          "body"
-        ],
-        "title": "Body_resolve_permission_api_v1_chat_permissions__permission_id__post"
-      },
       "Body_upload_skill_api_v1_skills_post": {
         "properties": {
           "file": {
             "type": "string",
-            "contentMediaType": "application/octet-stream",
+            "format": "binary",
             "title": "File"
           },
           "slug": {
@@ -5394,7 +5119,6 @@
             "title": "Documentids"
           },
           "config": {
-            "additionalProperties": true,
             "type": "object",
             "title": "Config"
           }
@@ -5440,7 +5164,6 @@
           "multiHop": {
             "anyOf": [
               {
-                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -5490,6 +5213,40 @@
           "uploadSessionId"
         ],
         "title": "CompleteUploadRequest"
+      },
+      "CompleteUploadsRequest": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CompleteUploadRequest"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "CompleteUploadsRequest"
+      },
+      "CompleteUploadsResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Document"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "CompleteUploadsResponse"
       },
       "CreateExpertCategoryRequest": {
         "properties": {
@@ -5606,7 +5363,6 @@
             "title": "Description"
           },
           "metadata": {
-            "additionalProperties": true,
             "type": "object",
             "title": "Metadata"
           }
@@ -5824,7 +5580,6 @@
             "title": "Indexstatus"
           },
           "metadata": {
-            "additionalProperties": true,
             "type": "object",
             "title": "Metadata"
           },
@@ -6056,6 +5811,126 @@
         ],
         "title": "ExpertListResponse"
       },
+      "ExpertMarketCategory": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "ExpertMarketCategory"
+      },
+      "ExpertMarketCategoryListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExpertMarketCategory"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ExpertMarketCategoryListResponse"
+      },
+      "ExpertMarketExpert": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "categoryId": {
+            "type": "string",
+            "title": "Categoryid"
+          },
+          "categoryName": {
+            "type": "string",
+            "title": "Categoryname"
+          },
+          "abilityIntro": {
+            "type": "string",
+            "title": "Abilityintro"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "guideQuestions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 3,
+            "title": "Guidequestions"
+          },
+          "summonButtonText": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summonbuttontext"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "categoryId",
+          "categoryName",
+          "abilityIntro"
+        ],
+        "title": "ExpertMarketExpert"
+      },
+      "ExpertMarketExpertListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExpertMarketExpert"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ExpertMarketExpertListResponse"
+      },
       "ExpertStatsResponse": {
         "properties": {
           "total": {
@@ -6173,7 +6048,6 @@
             "title": "Status"
           },
           "metadata": {
-            "additionalProperties": true,
             "type": "object",
             "title": "Metadata"
           },
@@ -6481,225 +6355,6 @@
         },
         "type": "object",
         "title": "ResolvePermissionRequest"
-      },
-      "Settings": {
-        "properties": {
-          "app_env": {
-            "type": "string",
-            "title": "App Env",
-            "default": "development"
-          },
-          "jwt_secret": {
-            "type": "string",
-            "title": "Jwt Secret",
-            "default": "change-me"
-          },
-          "jwt_issuer": {
-            "type": "string",
-            "title": "Jwt Issuer",
-            "default": "amazon-experts-backend"
-          },
-          "jwt_audience": {
-            "type": "string",
-            "title": "Jwt Audience",
-            "default": "expert-web"
-          },
-          "access_token_ttl_seconds": {
-            "type": "integer",
-            "title": "Access Token Ttl Seconds",
-            "default": 900
-          },
-          "refresh_token_ttl_seconds": {
-            "type": "integer",
-            "title": "Refresh Token Ttl Seconds",
-            "default": 604800
-          },
-          "platform_activation_token_ttl_seconds": {
-            "type": "integer",
-            "title": "Platform Activation Token Ttl Seconds",
-            "default": 604800
-          },
-          "default_tenant_id": {
-            "type": "string",
-            "title": "Default Tenant Id",
-            "default": "tenant_default"
-          },
-          "cors_origins": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Cors Origins"
-          },
-          "database_url": {
-            "type": "string",
-            "title": "Database Url",
-            "default": "sqlite:///./.data/amazon-experts-backend.sqlite3"
-          },
-          "database_auto_migrate": {
-            "type": "boolean",
-            "title": "Database Auto Migrate",
-            "default": true
-          },
-          "database_schema_dir": {
-            "type": "string",
-            "title": "Database Schema Dir"
-          },
-          "pageindex_base_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Pageindex Base Url"
-          },
-          "pageindex_api_key": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Pageindex Api Key"
-          },
-          "ngent_base_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ngent Base Url"
-          },
-          "ngent_auth_token": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ngent Auth Token"
-          },
-          "ngent_client_id": {
-            "type": "string",
-            "title": "Ngent Client Id",
-            "default": "amazon-experts-backend"
-          },
-          "ngent_default_agent": {
-            "type": "string",
-            "title": "Ngent Default Agent",
-            "default": "codex"
-          },
-          "ngent_default_cwd": {
-            "type": "string",
-            "title": "Ngent Default Cwd"
-          },
-          "ngent_cwd_base": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ngent Cwd Base"
-          },
-          "codex_home": {
-            "type": "string",
-            "title": "Codex Home"
-          },
-          "codex_skills_dir": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Codex Skills Dir"
-          },
-          "skill_storage_backend": {
-            "type": "string",
-            "title": "Skill Storage Backend",
-            "default": "local"
-          },
-          "skill_storage_local_dir": {
-            "type": "string",
-            "title": "Skill Storage Local Dir"
-          },
-          "skill_storage_prefix": {
-            "type": "string",
-            "title": "Skill Storage Prefix",
-            "default": "skills"
-          },
-          "minio_endpoint": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Minio Endpoint"
-          },
-          "minio_access_key": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Minio Access Key"
-          },
-          "minio_secret_key": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Minio Secret Key"
-          },
-          "minio_bucket": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Minio Bucket"
-          },
-          "minio_secure": {
-            "type": "boolean",
-            "title": "Minio Secure",
-            "default": false
-          },
-          "presigned_url_ttl_seconds": {
-            "type": "integer",
-            "title": "Presigned Url Ttl Seconds",
-            "default": 900
-          }
-        },
-        "type": "object",
-        "title": "Settings"
       },
       "Skill": {
         "properties": {
@@ -7052,7 +6707,6 @@
           "metadata": {
             "anyOf": [
               {
-                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -7245,7 +6899,6 @@
           "metadata": {
             "anyOf": [
               {
-                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -7445,6 +7098,40 @@
           "expiresAt"
         ],
         "title": "UploadUrlResponse"
+      },
+      "UploadUrlsRequest": {
+        "properties": {
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/UploadUrlRequest"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Files"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files"
+        ],
+        "title": "UploadUrlsRequest"
+      },
+      "UploadUrlsResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UploadUrlResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "UploadUrlsResponse"
       },
       "UserAccessSummary": {
         "properties": {
@@ -7715,13 +7402,6 @@
           "type": {
             "type": "string",
             "title": "Error Type"
-          },
-          "input": {
-            "title": "Input"
-          },
-          "ctx": {
-            "type": "object",
-            "title": "Context"
           }
         },
         "type": "object",
@@ -7760,6 +7440,10 @@
       "description": "Create, query, update, delete and switch expert status."
     },
     {
+      "name": "expert-market",
+      "description": "Public expert marketplace categories and published experts."
+    },
+    {
       "name": "rbac",
       "description": "Platform roles, tenant roles and member authorization."
     },
@@ -7773,7 +7457,7 @@
     },
     {
       "name": "chat",
-      "description": "Tenant chat sessions, messages and tasks."
+      "description": "Tenant chat sessions, turns and permission events."
     },
     {
       "name": "knowledge-bases",

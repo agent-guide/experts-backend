@@ -3,7 +3,9 @@ from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_database, get_ngent_client, require_tenant_permission
 from app.clients.ngent import NgentClient
+from app.core.config import Settings, get_settings
 from app.db import DatabaseConnection
+from app.db import open_database_connection
 from app.domain.auth import Principal
 from app.domain.chat import (
     ChatTurnRequest,
@@ -100,13 +102,20 @@ async def create_turn(
     session_id: str,
     body: ChatTurnRequest,
     principal: Principal = Depends(require_tenant_permission("chat:ask")),
-    service: ChatService = Depends(get_chat_service),
+    settings: Settings = Depends(get_settings),
+    ngent: NgentClient = Depends(get_ngent_client),
 ) -> StreamingResponse:
     # ngent creates and streams a turn in one shot; the turnId arrives in the first
     # `turn_started` event. The service tees the SSE stream: forwards it to the caller while
     # persisting the assembled turn record locally.
+    async def events():
+        with open_database_connection(settings) as connection:
+            service = ChatService(connection, ngent)
+            async for line in service.stream_turn(principal, session_id, body):
+                yield line
+
     return StreamingResponse(
-        service.stream_turn(principal, session_id, body),
+        events(),
         media_type="text/event-stream",
     )
 

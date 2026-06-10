@@ -1,10 +1,16 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from uuid import uuid4
 
 from app.core.errors import ApiError
 from app.db import DatabaseConnection
-from app.domain.experts import CreateExpertRequest, Expert, ExpertStatsResponse, UpdateExpertRequest
+from app.domain.experts import (
+    CreateExpertRequest,
+    Expert,
+    ExpertMarketExpert,
+    ExpertStatsResponse,
+    UpdateExpertRequest,
+)
 from app.services.expert_repository import ExpertRepository
 
 
@@ -30,6 +36,15 @@ class ExpertService:
             draft=counts.get("draft", 0),
             unlisted=counts.get("unlisted", 0),
         )
+
+    def list_market_experts(self, *, category_id: str | None = None) -> list[ExpertMarketExpert]:
+        return self.repo.list_market(category_id=category_id)
+
+    def get_market_expert(self, expert_id: str) -> ExpertMarketExpert:
+        expert = self.repo.get_market(expert_id)
+        if not expert:
+            raise ApiError(404, "EXPERT_NOT_FOUND", "Expert not found")
+        return expert
 
     def get(self, expert_id: str) -> Expert:
         expert = self.repo.get(expert_id)

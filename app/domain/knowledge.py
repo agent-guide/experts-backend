@@ -92,10 +92,26 @@ class UploadUrlResponse(BaseModel):
     expiresAt: str
 
 
+class UploadUrlsRequest(BaseModel):
+    files: list[UploadUrlRequest] = Field(min_length=1, max_length=50)
+
+
+class UploadUrlsResponse(BaseModel):
+    items: list[UploadUrlResponse]
+
+
 class CompleteUploadRequest(BaseModel):
     uploadSessionId: str
     etag: str | None = None
     fileSizeBytes: int | None = None
+
+
+class CompleteUploadsRequest(BaseModel):
+    items: list[CompleteUploadRequest] = Field(min_length=1, max_length=50)
+
+
+class CompleteUploadsResponse(BaseModel):
+    items: list[Document]
 
 
 class DownloadUrlResponse(BaseModel):

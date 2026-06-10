@@ -6,12 +6,16 @@ from app.db import DatabaseConnection
 from app.domain.auth import Principal
 from app.domain.knowledge import (
     CompleteUploadRequest,
+    CompleteUploadsRequest,
+    CompleteUploadsResponse,
     Document,
     DocumentListResponse,
     DownloadUrlResponse,
     UpdateDocumentRequest,
     UploadUrlRequest,
     UploadUrlResponse,
+    UploadUrlsRequest,
+    UploadUrlsResponse,
 )
 from app.services.document_service import DocumentService
 from app.services.object_store import ObjectStore
@@ -43,6 +47,20 @@ async def create_upload_url(
     )
 
 
+@router.post("/upload-urls", response_model=UploadUrlsResponse)
+async def create_upload_urls(
+    knowledge_base_id: str,
+    body: UploadUrlsRequest,
+    principal: Principal = Depends(require_platform_permission("doc:create")),
+    connection: DatabaseConnection = Depends(get_database),
+    object_store: ObjectStore = Depends(get_object_store),
+    settings: Settings = Depends(get_settings),
+) -> UploadUrlsResponse:
+    return _service(connection, object_store, settings).create_upload_urls(
+        principal, knowledge_base_id, body
+    )
+
+
 @router.post("/complete-upload", response_model=Document, status_code=201)
 async def complete_upload(
     knowledge_base_id: str,
@@ -53,6 +71,20 @@ async def complete_upload(
     settings: Settings = Depends(get_settings),
 ) -> Document:
     return _service(connection, object_store, settings).complete_upload(
+        principal, knowledge_base_id, body
+    )
+
+
+@router.post("/complete-uploads", response_model=CompleteUploadsResponse, status_code=201)
+async def complete_uploads(
+    knowledge_base_id: str,
+    body: CompleteUploadsRequest,
+    principal: Principal = Depends(require_platform_permission("doc:create")),
+    connection: DatabaseConnection = Depends(get_database),
+    object_store: ObjectStore = Depends(get_object_store),
+    settings: Settings = Depends(get_settings),
+) -> CompleteUploadsResponse:
+    return _service(connection, object_store, settings).complete_uploads(
         principal, knowledge_base_id, body
     )
 

@@ -20,3 +20,6 @@ data/
 # Editor / OS
 .vscode/
 .DS_Store
+
+# ngent workspace
+ngent-workspace/

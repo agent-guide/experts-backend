@@ -5,7 +5,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.db import DatabaseConnection
-from app.domain.experts import Expert
+from app.domain.experts import Expert, ExpertMarketExpert
 from app.services._sql import execute, fetch_all, fetch_one, json_param, rowcount
 
 
@@ -58,6 +58,55 @@ class ExpertRepository:
         if not row:
             return None
         return self._map_experts([row])[0]
+
+    def list_market(self, *, category_id: str | None = None) -> list[ExpertMarketExpert]:
+        where = ["e.status = 'published'"]
+        params: list[Any] = []
+        if category_id:
+            where.append("e.category_id = ?")
+            params.append(category_id)
+        rows = fetch_all(
+            self.connection,
+            f"""
+            select
+              e.id,
+              e.name,
+              e.category_id,
+              c.name as category_name,
+              e.ability_intro,
+              e.tags,
+              e.guide_questions,
+              e.summon_button_text
+            from experts e
+            inner join expert_categories c on c.id = e.category_id
+            where {' and '.join(where)}
+            order by e.created_at desc, e.id asc
+            """,
+            params,
+        )
+        return [_map_market_expert(row) for row in rows]
+
+    def get_market(self, expert_id: str) -> ExpertMarketExpert | None:
+        row = fetch_one(
+            self.connection,
+            """
+            select
+              e.id,
+              e.name,
+              e.category_id,
+              c.name as category_name,
+              e.ability_intro,
+              e.tags,
+              e.guide_questions,
+              e.summon_button_text
+            from experts e
+            inner join expert_categories c on c.id = e.category_id
+            where e.id = ? and e.status = 'published'
+            limit 1
+            """,
+            (expert_id,),
+        )
+        return _map_market_expert(row) if row else None
 
     def status_counts(self) -> dict[str, int]:
         rows = fetch_all(
@@ -314,3 +363,20 @@ def _json_string_list(value: Any) -> list[str]:
     if isinstance(value, list):
         return [str(item) for item in value if isinstance(item, str)]
     return []
+
+
+def _map_market_expert(row: dict[str, Any]) -> ExpertMarketExpert:
+    return ExpertMarketExpert(
+        id=str(row["id"]),
+        name=str(row["name"]),
+        categoryId=str(row["category_id"]),
+        categoryName=str(row["category_name"]),
+        abilityIntro=str(row["ability_intro"]),
+        tags=_json_string_list(row["tags"]),
+        guideQuestions=_json_string_list(row["guide_questions"]),
+        summonButtonText=(
+            str(row["summon_button_text"])
+            if row["summon_button_text"] is not None
+            else None
+        ),
+    )
