@@ -1552,7 +1552,7 @@ def test_expert_search_by_name_category_and_status(tmp_path: Path) -> None:
         assert [item["id"] for item in combined.json()["items"]] == ["expert_listing"]
 
 
-def test_expert_market_is_public_and_only_lists_published_experts(tmp_path: Path) -> None:
+def test_expert_market_requires_sign_in_and_only_lists_published_experts(tmp_path: Path) -> None:
     database_path = tmp_path / "expert_market.sqlite3"
     settings = Settings(
         database_url=f"sqlite:///{database_path}",
@@ -1562,6 +1562,22 @@ def test_expert_market_is_public_and_only_lists_published_experts(tmp_path: Path
     test_app = create_app(settings)
 
     with TestClient(test_app) as client:
+        _seed_platform_user(
+            settings, "market_user", "market@example.com", "Market User", "market-secret", "operator"
+        )
+
+        # Anonymous callers are rejected -- the marketplace is sign-in gated, not public.
+        assert client.get("/api/v1/expert-market/categories").status_code == 401
+        assert client.get("/api/v1/expert-market/experts").status_code == 401
+        assert client.get("/api/v1/expert-market/experts/expert_listing").status_code == 401
+
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"email": "market@example.com", "password": "market-secret"},
+        )
+        assert login.status_code == 200
+        headers = {"Authorization": f"Bearer {login.json()['accessToken']}"}
+
         with open_database_connection(settings) as connection:
             connection.execute(
                 """
@@ -1592,7 +1608,7 @@ def test_expert_market_is_public_and_only_lists_published_experts(tmp_path: Path
                 )
             connection.commit()
 
-        categories = client.get("/api/v1/expert-market/categories")
+        categories = client.get("/api/v1/expert-market/categories", headers=headers)
         assert categories.status_code == 200
         assert categories.json()["items"] == [
             {
@@ -1602,18 +1618,19 @@ def test_expert_market_is_public_and_only_lists_published_experts(tmp_path: Path
             }
         ]
 
-        experts = client.get("/api/v1/expert-market/experts")
+        experts = client.get("/api/v1/expert-market/experts", headers=headers)
         assert experts.status_code == 200
         assert [item["id"] for item in experts.json()["items"]] == ["expert_listing"]
 
         by_category = client.get(
             "/api/v1/expert-market/experts",
             params={"categoryId": "expert_cat_ads"},
+            headers=headers,
         )
         assert by_category.status_code == 200
         assert by_category.json()["items"] == []
 
-        detail = client.get("/api/v1/expert-market/experts/expert_listing")
+        detail = client.get("/api/v1/expert-market/experts/expert_listing", headers=headers)
         assert detail.status_code == 200
         assert detail.json() == {
             "id": "expert_listing",
@@ -1626,7 +1643,7 @@ def test_expert_market_is_public_and_only_lists_published_experts(tmp_path: Path
             "summonButtonText": "Ask",
         }
 
-        hidden = client.get("/api/v1/expert-market/experts/expert_store")
+        hidden = client.get("/api/v1/expert-market/experts/expert_store", headers=headers)
         assert hidden.status_code == 404
 
 
@@ -1988,13 +2005,7 @@ def test_chat_turn_uses_ngent_input_protocol(tmp_path: Path) -> None:
         turn = client.post(
             f"/api/v1/chat/sessions/{session_id}/turns",
             headers=headers,
-            json={
-                "question": "hello",
-                "knowledgeBaseIds": ["kb_1"],
-                "llmModel": "model_1",
-                "queryRewrite": True,
-                "multiHop": {"enabled": True},
-            },
+            json={"question": "hello"},
         )
 
         assert turn.status_code == 200
@@ -2337,8 +2348,10 @@ def test_document_batch_upload_flow(tmp_path: Path) -> None:
             },
         )
         assert url_resp.status_code == 200, url_resp.text
-        uploads = url_resp.json()["items"]
-        assert len(uploads) == 2
+        results = url_resp.json()["items"]
+        assert len(results) == 2
+        assert [r["status"] for r in results] == ["created", "created"]
+        uploads = [r["upload"] for r in results]
 
         store.put(uploads[0]["objectKey"], 1024)
         store.put(uploads[1]["objectKey"], 12)
@@ -2353,13 +2366,55 @@ def test_document_batch_upload_flow(tmp_path: Path) -> None:
                 ]
             },
         )
-        assert completed.status_code == 201, completed.text
-        docs = completed.json()["items"]
-        assert {doc["fileName"] for doc in docs} == {"guide.pdf", "notes.txt"}
+        assert completed.status_code == 200, completed.text
+        items = completed.json()["items"]
+        assert [item["status"] for item in items] == ["completed", "completed"]
+        assert {item["document"]["fileName"] for item in items} == {"guide.pdf", "notes.txt"}
 
         listed = client.get(f"/api/v1/knowledge-bases/{kb_id}/docs", headers=headers)
         assert listed.status_code == 200
         assert len(listed.json()["items"]) == 2
+
+
+def test_complete_uploads_is_non_atomic_and_reports_per_item_failures(tmp_path: Path) -> None:
+    settings = _kb_test_settings(tmp_path)
+    store = FakeObjectStore()
+    with TestClient(_kb_app(settings, store)) as client:
+        headers = _login(client, settings, "expert_user", "expert@example.com", "expert")
+        kb_id = client.post(
+            "/api/v1/knowledge-bases", headers=headers, json={"name": "Partial KB"}
+        ).json()["id"]
+
+        url_resp = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/upload-urls",
+            headers=headers,
+            json={"files": [{"fileName": "ok.pdf", "mimeType": "application/pdf", "fileSizeBytes": 8}]},
+        )
+        upload = url_resp.json()["items"][0]["upload"]
+        store.put(upload["objectKey"], 8)
+
+        # First item completes; second references an unknown session and must fail on its own
+        # without aborting the first (the batch is non-atomic).
+        completed = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/complete-uploads",
+            headers=headers,
+            json={
+                "items": [
+                    {"uploadSessionId": upload["uploadSessionId"], "fileSizeBytes": 8},
+                    {"uploadSessionId": "upl_does_not_exist", "fileSizeBytes": 8},
+                ]
+            },
+        )
+        assert completed.status_code == 200, completed.text
+        items = completed.json()["items"]
+        assert items[0]["status"] == "completed"
+        assert items[0]["document"]["fileName"] == "ok.pdf"
+        assert items[1]["status"] == "failed"
+        assert items[1]["error"]["code"] == "UPLOAD_SESSION_NOT_FOUND"
+
+        # The successful item was committed even though a sibling failed.
+        listed = client.get(f"/api/v1/knowledge-bases/{kb_id}/docs", headers=headers)
+        assert [doc["fileName"] for doc in listed.json()["items"]] == ["ok.pdf"]
 
 
 def test_complete_upload_size_mismatch_is_rejected(tmp_path: Path) -> None:

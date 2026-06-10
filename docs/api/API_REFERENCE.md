@@ -404,7 +404,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 | Status | Content Type | Schema |
 | --- | --- | --- |
-| 201 | application/json | CompleteUploadsResponse |
+| 200 | application/json | CompleteUploadsResponse |
 | 422 | application/json | HTTPValidationError |
 
 ### POST `/api/v1/knowledge-bases/{knowledge_base_id}/docs/upload-url`
@@ -622,13 +622,16 @@ This document is generated from the FastAPI OpenAPI schema.
 
 #### Input Parameters
 
-No input parameters.
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| header | Authorization | no | string \| null | - |
 
 #### Response
 
 | Status | Content Type | Schema |
 | --- | --- | --- |
 | 200 | application/json | ExpertMarketCategoryListResponse |
+| 422 | application/json | HTTPValidationError |
 
 ### GET `/api/v1/expert-market/experts`
 
@@ -639,6 +642,7 @@ No input parameters.
 | Location | Name | Required | Type | Description |
 | --- | --- | --- | --- | --- |
 | query | categoryId | no | string \| null | - |
+| header | Authorization | no | string \| null | - |
 
 #### Response
 
@@ -656,6 +660,7 @@ No input parameters.
 | Location | Name | Required | Type | Description |
 | --- | --- | --- | --- | --- |
 | path | expert_id | yes | string | - |
+| header | Authorization | no | string \| null | - |
 
 #### Response
 
@@ -1553,6 +1558,14 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | userId | yes | string | - |
 | role | no | TenantRole | - |
 
+### `BatchItemError`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| code | yes | string | - |
+| message | yes | string | - |
+| details | no | object | - |
+
 ### `Body_upload_skill_api_v1_skills_post`
 
 | Field | Required | Type | Description |
@@ -1573,10 +1586,6 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
 | question | yes | string | - |
-| knowledgeBaseIds | no | array[string] | - |
-| llmModel | no | string \| null | - |
-| queryRewrite | no | boolean \| null | - |
-| multiHop | no | object \| null | - |
 
 ### `CompleteUploadRequest`
 
@@ -1585,6 +1594,15 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | uploadSessionId | yes | string | - |
 | etag | no | string \| null | - |
 | fileSizeBytes | no | integer \| null | - |
+
+### `CompleteUploadResult`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| uploadSessionId | yes | string | - |
+| status | yes | string | - |
+| document | no | Document \| null | - |
+| error | no | BatchItemError \| null | - |
 
 ### `CompleteUploadsRequest`
 
@@ -1596,7 +1614,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
-| items | yes | array[Document] | - |
+| items | yes | array[CompleteUploadResult] | - |
 
 ### `CreateExpertCategoryRequest`
 
@@ -2078,6 +2096,15 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | objectKey | yes | string | - |
 | expiresAt | yes | string | - |
 
+### `UploadUrlResult`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| fileName | yes | string | - |
+| status | yes | string | - |
+| upload | no | UploadUrlResponse \| null | - |
+| error | no | BatchItemError \| null | - |
+
 ### `UploadUrlsRequest`
 
 | Field | Required | Type | Description |
@@ -2088,7 +2115,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
-| items | yes | array[UploadUrlResponse] | - |
+| items | yes | array[UploadUrlResult] | - |
 
 ### `UserAccessSummary`
 
@@ -2152,3 +2179,5 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | loc | yes | array[string \| integer] | - |
 | msg | yes | string | - |
 | type | yes | string | - |
+| input | no | {"title": "Input"} | - |
+| ctx | no | object | - |

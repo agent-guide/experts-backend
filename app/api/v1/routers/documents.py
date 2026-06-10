@@ -75,7 +75,9 @@ async def complete_upload(
     )
 
 
-@router.post("/complete-uploads", response_model=CompleteUploadsResponse, status_code=201)
+# Returns 200 (not 201): the batch is non-atomic, so the body reports per-item outcomes rather
+# than asserting every document was created.
+@router.post("/complete-uploads", response_model=CompleteUploadsResponse)
 async def complete_uploads(
     knowledge_base_id: str,
     body: CompleteUploadsRequest,

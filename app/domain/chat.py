@@ -7,11 +7,10 @@ class CreateSessionRequest(BaseModel):
 
 
 class ChatTurnRequest(BaseModel):
+    # ngent's turn API takes only the prompt text; model / knowledge-base / retrieval
+    # options are not forwarded (see ChatService.stream_turn). Do not re-add fields here
+    # without wiring them into the outgoing payload, or callers will think they take effect.
     question: str
-    knowledgeBaseIds: list[str] = Field(default_factory=list)
-    llmModel: str | None = None
-    queryRewrite: bool | None = None
-    multiHop: dict | None = None
 
 
 class RenameSessionRequest(BaseModel):

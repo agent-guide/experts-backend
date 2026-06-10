@@ -177,15 +177,13 @@ Request:
 
 ```json
 {
-  "question": "Analyze recent review trends",
-  "knowledgeBaseIds": ["kb_1"],
-  "llmModel": "codex/gpt-5",
-  "queryRewrite": true,
-  "multiHop": {
-    "enabled": true
-  }
+  "question": "Analyze recent review trends"
 }
 ```
+
+`question` is the only field. ngent's turn API takes just the prompt text, so model /
+knowledge-base / retrieval options are not accepted here -- supplying them would have no
+effect on the engine.
 
 Response content type:
 

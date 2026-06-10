@@ -18,7 +18,7 @@ OPENAPI_TAGS = [
     {"name": "tenants", "description": "Tenants, workspaces and tenant members."},
     {"name": "expert-categories", "description": "Create, query, update and delete expert categories."},
     {"name": "experts", "description": "Create, query, update, delete and switch expert status."},
-    {"name": "expert-market", "description": "Public expert marketplace categories and published experts."},
+    {"name": "expert-market", "description": "Expert marketplace categories and published experts (requires sign-in)."},
     {"name": "rbac", "description": "Platform roles, tenant roles and member authorization."},
     {"name": "models", "description": "Models available to tenants."},
     {"name": "ops", "description": "System operations and cleanup."},

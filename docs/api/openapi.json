@@ -54,6 +54,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Login Api V1 Auth Login Post"
                 }
@@ -96,6 +97,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Refresh Api V1 Auth Refresh Post"
                 }
@@ -172,6 +174,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Register Api V1 Users Register Post"
                 }
@@ -263,6 +266,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Activate Platform User Api V1 Users Platform Activate Post"
                 }
@@ -1932,6 +1936,24 @@
         ],
         "summary": "List public expert categories",
         "operationId": "list_market_categories_api_v1_expert_market_categories_get",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1939,6 +1961,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ExpertMarketCategoryListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -1969,6 +2001,22 @@
                 }
               ],
               "title": "Categoryid"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],
@@ -2011,6 +2059,22 @@
             "schema": {
               "type": "string",
               "title": "Expert Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],
@@ -2464,6 +2528,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response List Llm Models Api V1 Models Llm Get"
                 }
               }
@@ -2530,6 +2595,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Get Embedding Model Api V1 Models Embedding Get"
                 }
               }
@@ -2580,6 +2646,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Metrics Api V1 Ops Metrics Get"
                 }
               }
@@ -2631,6 +2698,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Run Storage Gc Api V1 Ops Storage Gc Post"
                 }
               }
@@ -2707,6 +2775,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Create Session Api V1 Chat Sessions Post"
                 }
               }
@@ -2771,6 +2840,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response List Sessions Api V1 Chat Sessions Get"
                 }
               }
@@ -2846,6 +2916,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Get Session Api V1 Chat Sessions  Session Id  Get"
                 }
               }
@@ -2919,6 +2990,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Delete Session Api V1 Chat Sessions  Session Id  Delete"
                 }
               }
@@ -2994,6 +3066,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response List Messages Api V1 Chat Sessions  Session Id  Messages Get"
                 }
               }
@@ -3079,6 +3152,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Rename Session Api V1 Chat Sessions  Session Id  Title Patch"
                 }
               }
@@ -3164,6 +3238,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Pin Session Api V1 Chat Sessions  Session Id  Pin Patch"
                 }
               }
@@ -3321,6 +3396,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Cancel Turn Api V1 Chat Turns  Turn Id  Cancel Post"
                 }
               }
@@ -3495,6 +3571,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Resolve Permission Api V1 Chat Permissions  Permission Id  Post"
                 }
               }
@@ -4041,7 +4118,7 @@
           }
         },
         "responses": {
-          "201": {
+          "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
@@ -4440,6 +4517,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Trigger Build Api V1 Knowledge Bases  Knowledge Base Id  Build Post"
                 }
               }
@@ -4499,6 +4577,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response List Builds Api V1 Knowledge Bases  Knowledge Base Id  Builds Get"
                 }
               }
@@ -4567,6 +4646,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Get Build Api V1 Knowledge Bases  Knowledge Base Id  Builds  Build Id  Get"
                 }
               }
@@ -4635,6 +4715,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": true,
                   "title": "Response Cancel Build Api V1 Knowledge Bases  Knowledge Base Id  Builds  Build Id  Cancel Post"
                 }
               }
@@ -5079,11 +5160,34 @@
         ],
         "title": "AddTenantMemberRequest"
       },
+      "BatchItemError": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "details": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Details"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "BatchItemError"
+      },
       "Body_upload_skill_api_v1_skills_post": {
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File"
           },
           "slug": {
@@ -5119,6 +5223,7 @@
             "title": "Documentids"
           },
           "config": {
+            "additionalProperties": true,
             "type": "object",
             "title": "Config"
           }
@@ -5131,46 +5236,6 @@
           "question": {
             "type": "string",
             "title": "Question"
-          },
-          "knowledgeBaseIds": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Knowledgebaseids"
-          },
-          "llmModel": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Llmmodel"
-          },
-          "queryRewrite": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Queryrewrite"
-          },
-          "multiHop": {
-            "anyOf": [
-              {
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Multihop"
           }
         },
         "type": "object",
@@ -5214,6 +5279,48 @@
         ],
         "title": "CompleteUploadRequest"
       },
+      "CompleteUploadResult": {
+        "properties": {
+          "uploadSessionId": {
+            "type": "string",
+            "title": "Uploadsessionid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "document": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Document"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BatchItemError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "uploadSessionId",
+          "status"
+        ],
+        "title": "CompleteUploadResult"
+      },
       "CompleteUploadsRequest": {
         "properties": {
           "items": {
@@ -5236,7 +5343,7 @@
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/Document"
+              "$ref": "#/components/schemas/CompleteUploadResult"
             },
             "type": "array",
             "title": "Items"
@@ -5363,6 +5470,7 @@
             "title": "Description"
           },
           "metadata": {
+            "additionalProperties": true,
             "type": "object",
             "title": "Metadata"
           }
@@ -5580,6 +5688,7 @@
             "title": "Indexstatus"
           },
           "metadata": {
+            "additionalProperties": true,
             "type": "object",
             "title": "Metadata"
           },
@@ -6048,6 +6157,7 @@
             "title": "Status"
           },
           "metadata": {
+            "additionalProperties": true,
             "type": "object",
             "title": "Metadata"
           },
@@ -6707,6 +6817,7 @@
           "metadata": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -6899,6 +7010,7 @@
           "metadata": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -7099,6 +7211,48 @@
         ],
         "title": "UploadUrlResponse"
       },
+      "UploadUrlResult": {
+        "properties": {
+          "fileName": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "created",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "upload": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UploadUrlResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BatchItemError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "fileName",
+          "status"
+        ],
+        "title": "UploadUrlResult"
+      },
       "UploadUrlsRequest": {
         "properties": {
           "files": {
@@ -7121,7 +7275,7 @@
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/UploadUrlResponse"
+              "$ref": "#/components/schemas/UploadUrlResult"
             },
             "type": "array",
             "title": "Items"
@@ -7402,6 +7556,13 @@
           "type": {
             "type": "string",
             "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
           }
         },
         "type": "object",
@@ -7441,7 +7602,7 @@
     },
     {
       "name": "expert-market",
-      "description": "Public expert marketplace categories and published experts."
+      "description": "Expert marketplace categories and published experts (requires sign-in)."
     },
     {
       "name": "rbac",

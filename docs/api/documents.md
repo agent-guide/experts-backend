@@ -80,25 +80,34 @@ Request:
 }
 ```
 
-Response:
+This batch is **non-atomic**: each file is processed independently and reported in `items`
+with `status` `created` or `failed`. A failed file carries an `error` (`code` / `message` /
+`details`) and does not abort the others, so the client retries only the failures.
+
+Response `200 OK`:
 
 ```json
 {
   "items": [
     {
-      "uploadSessionId": "upl_123",
-      "documentId": "doc_123",
-      "method": "PUT",
-      "uploadUrl": "https://minio.example.com/expert-docs/...",
-      "headers": { "Content-Type": "application/pdf" },
-      "objectKey": "knowledge-bases/kb_123/documents/doc_123/guide.pdf",
-      "expiresAt": "2026-06-03T10:10:00Z"
+      "fileName": "guide.pdf",
+      "status": "created",
+      "upload": {
+        "uploadSessionId": "upl_123",
+        "documentId": "doc_123",
+        "method": "PUT",
+        "uploadUrl": "https://minio.example.com/expert-docs/...",
+        "headers": { "Content-Type": "application/pdf" },
+        "objectKey": "knowledge-bases/kb_123/documents/doc_123/guide.pdf",
+        "expiresAt": "2026-06-03T10:10:00Z"
+      },
+      "error": null
     }
   ]
 }
 ```
 
-The client then `PUT`s each file body to its corresponding `uploadUrl`.
+The client then `PUT`s each file body to its corresponding `upload.uploadUrl`.
 
 ## POST /complete-upload
 
@@ -162,25 +171,35 @@ Request:
 }
 ```
 
-Response `201 Created`:
+Like `/upload-urls`, this batch is **non-atomic**: each item commits on its own and is
+reported in `items` with `status` `completed` or `failed`. A `completed` item carries the
+created `document`; a `failed` item carries an `error` (`code` / `message` / `details`) and
+the caller retries only the failures. The endpoint returns `200 OK` even when some items fail.
+
+Response `200 OK`:
 
 ```json
 {
   "items": [
     {
-      "id": "doc_123",
-      "knowledgeBaseId": "kb_123",
-      "fileName": "guide.pdf",
-      "fileType": "pdf",
-      "mimeType": "application/pdf",
-      "fileSizeBytes": 102400,
-      "storageKey": "knowledge-bases/kb_123/documents/doc_123/guide.pdf",
-      "contentHash": null,
-      "parseStatus": "pending",
-      "indexStatus": "pending",
-      "metadata": {},
-      "createdAt": "2026-06-03T10:00:00Z",
-      "updatedAt": "2026-06-03T10:00:00Z"
+      "uploadSessionId": "upl_123",
+      "status": "completed",
+      "document": {
+        "id": "doc_123",
+        "knowledgeBaseId": "kb_123",
+        "fileName": "guide.pdf",
+        "fileType": "pdf",
+        "mimeType": "application/pdf",
+        "fileSizeBytes": 102400,
+        "storageKey": "knowledge-bases/kb_123/documents/doc_123/guide.pdf",
+        "contentHash": null,
+        "parseStatus": "pending",
+        "indexStatus": "pending",
+        "metadata": {},
+        "createdAt": "2026-06-03T10:00:00Z",
+        "updatedAt": "2026-06-03T10:00:00Z"
+      },
+      "error": null
     }
   ]
 }

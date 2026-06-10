@@ -10,7 +10,9 @@ from app.core.errors import ApiError
 from app.db import DatabaseConnection
 from app.domain.auth import Principal
 from app.domain.knowledge import (
+    BatchItemError,
     CompleteUploadRequest,
+    CompleteUploadResult,
     CompleteUploadsRequest,
     CompleteUploadsResponse,
     Document,
@@ -18,6 +20,7 @@ from app.domain.knowledge import (
     UpdateDocumentRequest,
     UploadUrlRequest,
     UploadUrlResponse,
+    UploadUrlResult,
     UploadUrlsRequest,
     UploadUrlsResponse,
 )
@@ -121,12 +124,22 @@ class DocumentService:
     def create_upload_urls(
         self, principal: Principal, knowledge_base_id: str, request: UploadUrlsRequest
     ) -> UploadUrlsResponse:
-        return UploadUrlsResponse(
-            items=[
-                self.create_upload_url(principal, knowledge_base_id, file_request)
-                for file_request in request.files
-            ]
-        )
+        # Non-atomic batch: each file is its own transaction. A failure is captured as a per-item
+        # error instead of aborting the rest, so the caller can retry only the failed files.
+        results: list[UploadUrlResult] = []
+        for file_request in request.files:
+            try:
+                upload = self.create_upload_url(principal, knowledge_base_id, file_request)
+                results.append(
+                    UploadUrlResult(fileName=file_request.fileName, status="created", upload=upload)
+                )
+            except ApiError as exc:
+                results.append(
+                    UploadUrlResult(
+                        fileName=file_request.fileName, status="failed", error=_batch_error(exc)
+                    )
+                )
+        return UploadUrlsResponse(items=results)
 
     def complete_upload(
         self, principal: Principal, knowledge_base_id: str, request: CompleteUploadRequest
@@ -198,12 +211,27 @@ class DocumentService:
     def complete_uploads(
         self, principal: Principal, knowledge_base_id: str, request: CompleteUploadsRequest
     ) -> CompleteUploadsResponse:
-        return CompleteUploadsResponse(
-            items=[
-                self.complete_upload(principal, knowledge_base_id, item)
-                for item in request.items
-            ]
-        )
+        # Non-atomic batch: complete_upload commits per item and leaves the connection clean on
+        # ApiError (it commits or rolls back before raising), so a failed item is reported and the
+        # loop continues. The caller retries only the failures.
+        results: list[CompleteUploadResult] = []
+        for item in request.items:
+            try:
+                document = self.complete_upload(principal, knowledge_base_id, item)
+                results.append(
+                    CompleteUploadResult(
+                        uploadSessionId=item.uploadSessionId, status="completed", document=document
+                    )
+                )
+            except ApiError as exc:
+                results.append(
+                    CompleteUploadResult(
+                        uploadSessionId=item.uploadSessionId,
+                        status="failed",
+                        error=_batch_error(exc),
+                    )
+                )
+        return CompleteUploadsResponse(items=results)
 
     # read / update / delete ------------------------------------------------------
 
@@ -356,6 +384,10 @@ def _safe_file_name(file_name: str) -> str:
 
 def _object_key(knowledge_base_id: str, document_id: str, safe_file_name: str) -> str:
     return f"knowledge-bases/{knowledge_base_id}/documents/{document_id}/{safe_file_name}"
+
+
+def _batch_error(exc: ApiError) -> BatchItemError:
+    return BatchItemError(code=exc.code, message=exc.message, details=exc.details)
 
 
 def _best_effort_remove(store: ObjectStore, object_key: str) -> None:

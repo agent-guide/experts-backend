@@ -149,16 +149,20 @@ class ChatService:
                 tid = data.get("turnId")
                 if tid and turn_id is None:
                     turn_id = str(tid)
+                    # ngent's turn API takes only the prompt, so model / knowledge-base /
+                    # retrieval options are not part of a turn request and are stored as
+                    # defaults -- persisting caller-supplied values would record options that
+                    # never reached the engine.
                     self.repo.create_turn(
                         turn_id=turn_id,
                         session_id=session_id,
                         tenant_id=str(tenant_id),
                         user_id=principal.user_id,
                         request_text=request.question,
-                        model=request.llmModel,
-                        knowledge_base_ids=request.knowledgeBaseIds,
-                        query_rewrite=bool(request.queryRewrite),
-                        multi_hop_config=request.multiHop,
+                        model=None,
+                        knowledge_base_ids=[],
+                        query_rewrite=False,
+                        multi_hop_config=None,
                         now=_now_iso(),
                     )
                     self.connection.commit()

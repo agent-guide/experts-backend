@@ -92,12 +92,28 @@ class UploadUrlResponse(BaseModel):
     expiresAt: str
 
 
+# Batch upload endpoints are deliberately non-atomic: each file is processed independently and
+# the response reports every item's outcome, so one bad file never aborts the others and the
+# caller can retry only the failures. `error` mirrors the ApiError envelope (code/message/details).
+class BatchItemError(BaseModel):
+    code: str
+    message: str
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
 class UploadUrlsRequest(BaseModel):
     files: list[UploadUrlRequest] = Field(min_length=1, max_length=50)
 
 
+class UploadUrlResult(BaseModel):
+    fileName: str
+    status: Literal["created", "failed"]
+    upload: UploadUrlResponse | None = None
+    error: BatchItemError | None = None
+
+
 class UploadUrlsResponse(BaseModel):
-    items: list[UploadUrlResponse]
+    items: list[UploadUrlResult]
 
 
 class CompleteUploadRequest(BaseModel):
@@ -110,8 +126,15 @@ class CompleteUploadsRequest(BaseModel):
     items: list[CompleteUploadRequest] = Field(min_length=1, max_length=50)
 
 
+class CompleteUploadResult(BaseModel):
+    uploadSessionId: str
+    status: Literal["completed", "failed"]
+    document: Document | None = None
+    error: BatchItemError | None = None
+
+
 class CompleteUploadsResponse(BaseModel):
-    items: list[Document]
+    items: list[CompleteUploadResult]
 
 
 class DownloadUrlResponse(BaseModel):

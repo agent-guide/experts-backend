@@ -54,6 +54,10 @@ PageIndex / ngent / Codex are upstream/optional integrations, not the source of 
   `purge_deleted_objects` (docs) and `purge_deleted_knowledge_bases` (KBs). All reads must filter
   `deleted_at is null`. GC has no scheduler/entry point yet — call it directly. complete-upload
   guards concurrent completion via the `documents` PK and maps the collision to 409, not 500.
+- **Batch upload endpoints (`/docs/upload-urls`, `/docs/complete-uploads`) are non-atomic**: each
+  file is its own transaction (`DocumentService` loops the single-item method). They never abort
+  mid-batch — each `items[]` entry reports `status` (`created`/`completed` vs `failed`) and a
+  per-item `error`, so callers retry only failures. Both return `200` (not `201`).
 
 ## Chat (ngent integration)
 
@@ -74,6 +78,14 @@ PageIndex / ngent / Codex are upstream/optional integrations, not the source of 
   `turn_started` (captures turnId → insert) / `message_delta` (assemble) / `turn_completed`
   (finalize). Client disconnect before completion can leave a turn `running` (known gap; reconcile
   on read later). Only the assembled turn is stored — no per-event log table yet.
+- The turn request body is **`question` only**. ngent's turn API takes just the prompt
+  (`{input, stream}`), so model / knowledge-base / retrieval options are not accepted and the
+  `chat_turns` option columns are stored as defaults — do not re-add request fields without
+  wiring them into the outgoing payload. The streaming handler opens its own DB connection
+  (`open_database_connection`) inside the generator, since the request-scoped `get_database`
+  connection is closed before the `StreamingResponse` body runs.
+- **Expert marketplace (`/expert-market/*`) requires sign-in** (`require_principal`, any
+  authenticated caller) but no specific permission; it lists only `published` experts/categories.
 
 ## Tests & lint
 
