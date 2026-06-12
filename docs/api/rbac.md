@@ -150,6 +150,8 @@ Response `200`:
         "kb:delete",
         "kb:read",
         "kb:update",
+        "plan:read",
+        "plan:write",
         "platform:entitlement_grant",
         "platform:role_grant",
         "platform:tenant_manage",
@@ -162,6 +164,11 @@ Response `200`:
   ]
 }
 ```
+
+Plan permissions:
+
+- `plan:read` is granted to `admin` and `operator`.
+- `plan:write` is granted to `admin`.
 
 ## POST /platform/users/{user_id}/roles
 

@@ -64,6 +64,7 @@ def platform_role_permissions(role: PlatformRole) -> set[Permission]:
             "platform:role_grant",
             "platform:entitlement_grant",
             "system:ops",
+            "plan:read",
             "kb:read",
             "skill:read",
             "expert:read",
@@ -74,6 +75,8 @@ def platform_role_permissions(role: PlatformRole) -> set[Permission]:
             "platform:role_grant",
             "platform:entitlement_grant",
             "platform:tenant_manage",
+            "plan:read",
+            "plan:write",
             "kb:create",
             "kb:read",
             "kb:update",
@@ -181,6 +184,58 @@ class UserTenantSummary(BaseModel):
     joinedAt: str
 
 
+class UserSubscriptionSummary(BaseModel):
+    subscriptionId: str | None = None
+    planId: str | None = None
+    planCode: str | None = None
+    planName: str | None = None
+    billingPeriod: str | None = None
+    status: str | None = None
+    statusLabel: str | None = None
+    currentPeriodStart: str | None = None
+    currentPeriodEnd: str | None = None
+    daysUntilExpiry: int | None = None
+    cancelAtPeriodEnd: bool = False
+    autoRenew: bool = False
+    priceLabel: str | None = None
+    currentOrderNo: str | None = None
+    paymentMethod: str | None = None
+    tenantId: str | None = None
+    tenantName: str | None = None
+
+
+class UserMonthlyUsageSummary(BaseModel):
+    questionUsed: int = 0
+    questionLimit: int = 0
+    tokenUsed: int = 0
+    tokenLimit: int = 0
+    questionUsagePercent: float = 0
+    tokenUsagePercent: float = 0
+    status: str = "normal"
+    isServicePaused: bool = False
+
+
+class UserOrderItem(BaseModel):
+    orderNo: str
+    planName: str | None = None
+    billingPeriod: str | None = None
+    amountCents: int = 0
+    paidAt: str | None = None
+    status: str
+
+
+class UserOrderSummary(BaseModel):
+    totalAmountCents: int = 0
+    orderCount: int = 0
+    recentOrders: list[UserOrderItem] = Field(default_factory=list)
+
+
+class UserLifetimeUsageSummary(BaseModel):
+    startDate: str | None = None
+    usageDays: int = 0
+    stopped: bool = False
+
+
 class UserSummary(BaseModel):
     id: str
     email: str
@@ -188,6 +243,10 @@ class UserSummary(BaseModel):
     status: UserStatus
     platformRoles: list[PlatformRole]
     tenantCount: int
+    currentSubscription: UserSubscriptionSummary | None = None
+    monthlyUsage: UserMonthlyUsageSummary = Field(default_factory=UserMonthlyUsageSummary)
+    orderSummary: UserOrderSummary = Field(default_factory=UserOrderSummary)
+    usageLifetime: UserLifetimeUsageSummary = Field(default_factory=UserLifetimeUsageSummary)
     createdAt: str
     updatedAt: str
 
@@ -200,12 +259,19 @@ class UserDetail(BaseModel):
     platformRoles: list[PlatformRole]
     platformPermissions: list[Permission]
     tenants: list[UserTenantSummary]
+    currentSubscription: UserSubscriptionSummary | None = None
+    monthlyUsage: UserMonthlyUsageSummary = Field(default_factory=UserMonthlyUsageSummary)
+    orderSummary: UserOrderSummary = Field(default_factory=UserOrderSummary)
+    usageLifetime: UserLifetimeUsageSummary = Field(default_factory=UserLifetimeUsageSummary)
     createdAt: str
     updatedAt: str
 
 
 class ListManagedUsersResponse(BaseModel):
     items: list[UserSummary]
+    total: int = 0
+    page: int = 1
+    pageSize: int = 50
 
 
 class ListUserTenantsResponse(BaseModel):

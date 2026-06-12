@@ -1,0 +1,147 @@
+from __future__ import annotations
+
+from typing import Any
+
+from app.db import DatabaseConnection
+from app.domain.plans import SubscriptionEntitlementSnapshot, TenantSubscription
+from app.services._sql import execute, fetch_one, json_load, json_param
+
+
+class SubscriptionRepository:
+    """Raw SQL data access for tenant subscriptions and entitlement snapshots."""
+
+    def __init__(self, connection: DatabaseConnection) -> None:
+        self.connection = connection
+
+    def get_current(self, tenant_id: str) -> TenantSubscription | None:
+        row = fetch_one(
+            self.connection,
+            """
+            select id, tenant_id, plan_id, status, billing_period, current_period_start,
+                   current_period_end, cancel_at_period_end, created_at, updated_at
+            from tenant_subscriptions
+            where tenant_id = ?
+              and status in ('active', 'trialing', 'past_due')
+              and (current_period_end is null or current_period_end > CURRENT_TIMESTAMP)
+            order by current_period_start desc, created_at desc
+            limit 1
+            """,
+            (tenant_id,),
+        )
+        return _map_subscription(row) if row else None
+
+    def insert_subscription(
+        self,
+        *,
+        subscription_id: str,
+        tenant_id: str,
+        plan_id: str,
+        status: str,
+        billing_period: str,
+        current_period_start: str,
+        current_period_end: str | None,
+    ) -> None:
+        execute(
+            self.connection,
+            """
+            insert into tenant_subscriptions (
+              id, tenant_id, plan_id, status, billing_period,
+              current_period_start, current_period_end
+            )
+            values (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                subscription_id,
+                tenant_id,
+                plan_id,
+                status,
+                billing_period,
+                current_period_start,
+                current_period_end,
+            ),
+        )
+
+    def get_current_snapshot(
+        self, subscription_id: str
+    ) -> SubscriptionEntitlementSnapshot | None:
+        row = fetch_one(
+            self.connection,
+            """
+            select id, subscription_id, plan_code, plan_name, billing_period,
+                   price_snapshot, entitlements_snapshot, starts_at, ends_at, created_at
+            from subscription_entitlement_snapshots
+            where subscription_id = ?
+              and (ends_at is null or ends_at > CURRENT_TIMESTAMP)
+            order by starts_at desc, created_at desc
+            limit 1
+            """,
+            (subscription_id,),
+        )
+        return _map_snapshot(row) if row else None
+
+    def insert_snapshot(
+        self,
+        *,
+        snapshot_id: str,
+        subscription_id: str,
+        plan_code: str,
+        plan_name: str,
+        billing_period: str,
+        price_snapshot: dict[str, Any],
+        entitlements_snapshot: dict[str, Any],
+        starts_at: str,
+        ends_at: str | None,
+    ) -> None:
+        execute(
+            self.connection,
+            """
+            insert into subscription_entitlement_snapshots (
+              id, subscription_id, plan_code, plan_name, billing_period,
+              price_snapshot, entitlements_snapshot, starts_at, ends_at
+            )
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                snapshot_id,
+                subscription_id,
+                plan_code,
+                plan_name,
+                billing_period,
+                json_param(self.connection, price_snapshot),
+                json_param(self.connection, entitlements_snapshot),
+                starts_at,
+                ends_at,
+            ),
+        )
+
+
+def _map_subscription(row: dict[str, Any]) -> TenantSubscription:
+    return TenantSubscription(
+        id=str(row["id"]),
+        tenantId=str(row["tenant_id"]),
+        planId=str(row["plan_id"]),
+        status=str(row["status"]),
+        billingPeriod=str(row["billing_period"]),
+        currentPeriodStart=str(row["current_period_start"]),
+        currentPeriodEnd=(
+            str(row["current_period_end"]) if row["current_period_end"] is not None else None
+        ),
+        cancelAtPeriodEnd=bool(row["cancel_at_period_end"]),
+        createdAt=str(row["created_at"]),
+        updatedAt=str(row["updated_at"]),
+    )
+
+
+def _map_snapshot(row: dict[str, Any]) -> SubscriptionEntitlementSnapshot:
+    return SubscriptionEntitlementSnapshot(
+        id=str(row["id"]),
+        subscriptionId=str(row["subscription_id"]),
+        planCode=str(row["plan_code"]),
+        planName=str(row["plan_name"]),
+        billingPeriod=str(row["billing_period"]),
+        priceSnapshot=json_load(row["price_snapshot"]),
+        entitlementsSnapshot=json_load(row["entitlements_snapshot"]),
+        startsAt=str(row["starts_at"]),
+        endsAt=str(row["ends_at"]) if row["ends_at"] is not None else None,
+        createdAt=str(row["created_at"]),
+    )

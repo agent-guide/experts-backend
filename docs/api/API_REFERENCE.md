@@ -614,6 +614,117 @@ This document is generated from the FastAPI OpenAPI schema.
 | 200 | application/json | ExpertCategory |
 | 422 | application/json | HTTPValidationError |
 
+## expert-groups
+
+### GET `/api/v1/expert-groups`
+
+- Summary: List expert groups
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| header | Authorization | no | string \| null | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | ExpertGroupListResponse |
+| 422 | application/json | HTTPValidationError |
+
+### POST `/api/v1/expert-groups`
+
+- Summary: Create an expert group
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| header | Authorization | no | string \| null | - |
+| body | application/json | yes | CreateExpertGroupRequest | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 201 | application/json | ExpertGroup |
+| 422 | application/json | HTTPValidationError |
+
+### DELETE `/api/v1/expert-groups/{group_id}`
+
+- Summary: Delete an expert group
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| path | group_id | yes | string | - |
+| header | Authorization | no | string \| null | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 204 | - | Successful Response |
+| 422 | application/json | HTTPValidationError |
+
+### GET `/api/v1/expert-groups/{group_id}`
+
+- Summary: Get expert group details
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| path | group_id | yes | string | - |
+| header | Authorization | no | string \| null | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | ExpertGroup |
+| 422 | application/json | HTTPValidationError |
+
+### PATCH `/api/v1/expert-groups/{group_id}`
+
+- Summary: Update an expert group
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| path | group_id | yes | string | - |
+| header | Authorization | no | string \| null | - |
+| body | application/json | yes | UpdateExpertGroupRequest | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | ExpertGroup |
+| 422 | application/json | HTTPValidationError |
+
+### PUT `/api/v1/expert-groups/{group_id}/experts`
+
+- Summary: Replace expert group members
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| path | group_id | yes | string | - |
+| header | Authorization | no | string \| null | - |
+| body | application/json | yes | ReplaceExpertGroupMembersRequest | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | ExpertGroup |
+| 422 | application/json | HTTPValidationError |
+
 ## expert-market
 
 ### GET `/api/v1/expert-market/categories`
@@ -986,6 +1097,191 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | Status | Content Type | Schema |
 | --- | --- | --- |
 | 200 | application/json | object |
+| 422 | application/json | HTTPValidationError |
+
+## plan-market
+
+### GET `/api/v1/plan-market/current-subscription`
+
+- Summary: Get current subscription
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| header | Authorization | no | string \| null | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | CurrentSubscriptionResponse |
+| 422 | application/json | HTTPValidationError |
+
+### GET `/api/v1/plan-market/plans`
+
+- Summary: List market plans
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| header | Authorization | no | string \| null | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | PlanListResponse |
+| 422 | application/json | HTTPValidationError |
+
+## plans
+
+### GET `/api/v1/plans`
+
+- Summary: List plans
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| header | Authorization | no | string \| null | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | PlanListResponse |
+| 422 | application/json | HTTPValidationError |
+
+### POST `/api/v1/plans`
+
+- Summary: Create a plan
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| header | Authorization | no | string \| null | - |
+| body | application/json | yes | CreatePlanRequest | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 201 | application/json | Plan |
+| 422 | application/json | HTTPValidationError |
+
+### DELETE `/api/v1/plans/{plan_id}`
+
+- Summary: Delete a plan
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| path | plan_id | yes | string | - |
+| header | Authorization | no | string \| null | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 204 | - | Successful Response |
+| 422 | application/json | HTTPValidationError |
+
+### GET `/api/v1/plans/{plan_id}`
+
+- Summary: Get plan details
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| path | plan_id | yes | string | - |
+| header | Authorization | no | string \| null | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | Plan |
+| 422 | application/json | HTTPValidationError |
+
+### PATCH `/api/v1/plans/{plan_id}`
+
+- Summary: Update a plan
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| path | plan_id | yes | string | - |
+| header | Authorization | no | string \| null | - |
+| body | application/json | yes | UpdatePlanRequest | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | Plan |
+| 422 | application/json | HTTPValidationError |
+
+### PUT `/api/v1/plans/{plan_id}/entitlements`
+
+- Summary: Replace plan entitlements
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| path | plan_id | yes | string | - |
+| header | Authorization | no | string \| null | - |
+| body | application/json | yes | ReplacePlanEntitlementsRequest | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | Plan |
+| 422 | application/json | HTTPValidationError |
+
+### PUT `/api/v1/plans/{plan_id}/expert-groups`
+
+- Summary: Replace plan expert groups
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| path | plan_id | yes | string | - |
+| header | Authorization | no | string \| null | - |
+| body | application/json | yes | ReplacePlanExpertGroupsRequest | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | Plan |
+| 422 | application/json | HTTPValidationError |
+
+### PUT `/api/v1/plans/{plan_id}/prices`
+
+- Summary: Replace plan prices
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| path | plan_id | yes | string | - |
+| header | Authorization | no | string \| null | - |
+| body | application/json | yes | ReplacePlanPricesRequest | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | Plan |
 | 422 | application/json | HTTPValidationError |
 
 ## rbac
@@ -1397,6 +1693,12 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 | Location | Name | Required | Type | Description |
 | --- | --- | --- | --- | --- |
+| query | search | no | string \| null | - |
+| query | subscriptionStatus | no | string \| null | - |
+| query | subscriptionType | no | string \| null | - |
+| query | sort | no | string \| null | - |
+| query | page | no | integer | - |
+| query | pageSize | no | integer | - |
 | header | Authorization | no | string \| null | - |
 
 #### Response
@@ -1623,12 +1925,22 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | name | yes | string | - |
 | description | no | string \| null | - |
 
+### `CreateExpertGroupRequest`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| code | yes | string | - |
+| name | yes | string | - |
+| description | no | string \| null | - |
+| sortOrder | no | integer | - |
+
 ### `CreateExpertRequest`
 
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
 | name | yes | string | - |
 | categoryId | yes | string | - |
+| groupId | no | string \| null | - |
 | abilityIntro | yes | string | - |
 | tags | no | array[string] | - |
 | status | no | string | - |
@@ -1644,6 +1956,23 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | name | yes | string | - |
 | description | no | string \| null | - |
 | metadata | no | object | - |
+
+### `CreatePlanRequest`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| code | no | string \| null | - |
+| name | yes | string | - |
+| level | yes | integer | - |
+| description | yes | string | - |
+| typeLabel | no | string \| null | - |
+| subtitle | no | string \| null | - |
+| badgeLabel | no | string \| null | - |
+| highlightItems | no | array[string] | - |
+| upgradeRules | no | object | - |
+| status | no | string | - |
+| isRecommended | no | boolean | - |
+| sortOrder | no | integer | - |
 
 ### `CreatePlatformUserRequest`
 
@@ -1679,6 +2008,13 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | name | yes | string | - |
 | slug | no | string \| null | - |
 | ownerUserId | yes | string | - |
+
+### `CurrentSubscriptionResponse`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| subscription | yes | TenantSubscription | - |
+| snapshot | yes | SubscriptionEntitlementSnapshot | - |
 
 ### `Document`
 
@@ -1720,6 +2056,8 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | name | yes | string | - |
 | categoryId | yes | string | - |
 | categoryName | yes | string | - |
+| groupId | no | string \| null | - |
+| groupName | no | string \| null | - |
 | abilityIntro | yes | string | - |
 | tags | no | array[string] | - |
 | status | yes | string | - |
@@ -1745,6 +2083,25 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
 | items | yes | array[ExpertCategory] | - |
+
+### `ExpertGroup`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| id | yes | string | - |
+| code | yes | string | - |
+| name | yes | string | - |
+| description | no | string \| null | - |
+| sortOrder | yes | integer | - |
+| expertIds | no | array[string] | - |
+| createdAt | yes | string | - |
+| updatedAt | yes | string | - |
+
+### `ExpertGroupListResponse`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| items | yes | array[ExpertGroup] | - |
 
 ### `ExpertListResponse`
 
@@ -1837,6 +2194,9 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
 | items | yes | array[UserSummary] | - |
+| total | no | integer | - |
+| page | no | integer | - |
+| pageSize | no | integer | - |
 
 ### `ListPlatformRolesResponse`
 
@@ -1875,6 +2235,65 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
 | isPinned | no | boolean | - |
+
+### `Plan`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| id | yes | string | - |
+| code | yes | string | - |
+| name | yes | string | - |
+| level | yes | integer | - |
+| description | yes | string | - |
+| typeLabel | no | string \| null | - |
+| subtitle | no | string \| null | - |
+| badgeLabel | no | string \| null | - |
+| highlightItems | no | array[string] | - |
+| upgradeRules | no | object | - |
+| status | yes | string | - |
+| isRecommended | yes | boolean | - |
+| sortOrder | yes | integer | - |
+| subscriptionCount | no | integer | - |
+| prices | no | array[PlanPrice] | - |
+| entitlements | no | PlanEntitlements \| null | - |
+| expertGroups | no | array[ExpertGroup] | - |
+| createdAt | yes | string | - |
+| updatedAt | yes | string | - |
+
+### `PlanEntitlements`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| id | yes | string | - |
+| planId | yes | string | - |
+| monthlyQuestionLimit | yes | integer | - |
+| monthlyTokenLimit | yes | integer | - |
+| seatLimit | yes | integer | - |
+| singleTurnTokenLimit | no | integer \| null | - |
+| modelTiers | no | array[string] | - |
+| features | no | object | - |
+| createdAt | yes | string | - |
+| updatedAt | yes | string | - |
+
+### `PlanListResponse`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| items | yes | array[Plan] | - |
+
+### `PlanPrice`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| id | yes | string | - |
+| planId | yes | string | - |
+| billingPeriod | yes | string | - |
+| currency | yes | string | - |
+| amountCents | yes | integer | - |
+| discountLabel | no | string \| null | - |
+| isEnabled | yes | boolean | - |
+| createdAt | yes | string | - |
+| updatedAt | yes | string | - |
 
 ### `PlatformRole`
 
@@ -1916,6 +2335,45 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
 | title | yes | string | - |
+
+### `ReplaceExpertGroupMembersRequest`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| expertIds | no | array[string] | - |
+
+### `ReplacePlanEntitlementsRequest`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| monthlyQuestionLimit | yes | integer | - |
+| monthlyTokenLimit | yes | integer | - |
+| seatLimit | yes | integer | - |
+| singleTurnTokenLimit | no | integer \| null | - |
+| modelTiers | no | array[string] | - |
+| features | no | object | - |
+
+### `ReplacePlanExpertGroupsRequest`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| groupIds | no | array[string] | - |
+
+### `ReplacePlanPriceRequest`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| billingPeriod | yes | string | - |
+| currency | yes | string | - |
+| amountCents | yes | integer | - |
+| discountLabel | no | string \| null | - |
+| isEnabled | no | boolean | - |
+
+### `ReplacePlanPricesRequest`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| items | no | array[ReplacePlanPriceRequest] | - |
 
 ### `ResolvePermissionRequest`
 
@@ -1960,6 +2418,21 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | allowedTools | no | array[string] \| null | - |
 | tags | no | array[string] \| null | - |
 
+### `SubscriptionEntitlementSnapshot`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| id | yes | string | - |
+| subscriptionId | yes | string | - |
+| planCode | yes | string | - |
+| planName | yes | string | - |
+| billingPeriod | yes | string | - |
+| priceSnapshot | no | object | - |
+| entitlementsSnapshot | no | object | - |
+| startsAt | yes | string | - |
+| endsAt | no | string \| null | - |
+| createdAt | yes | string | - |
+
 ### `Tenant`
 
 | Field | Required | Type | Description |
@@ -2002,6 +2475,21 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 `{"type": "string", "enum": ["admin", "member"], "title": "TenantRole"}`
 
+### `TenantSubscription`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| id | yes | string | - |
+| tenantId | yes | string | - |
+| planId | yes | string | - |
+| status | yes | string | - |
+| billingPeriod | yes | string | - |
+| currentPeriodStart | yes | string | - |
+| currentPeriodEnd | no | string \| null | - |
+| cancelAtPeriodEnd | yes | boolean | - |
+| createdAt | yes | string | - |
+| updatedAt | yes | string | - |
+
 ### `UpdateDocumentRequest`
 
 | Field | Required | Type | Description |
@@ -2016,12 +2504,22 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | name | no | string \| null | - |
 | description | no | string \| null | - |
 
+### `UpdateExpertGroupRequest`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| code | no | string \| null | - |
+| name | no | string \| null | - |
+| description | no | string \| null | - |
+| sortOrder | no | integer \| null | - |
+
 ### `UpdateExpertRequest`
 
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
 | name | no | string \| null | - |
 | categoryId | no | string \| null | - |
+| groupId | no | string \| null | - |
 | abilityIntro | no | string \| null | - |
 | tags | no | array[string] \| null | - |
 | skillIds | no | array[string] \| null | - |
@@ -2042,6 +2540,23 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | name | no | string \| null | - |
 | description | no | string \| null | - |
 | metadata | no | object \| null | - |
+
+### `UpdatePlanRequest`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| code | no | string \| null | - |
+| name | no | string \| null | - |
+| level | no | integer \| null | - |
+| description | no | string \| null | - |
+| typeLabel | no | string \| null | - |
+| subtitle | no | string \| null | - |
+| badgeLabel | no | string \| null | - |
+| highlightItems | no | array[string] \| null | - |
+| upgradeRules | no | object \| null | - |
+| status | no | string \| null | - |
+| isRecommended | no | boolean \| null | - |
+| sortOrder | no | integer \| null | - |
 
 ### `UpdateTenantMemberRequest`
 
@@ -2144,8 +2659,74 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | platformRoles | yes | array[PlatformRole] | - |
 | platformPermissions | yes | array[string] | - |
 | tenants | yes | array[UserTenantSummary] | - |
+| currentSubscription | no | UserSubscriptionSummary \| null | - |
+| monthlyUsage | no | UserMonthlyUsageSummary | - |
+| orderSummary | no | UserOrderSummary | - |
+| usageLifetime | no | UserLifetimeUsageSummary | - |
 | createdAt | yes | string | - |
 | updatedAt | yes | string | - |
+
+### `UserLifetimeUsageSummary`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| startDate | no | string \| null | - |
+| usageDays | no | integer | - |
+| stopped | no | boolean | - |
+
+### `UserMonthlyUsageSummary`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| questionUsed | no | integer | - |
+| questionLimit | no | integer | - |
+| tokenUsed | no | integer | - |
+| tokenLimit | no | integer | - |
+| questionUsagePercent | no | number | - |
+| tokenUsagePercent | no | number | - |
+| status | no | string | - |
+| isServicePaused | no | boolean | - |
+
+### `UserOrderItem`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| orderNo | yes | string | - |
+| planName | no | string \| null | - |
+| billingPeriod | no | string \| null | - |
+| amountCents | no | integer | - |
+| paidAt | no | string \| null | - |
+| status | yes | string | - |
+
+### `UserOrderSummary`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| totalAmountCents | no | integer | - |
+| orderCount | no | integer | - |
+| recentOrders | no | array[UserOrderItem] | - |
+
+### `UserSubscriptionSummary`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| subscriptionId | no | string \| null | - |
+| planId | no | string \| null | - |
+| planCode | no | string \| null | - |
+| planName | no | string \| null | - |
+| billingPeriod | no | string \| null | - |
+| status | no | string \| null | - |
+| statusLabel | no | string \| null | - |
+| currentPeriodStart | no | string \| null | - |
+| currentPeriodEnd | no | string \| null | - |
+| daysUntilExpiry | no | integer \| null | - |
+| cancelAtPeriodEnd | no | boolean | - |
+| autoRenew | no | boolean | - |
+| priceLabel | no | string \| null | - |
+| currentOrderNo | no | string \| null | - |
+| paymentMethod | no | string \| null | - |
+| tenantId | no | string \| null | - |
+| tenantName | no | string \| null | - |
 
 ### `UserSummary`
 
@@ -2157,6 +2738,10 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | status | yes | string | - |
 | platformRoles | yes | array[PlatformRole] | - |
 | tenantCount | yes | integer | - |
+| currentSubscription | no | UserSubscriptionSummary \| null | - |
+| monthlyUsage | no | UserMonthlyUsageSummary | - |
+| orderSummary | no | UserOrderSummary | - |
+| usageLifetime | no | UserLifetimeUsageSummary | - |
 | createdAt | yes | string | - |
 | updatedAt | yes | string | - |
 
@@ -2179,5 +2764,3 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | loc | yes | array[string \| integer] | - |
 | msg | yes | string | - |
 | type | yes | string | - |
-| input | no | {"title": "Input"} | - |
-| ctx | no | object | - |

@@ -54,7 +54,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Login Api V1 Auth Login Post"
                 }
@@ -97,7 +96,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Refresh Api V1 Auth Refresh Post"
                 }
@@ -174,7 +172,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Register Api V1 Users Register Post"
                 }
@@ -202,6 +199,94 @@
         "summary": "List regular users",
         "operationId": "list_users_api_v1_users_get",
         "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "subscriptionStatus",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Subscriptionstatus"
+            }
+          },
+          {
+            "name": "subscriptionType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Subscriptiontype"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Pagesize"
+            }
+          },
           {
             "name": "Authorization",
             "in": "header",
@@ -266,7 +351,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "type": "object",
                   "title": "Response Activate Platform User Api V1 Users Platform Activate Post"
                 }
@@ -1929,6 +2013,353 @@
         }
       }
     },
+    "/api/v1/expert-groups": {
+      "get": {
+        "tags": [
+          "expert-groups"
+        ],
+        "summary": "List expert groups",
+        "operationId": "list_expert_groups_api_v1_expert_groups_get",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpertGroupListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "expert-groups"
+        ],
+        "summary": "Create an expert group",
+        "operationId": "create_expert_group_api_v1_expert_groups_post",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateExpertGroupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpertGroup"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/expert-groups/{group_id}": {
+      "get": {
+        "tags": [
+          "expert-groups"
+        ],
+        "summary": "Get expert group details",
+        "operationId": "get_expert_group_api_v1_expert_groups__group_id__get",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpertGroup"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "expert-groups"
+        ],
+        "summary": "Update an expert group",
+        "operationId": "update_expert_group_api_v1_expert_groups__group_id__patch",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateExpertGroupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpertGroup"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "expert-groups"
+        ],
+        "summary": "Delete an expert group",
+        "operationId": "delete_expert_group_api_v1_expert_groups__group_id__delete",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/expert-groups/{group_id}/experts": {
+      "put": {
+        "tags": [
+          "expert-groups"
+        ],
+        "summary": "Replace expert group members",
+        "operationId": "replace_expert_group_members_api_v1_expert_groups__group_id__experts_put",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceExpertGroupMembersRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpertGroup"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/expert-market/categories": {
       "get": {
         "tags": [
@@ -2085,6 +2516,587 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ExpertMarketExpert"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/plans": {
+      "get": {
+        "tags": [
+          "plans"
+        ],
+        "summary": "List plans",
+        "operationId": "list_plans_api_v1_plans_get",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "plans"
+        ],
+        "summary": "Create a plan",
+        "operationId": "create_plan_api_v1_plans_post",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlanRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Plan"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/plans/{plan_id}": {
+      "get": {
+        "tags": [
+          "plans"
+        ],
+        "summary": "Get plan details",
+        "operationId": "get_plan_api_v1_plans__plan_id__get",
+        "parameters": [
+          {
+            "name": "plan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Plan Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Plan"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "plans"
+        ],
+        "summary": "Update a plan",
+        "operationId": "update_plan_api_v1_plans__plan_id__patch",
+        "parameters": [
+          {
+            "name": "plan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Plan Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePlanRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Plan"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "plans"
+        ],
+        "summary": "Delete a plan",
+        "operationId": "delete_plan_api_v1_plans__plan_id__delete",
+        "parameters": [
+          {
+            "name": "plan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Plan Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/plans/{plan_id}/prices": {
+      "put": {
+        "tags": [
+          "plans"
+        ],
+        "summary": "Replace plan prices",
+        "operationId": "replace_plan_prices_api_v1_plans__plan_id__prices_put",
+        "parameters": [
+          {
+            "name": "plan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Plan Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplacePlanPricesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Plan"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/plans/{plan_id}/entitlements": {
+      "put": {
+        "tags": [
+          "plans"
+        ],
+        "summary": "Replace plan entitlements",
+        "operationId": "replace_plan_entitlements_api_v1_plans__plan_id__entitlements_put",
+        "parameters": [
+          {
+            "name": "plan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Plan Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplacePlanEntitlementsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Plan"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/plans/{plan_id}/expert-groups": {
+      "put": {
+        "tags": [
+          "plans"
+        ],
+        "summary": "Replace plan expert groups",
+        "operationId": "replace_plan_expert_groups_api_v1_plans__plan_id__expert_groups_put",
+        "parameters": [
+          {
+            "name": "plan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Plan Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplacePlanExpertGroupsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Plan"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/plan-market/plans": {
+      "get": {
+        "tags": [
+          "plan-market"
+        ],
+        "summary": "List market plans",
+        "operationId": "list_market_plans_api_v1_plan_market_plans_get",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/plan-market/current-subscription": {
+      "get": {
+        "tags": [
+          "plan-market"
+        ],
+        "summary": "Get current subscription",
+        "operationId": "get_current_subscription_api_v1_plan_market_current_subscription_get",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentSubscriptionResponse"
                 }
               }
             }
@@ -2528,7 +3540,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response List Llm Models Api V1 Models Llm Get"
                 }
               }
@@ -2595,7 +3606,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Get Embedding Model Api V1 Models Embedding Get"
                 }
               }
@@ -2646,7 +3656,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Metrics Api V1 Ops Metrics Get"
                 }
               }
@@ -2698,7 +3707,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Run Storage Gc Api V1 Ops Storage Gc Post"
                 }
               }
@@ -2775,7 +3783,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Create Session Api V1 Chat Sessions Post"
                 }
               }
@@ -2840,7 +3847,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response List Sessions Api V1 Chat Sessions Get"
                 }
               }
@@ -2916,7 +3922,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Get Session Api V1 Chat Sessions  Session Id  Get"
                 }
               }
@@ -2990,7 +3995,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Delete Session Api V1 Chat Sessions  Session Id  Delete"
                 }
               }
@@ -3066,7 +4070,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response List Messages Api V1 Chat Sessions  Session Id  Messages Get"
                 }
               }
@@ -3152,7 +4155,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Rename Session Api V1 Chat Sessions  Session Id  Title Patch"
                 }
               }
@@ -3238,7 +4240,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Pin Session Api V1 Chat Sessions  Session Id  Pin Patch"
                 }
               }
@@ -3396,7 +4397,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Cancel Turn Api V1 Chat Turns  Turn Id  Cancel Post"
                 }
               }
@@ -3571,7 +4571,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Resolve Permission Api V1 Chat Permissions  Permission Id  Post"
                 }
               }
@@ -4517,7 +5516,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Trigger Build Api V1 Knowledge Bases  Knowledge Base Id  Build Post"
                 }
               }
@@ -4577,7 +5575,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response List Builds Api V1 Knowledge Bases  Knowledge Base Id  Builds Get"
                 }
               }
@@ -4646,7 +5643,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Get Build Api V1 Knowledge Bases  Knowledge Base Id  Builds  Build Id  Get"
                 }
               }
@@ -4715,7 +5711,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true,
                   "title": "Response Cancel Build Api V1 Knowledge Bases  Knowledge Base Id  Builds  Build Id  Cancel Post"
                 }
               }
@@ -5171,7 +6166,6 @@
             "title": "Message"
           },
           "details": {
-            "additionalProperties": true,
             "type": "object",
             "title": "Details"
           }
@@ -5187,7 +6181,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "contentMediaType": "application/octet-stream",
+            "format": "binary",
             "title": "File"
           },
           "slug": {
@@ -5223,7 +6217,6 @@
             "title": "Documentids"
           },
           "config": {
-            "additionalProperties": true,
             "type": "object",
             "title": "Config"
           }
@@ -5379,6 +6372,41 @@
         ],
         "title": "CreateExpertCategoryRequest"
       },
+      "CreateExpertGroupRequest": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Sortorder",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "name"
+        ],
+        "title": "CreateExpertGroupRequest"
+      },
       "CreateExpertRequest": {
         "properties": {
           "name": {
@@ -5388,6 +6416,17 @@
           "categoryId": {
             "type": "string",
             "title": "Categoryid"
+          },
+          "groupId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Groupid"
           },
           "abilityIntro": {
             "type": "string",
@@ -5470,7 +6509,6 @@
             "title": "Description"
           },
           "metadata": {
-            "additionalProperties": true,
             "type": "object",
             "title": "Metadata"
           }
@@ -5480,6 +6518,107 @@
           "name"
         ],
         "title": "CreateKnowledgeBaseRequest"
+      },
+      "CreatePlanRequest": {
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "level": {
+            "type": "integer",
+            "maximum": 99.0,
+            "minimum": 1.0,
+            "title": "Level"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "typeLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Typelabel"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subtitle"
+          },
+          "badgeLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Badgelabel"
+          },
+          "highlightItems": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Highlightitems"
+          },
+          "upgradeRules": {
+            "type": "object",
+            "title": "Upgraderules"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "disabled"
+            ],
+            "title": "Status",
+            "default": "active"
+          },
+          "isRecommended": {
+            "type": "boolean",
+            "title": "Isrecommended",
+            "default": false
+          },
+          "sortOrder": {
+            "type": "integer",
+            "maximum": 9999.0,
+            "minimum": 0.0,
+            "title": "Sortorder",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "level",
+          "description"
+        ],
+        "title": "CreatePlanRequest"
       },
       "CreatePlatformUserRequest": {
         "properties": {
@@ -5607,6 +6746,22 @@
         ],
         "title": "CreateTenantRequest"
       },
+      "CurrentSubscriptionResponse": {
+        "properties": {
+          "subscription": {
+            "$ref": "#/components/schemas/TenantSubscription"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/SubscriptionEntitlementSnapshot"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subscription",
+          "snapshot"
+        ],
+        "title": "CurrentSubscriptionResponse"
+      },
       "Document": {
         "properties": {
           "id": {
@@ -5688,7 +6843,6 @@
             "title": "Indexstatus"
           },
           "metadata": {
-            "additionalProperties": true,
             "type": "object",
             "title": "Metadata"
           },
@@ -5773,6 +6927,28 @@
           "categoryName": {
             "type": "string",
             "title": "Categoryname"
+          },
+          "groupId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Groupid"
+          },
+          "groupName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Groupname"
           },
           "abilityIntro": {
             "type": "string",
@@ -5903,6 +7079,78 @@
           "items"
         ],
         "title": "ExpertCategoryListResponse"
+      },
+      "ExpertGroup": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "title": "Sortorder"
+          },
+          "expertIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Expertids"
+          },
+          "createdAt": {
+            "type": "string",
+            "title": "Createdat"
+          },
+          "updatedAt": {
+            "type": "string",
+            "title": "Updatedat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "sortOrder",
+          "createdAt",
+          "updatedAt"
+        ],
+        "title": "ExpertGroup"
+      },
+      "ExpertGroupListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExpertGroup"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ExpertGroupListResponse"
       },
       "ExpertListResponse": {
         "properties": {
@@ -6157,7 +7405,6 @@
             "title": "Status"
           },
           "metadata": {
-            "additionalProperties": true,
             "type": "object",
             "title": "Metadata"
           },
@@ -6204,6 +7451,21 @@
             },
             "type": "array",
             "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page",
+            "default": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "title": "Pagesize",
+            "default": 50
           }
         },
         "type": "object",
@@ -6313,6 +7575,287 @@
         },
         "type": "object",
         "title": "PinSessionRequest"
+      },
+      "Plan": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "level": {
+            "type": "integer",
+            "title": "Level"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "typeLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Typelabel"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subtitle"
+          },
+          "badgeLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Badgelabel"
+          },
+          "highlightItems": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Highlightitems"
+          },
+          "upgradeRules": {
+            "type": "object",
+            "title": "Upgraderules"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "disabled"
+            ],
+            "title": "Status"
+          },
+          "isRecommended": {
+            "type": "boolean",
+            "title": "Isrecommended"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "title": "Sortorder"
+          },
+          "subscriptionCount": {
+            "type": "integer",
+            "title": "Subscriptioncount",
+            "default": 0
+          },
+          "prices": {
+            "items": {
+              "$ref": "#/components/schemas/PlanPrice"
+            },
+            "type": "array",
+            "title": "Prices"
+          },
+          "entitlements": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanEntitlements"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expertGroups": {
+            "items": {
+              "$ref": "#/components/schemas/ExpertGroup"
+            },
+            "type": "array",
+            "title": "Expertgroups"
+          },
+          "createdAt": {
+            "type": "string",
+            "title": "Createdat"
+          },
+          "updatedAt": {
+            "type": "string",
+            "title": "Updatedat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "level",
+          "description",
+          "status",
+          "isRecommended",
+          "sortOrder",
+          "createdAt",
+          "updatedAt"
+        ],
+        "title": "Plan"
+      },
+      "PlanEntitlements": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "planId": {
+            "type": "string",
+            "title": "Planid"
+          },
+          "monthlyQuestionLimit": {
+            "type": "integer",
+            "title": "Monthlyquestionlimit"
+          },
+          "monthlyTokenLimit": {
+            "type": "integer",
+            "title": "Monthlytokenlimit"
+          },
+          "seatLimit": {
+            "type": "integer",
+            "title": "Seatlimit"
+          },
+          "singleTurnTokenLimit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Singleturntokenlimit"
+          },
+          "modelTiers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Modeltiers"
+          },
+          "features": {
+            "type": "object",
+            "title": "Features"
+          },
+          "createdAt": {
+            "type": "string",
+            "title": "Createdat"
+          },
+          "updatedAt": {
+            "type": "string",
+            "title": "Updatedat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "planId",
+          "monthlyQuestionLimit",
+          "monthlyTokenLimit",
+          "seatLimit",
+          "createdAt",
+          "updatedAt"
+        ],
+        "title": "PlanEntitlements"
+      },
+      "PlanListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Plan"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "PlanListResponse"
+      },
+      "PlanPrice": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "planId": {
+            "type": "string",
+            "title": "Planid"
+          },
+          "billingPeriod": {
+            "type": "string",
+            "enum": [
+              "free",
+              "monthly",
+              "yearly",
+              "sales"
+            ],
+            "title": "Billingperiod"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "amountCents": {
+            "type": "integer",
+            "title": "Amountcents"
+          },
+          "discountLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discountlabel"
+          },
+          "isEnabled": {
+            "type": "boolean",
+            "title": "Isenabled"
+          },
+          "createdAt": {
+            "type": "string",
+            "title": "Createdat"
+          },
+          "updatedAt": {
+            "type": "string",
+            "title": "Updatedat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "planId",
+          "billingPeriod",
+          "currency",
+          "amountCents",
+          "isEnabled",
+          "createdAt",
+          "updatedAt"
+        ],
+        "title": "PlanPrice"
       },
       "PlatformRole": {
         "type": "string",
@@ -6437,6 +7980,140 @@
           "title"
         ],
         "title": "RenameSessionRequest"
+      },
+      "ReplaceExpertGroupMembersRequest": {
+        "properties": {
+          "expertIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Expertids"
+          }
+        },
+        "type": "object",
+        "title": "ReplaceExpertGroupMembersRequest"
+      },
+      "ReplacePlanEntitlementsRequest": {
+        "properties": {
+          "monthlyQuestionLimit": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Monthlyquestionlimit"
+          },
+          "monthlyTokenLimit": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Monthlytokenlimit"
+          },
+          "seatLimit": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Seatlimit"
+          },
+          "singleTurnTokenLimit": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Singleturntokenlimit"
+          },
+          "modelTiers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Modeltiers"
+          },
+          "features": {
+            "type": "object",
+            "title": "Features"
+          }
+        },
+        "type": "object",
+        "required": [
+          "monthlyQuestionLimit",
+          "monthlyTokenLimit",
+          "seatLimit"
+        ],
+        "title": "ReplacePlanEntitlementsRequest"
+      },
+      "ReplacePlanExpertGroupsRequest": {
+        "properties": {
+          "groupIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Groupids"
+          }
+        },
+        "type": "object",
+        "title": "ReplacePlanExpertGroupsRequest"
+      },
+      "ReplacePlanPriceRequest": {
+        "properties": {
+          "billingPeriod": {
+            "type": "string",
+            "enum": [
+              "free",
+              "monthly",
+              "yearly",
+              "sales"
+            ],
+            "title": "Billingperiod"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "amountCents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Amountcents"
+          },
+          "discountLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discountlabel"
+          },
+          "isEnabled": {
+            "type": "boolean",
+            "title": "Isenabled",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "billingPeriod",
+          "currency",
+          "amountCents"
+        ],
+        "title": "ReplacePlanPriceRequest"
+      },
+      "ReplacePlanPricesRequest": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReplacePlanPriceRequest"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "title": "ReplacePlanPricesRequest"
       },
       "ResolvePermissionRequest": {
         "properties": {
@@ -6646,6 +8323,74 @@
         "type": "object",
         "title": "SkillMetadataUpdate"
       },
+      "SubscriptionEntitlementSnapshot": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "subscriptionId": {
+            "type": "string",
+            "title": "Subscriptionid"
+          },
+          "planCode": {
+            "type": "string",
+            "title": "Plancode"
+          },
+          "planName": {
+            "type": "string",
+            "title": "Planname"
+          },
+          "billingPeriod": {
+            "type": "string",
+            "enum": [
+              "free",
+              "monthly",
+              "yearly",
+              "sales"
+            ],
+            "title": "Billingperiod"
+          },
+          "priceSnapshot": {
+            "type": "object",
+            "title": "Pricesnapshot"
+          },
+          "entitlementsSnapshot": {
+            "type": "object",
+            "title": "Entitlementssnapshot"
+          },
+          "startsAt": {
+            "type": "string",
+            "title": "Startsat"
+          },
+          "endsAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endsat"
+          },
+          "createdAt": {
+            "type": "string",
+            "title": "Createdat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "subscriptionId",
+          "planCode",
+          "planName",
+          "billingPeriod",
+          "startsAt",
+          "createdAt"
+        ],
+        "title": "SubscriptionEntitlementSnapshot"
+      },
       "Tenant": {
         "properties": {
           "id": {
@@ -6801,6 +8546,83 @@
         ],
         "title": "TenantRole"
       },
+      "TenantSubscription": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "tenantId": {
+            "type": "string",
+            "title": "Tenantid"
+          },
+          "planId": {
+            "type": "string",
+            "title": "Planid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "trialing",
+              "past_due",
+              "cancelled",
+              "expired"
+            ],
+            "title": "Status"
+          },
+          "billingPeriod": {
+            "type": "string",
+            "enum": [
+              "free",
+              "monthly",
+              "yearly",
+              "sales"
+            ],
+            "title": "Billingperiod"
+          },
+          "currentPeriodStart": {
+            "type": "string",
+            "title": "Currentperiodstart"
+          },
+          "currentPeriodEnd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currentperiodend"
+          },
+          "cancelAtPeriodEnd": {
+            "type": "boolean",
+            "title": "Cancelatperiodend"
+          },
+          "createdAt": {
+            "type": "string",
+            "title": "Createdat"
+          },
+          "updatedAt": {
+            "type": "string",
+            "title": "Updatedat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenantId",
+          "planId",
+          "status",
+          "billingPeriod",
+          "currentPeriodStart",
+          "cancelAtPeriodEnd",
+          "createdAt",
+          "updatedAt"
+        ],
+        "title": "TenantSubscription"
+      },
       "UpdateDocumentRequest": {
         "properties": {
           "fileName": {
@@ -6817,7 +8639,6 @@
           "metadata": {
             "anyOf": [
               {
-                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -6858,6 +8679,57 @@
         "type": "object",
         "title": "UpdateExpertCategoryRequest"
       },
+      "UpdateExpertGroupRequest": {
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "sortOrder": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sortorder"
+          }
+        },
+        "type": "object",
+        "title": "UpdateExpertGroupRequest"
+      },
       "UpdateExpertRequest": {
         "properties": {
           "name": {
@@ -6881,6 +8753,17 @@
               }
             ],
             "title": "Categoryid"
+          },
+          "groupId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Groupid"
           },
           "abilityIntro": {
             "anyOf": [
@@ -7010,7 +8893,6 @@
           "metadata": {
             "anyOf": [
               {
-                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -7022,6 +8904,155 @@
         },
         "type": "object",
         "title": "UpdateKnowledgeBaseRequest"
+      },
+      "UpdatePlanRequest": {
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "level": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 99.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "typeLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Typelabel"
+          },
+          "subtitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subtitle"
+          },
+          "badgeLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Badgelabel"
+          },
+          "highlightItems": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Highlightitems"
+          },
+          "upgradeRules": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upgraderules"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "active",
+                  "disabled"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "isRecommended": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Isrecommended"
+          },
+          "sortOrder": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 9999.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sortorder"
+          }
+        },
+        "type": "object",
+        "title": "UpdatePlanRequest"
       },
       "UpdateTenantMemberRequest": {
         "properties": {
@@ -7412,6 +9443,25 @@
             "type": "array",
             "title": "Tenants"
           },
+          "currentSubscription": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserSubscriptionSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "monthlyUsage": {
+            "$ref": "#/components/schemas/UserMonthlyUsageSummary"
+          },
+          "orderSummary": {
+            "$ref": "#/components/schemas/UserOrderSummary"
+          },
+          "usageLifetime": {
+            "$ref": "#/components/schemas/UserLifetimeUsageSummary"
+          },
           "createdAt": {
             "type": "string",
             "title": "Createdat"
@@ -7434,6 +9484,339 @@
           "updatedAt"
         ],
         "title": "UserDetail"
+      },
+      "UserLifetimeUsageSummary": {
+        "properties": {
+          "startDate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Startdate"
+          },
+          "usageDays": {
+            "type": "integer",
+            "title": "Usagedays",
+            "default": 0
+          },
+          "stopped": {
+            "type": "boolean",
+            "title": "Stopped",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "UserLifetimeUsageSummary"
+      },
+      "UserMonthlyUsageSummary": {
+        "properties": {
+          "questionUsed": {
+            "type": "integer",
+            "title": "Questionused",
+            "default": 0
+          },
+          "questionLimit": {
+            "type": "integer",
+            "title": "Questionlimit",
+            "default": 0
+          },
+          "tokenUsed": {
+            "type": "integer",
+            "title": "Tokenused",
+            "default": 0
+          },
+          "tokenLimit": {
+            "type": "integer",
+            "title": "Tokenlimit",
+            "default": 0
+          },
+          "questionUsagePercent": {
+            "type": "number",
+            "title": "Questionusagepercent",
+            "default": 0
+          },
+          "tokenUsagePercent": {
+            "type": "number",
+            "title": "Tokenusagepercent",
+            "default": 0
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "normal"
+          },
+          "isServicePaused": {
+            "type": "boolean",
+            "title": "Isservicepaused",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "UserMonthlyUsageSummary"
+      },
+      "UserOrderItem": {
+        "properties": {
+          "orderNo": {
+            "type": "string",
+            "title": "Orderno"
+          },
+          "planName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Planname"
+          },
+          "billingPeriod": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Billingperiod"
+          },
+          "amountCents": {
+            "type": "integer",
+            "title": "Amountcents",
+            "default": 0
+          },
+          "paidAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paidat"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "orderNo",
+          "status"
+        ],
+        "title": "UserOrderItem"
+      },
+      "UserOrderSummary": {
+        "properties": {
+          "totalAmountCents": {
+            "type": "integer",
+            "title": "Totalamountcents",
+            "default": 0
+          },
+          "orderCount": {
+            "type": "integer",
+            "title": "Ordercount",
+            "default": 0
+          },
+          "recentOrders": {
+            "items": {
+              "$ref": "#/components/schemas/UserOrderItem"
+            },
+            "type": "array",
+            "title": "Recentorders"
+          }
+        },
+        "type": "object",
+        "title": "UserOrderSummary"
+      },
+      "UserSubscriptionSummary": {
+        "properties": {
+          "subscriptionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscriptionid"
+          },
+          "planId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Planid"
+          },
+          "planCode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plancode"
+          },
+          "planName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Planname"
+          },
+          "billingPeriod": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Billingperiod"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "statusLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Statuslabel"
+          },
+          "currentPeriodStart": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currentperiodstart"
+          },
+          "currentPeriodEnd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currentperiodend"
+          },
+          "daysUntilExpiry": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daysuntilexpiry"
+          },
+          "cancelAtPeriodEnd": {
+            "type": "boolean",
+            "title": "Cancelatperiodend",
+            "default": false
+          },
+          "autoRenew": {
+            "type": "boolean",
+            "title": "Autorenew",
+            "default": false
+          },
+          "priceLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pricelabel"
+          },
+          "currentOrderNo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currentorderno"
+          },
+          "paymentMethod": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paymentmethod"
+          },
+          "tenantId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenantid"
+          },
+          "tenantName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenantname"
+          }
+        },
+        "type": "object",
+        "title": "UserSubscriptionSummary"
       },
       "UserSummary": {
         "properties": {
@@ -7468,6 +9851,25 @@
           "tenantCount": {
             "type": "integer",
             "title": "Tenantcount"
+          },
+          "currentSubscription": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserSubscriptionSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "monthlyUsage": {
+            "$ref": "#/components/schemas/UserMonthlyUsageSummary"
+          },
+          "orderSummary": {
+            "$ref": "#/components/schemas/UserOrderSummary"
+          },
+          "usageLifetime": {
+            "$ref": "#/components/schemas/UserLifetimeUsageSummary"
           },
           "createdAt": {
             "type": "string",
@@ -7556,13 +9958,6 @@
           "type": {
             "type": "string",
             "title": "Error Type"
-          },
-          "input": {
-            "title": "Input"
-          },
-          "ctx": {
-            "type": "object",
-            "title": "Context"
           }
         },
         "type": "object",
@@ -7601,8 +9996,20 @@
       "description": "Create, query, update, delete and switch expert status."
     },
     {
+      "name": "expert-groups",
+      "description": "Manage expert authorization groups."
+    },
+    {
       "name": "expert-market",
       "description": "Expert marketplace categories and published experts (requires sign-in)."
+    },
+    {
+      "name": "plans",
+      "description": "Manage expert subscription plans."
+    },
+    {
+      "name": "plan-market",
+      "description": "Signed-in user plan catalog and current subscription."
     },
     {
       "name": "rbac",

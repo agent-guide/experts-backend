@@ -45,6 +45,9 @@ Response `201`:
 
 List ordinary users for platform-side user management. This list excludes users
 that currently have platform roles; use `GET /platform` for platform personnel.
+The response also includes the user's current subscription summary, monthly usage
+summary, order summary and lifetime usage summary for the ordinary-user
+management page.
 
 Auth:
 
@@ -58,10 +61,24 @@ Required platform permission:
 platform:user_manage
 ```
 
+Query parameters:
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `search` | string | no | Searches user name, email, current plan name and tenant count. |
+| `subscriptionStatus` | string | no | Filters by `active`, `expiring_soon`, `expired`, or Chinese labels `订阅中`, `即将到期`, `已过期`. |
+| `subscriptionType` | string | no | Filters by current plan plus billing period, for example `专业版 · 月付`, `专业版 monthly`, `免费版 免费`. |
+| `sort` | string | no | `expiresAt`, `monthlyUsage`, or `subscriptionStart`. |
+| `page` | integer | no | Page number, starts at `1`. Default `1`. |
+| `pageSize` | integer | no | Page size, `1-100`. Default `50`. |
+
 Response `200`:
 
 ```json
 {
+  "total": 1,
+  "page": 1,
+  "pageSize": 50,
   "items": [
     {
       "id": "user_123",
@@ -70,6 +87,45 @@ Response `200`:
       "status": "active",
       "platformRoles": [],
       "tenantCount": 2,
+      "currentSubscription": {
+        "subscriptionId": "sub_123",
+        "planId": "plan_pro",
+        "planCode": "pro",
+        "planName": "专业版",
+        "billingPeriod": "monthly",
+        "status": "expiring_soon",
+        "statusLabel": "即将到期",
+        "currentPeriodStart": "2026-06-01T00:00:00+00:00",
+        "currentPeriodEnd": "2026-06-21T00:00:00+00:00",
+        "daysUntilExpiry": 9,
+        "cancelAtPeriodEnd": false,
+        "autoRenew": true,
+        "priceLabel": "¥99 / 月",
+        "currentOrderNo": null,
+        "paymentMethod": null,
+        "tenantId": "tenant_1",
+        "tenantName": "A Company"
+      },
+      "monthlyUsage": {
+        "questionUsed": 20,
+        "questionLimit": 100,
+        "tokenUsed": 0,
+        "tokenLimit": 50000,
+        "questionUsagePercent": 20,
+        "tokenUsagePercent": 0,
+        "status": "expiring_soon",
+        "isServicePaused": false
+      },
+      "orderSummary": {
+        "totalAmountCents": 0,
+        "orderCount": 0,
+        "recentOrders": []
+      },
+      "usageLifetime": {
+        "startDate": "2026-06-03T00:00:00+00:00",
+        "usageDays": 10,
+        "stopped": false
+      },
       "createdAt": "2026-06-03T00:00:00+00:00",
       "updatedAt": "2026-06-03T00:00:00+00:00"
     }
@@ -77,9 +133,22 @@ Response `200`:
 }
 ```
 
+Notes:
+
+- `currentSubscription` is `null` when none of the user's tenants has a tenant
+  subscription.
+- `monthlyUsage.questionUsed` is counted from this month's non-internal
+  `chat_turns` for the selected subscription tenant.
+- `monthlyUsage.tokenUsed` is currently `0` because persisted token usage is not
+  available yet. `tokenLimit` comes from the subscription entitlement snapshot.
+- `orderSummary` is a real empty summary until order/payment tables are added.
+- Current tenant membership roles are `admin` and `member`; the database does not
+  yet model `owner` or `viewer` tenant roles.
+
 ## GET /{user_id}
 
-Get a user's profile, platform roles and tenant memberships.
+Get a user's profile, platform roles, tenant memberships, current subscription,
+monthly usage, order summary and lifetime usage summary.
 
 Auth:
 
@@ -114,6 +183,45 @@ Response `200`:
       "joinedAt": "2026-06-03T00:00:00+00:00"
     }
   ],
+  "currentSubscription": {
+    "subscriptionId": "sub_123",
+    "planId": "plan_pro",
+    "planCode": "pro",
+    "planName": "专业版",
+    "billingPeriod": "monthly",
+    "status": "expiring_soon",
+    "statusLabel": "即将到期",
+    "currentPeriodStart": "2026-06-01T00:00:00+00:00",
+    "currentPeriodEnd": "2026-06-21T00:00:00+00:00",
+    "daysUntilExpiry": 9,
+    "cancelAtPeriodEnd": false,
+    "autoRenew": true,
+    "priceLabel": "¥99 / 月",
+    "currentOrderNo": null,
+    "paymentMethod": null,
+    "tenantId": "tenant_1",
+    "tenantName": "A Company"
+  },
+  "monthlyUsage": {
+    "questionUsed": 20,
+    "questionLimit": 100,
+    "tokenUsed": 0,
+    "tokenLimit": 50000,
+    "questionUsagePercent": 20,
+    "tokenUsagePercent": 0,
+    "status": "expiring_soon",
+    "isServicePaused": false
+  },
+  "orderSummary": {
+    "totalAmountCents": 0,
+    "orderCount": 0,
+    "recentOrders": []
+  },
+  "usageLifetime": {
+    "startDate": "2026-06-03T00:00:00+00:00",
+    "usageDays": 10,
+    "stopped": false
+  },
   "createdAt": "2026-06-03T00:00:00+00:00",
   "updatedAt": "2026-06-03T00:00:00+00:00"
 }
