@@ -47,6 +47,16 @@ def test_openapi_loads() -> None:
     assert "/api/v1/expert-market/categories" in paths
     assert "/api/v1/expert-market/experts" in paths
     assert "/api/v1/expert-market/experts/{expert_id}" in paths
+    assert "/api/v1/expert-groups" in paths
+    assert "/api/v1/expert-groups/{group_id}" in paths
+    assert "/api/v1/expert-groups/{group_id}/experts" in paths
+    assert "/api/v1/plans" in paths
+    assert "/api/v1/plans/{plan_id}" in paths
+    assert "/api/v1/plans/{plan_id}/prices" in paths
+    assert "/api/v1/plans/{plan_id}/entitlements" in paths
+    assert "/api/v1/plans/{plan_id}/expert-groups" in paths
+    assert "/api/v1/plan-market/plans" in paths
+    assert "/api/v1/plan-market/current-subscription" in paths
     assert "/api/v1/rbac/tenant/users" in paths
     assert "/api/v1/rbac/tenant/users/{user_id}/roles" in paths
     assert "/api/v1/rbac/tenant/users/{user_id}" in paths
@@ -90,6 +100,14 @@ def test_sqlite_migration_uses_infra_sql(tmp_path: Path) -> None:
     assert "experts" in tables
     assert "expert_skills" in tables
     assert "expert_knowledge_bases" in tables
+    assert "plans" in tables
+    assert "plan_prices" in tables
+    assert "plan_entitlements" in tables
+    assert "expert_groups" in tables
+    assert "expert_group_members" in tables
+    assert "plan_expert_groups" in tables
+    assert "tenant_subscriptions" in tables
+    assert "subscription_entitlement_snapshots" in tables
 
 
 def test_app_startup_migrates_sqlite(tmp_path: Path) -> None:
@@ -902,7 +920,11 @@ def test_managed_users_crud_and_tenants_require_platform_user_manage(tmp_path: P
 
         list_response = client.get("/api/v1/users", headers=admin_headers)
         assert list_response.status_code == 200
-        listed_by_email = {item["email"]: item for item in list_response.json()["items"]}
+        list_body = list_response.json()
+        assert list_body["total"] == 1
+        assert list_body["page"] == 1
+        assert list_body["pageSize"] == 50
+        listed_by_email = {item["email"]: item for item in list_body["items"]}
         assert "tenant@example.com" in listed_by_email
         assert "platform-admin@example.com" not in listed_by_email
         assert listed_by_email["tenant@example.com"]["tenantCount"] == 2
@@ -954,6 +976,193 @@ def test_managed_users_crud_and_tenants_require_platform_user_manage(tmp_path: P
         tenant_headers = {"Authorization": f"Bearer {tenant_register.json()['accessToken']}"}
         forbidden = client.get("/api/v1/users", headers=tenant_headers)
         assert forbidden.status_code == 403
+
+
+def test_managed_users_include_subscription_usage_filters_and_detail(tmp_path: Path) -> None:
+    database_path = tmp_path / "managed_users_subscription.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+    )
+    test_app = create_app(settings)
+
+    with TestClient(test_app) as client:
+        _seed_tenant(settings)
+        _seed_platform_user(
+            settings,
+            "platform_admin",
+            "platform-admin@example.com",
+            "Platform Admin",
+            "admin-secret",
+            "admin",
+        )
+        _seed_tenant_user(
+            settings,
+            "tenant_user",
+            "tenant@example.com",
+            "Tenant User",
+            "tenant-secret",
+            "member",
+        )
+        with open_database_connection(settings) as connection:
+            connection.execute(
+                """
+                insert into tenant_subscriptions (
+                  id,
+                  tenant_id,
+                  plan_id,
+                  status,
+                  billing_period,
+                  current_period_start,
+                  current_period_end,
+                  cancel_at_period_end
+                )
+                values (
+                  'sub_tenant_user_pro',
+                  'tenant_default',
+                  'plan_pro',
+                  'active',
+                  'monthly',
+                  CURRENT_TIMESTAMP,
+                  datetime('now', '+9 days'),
+                  false
+                )
+                """
+            )
+            connection.execute(
+                """
+                insert into subscription_entitlement_snapshots (
+                  id,
+                  subscription_id,
+                  plan_code,
+                  plan_name,
+                  billing_period,
+                  price_snapshot,
+                  entitlements_snapshot,
+                  starts_at
+                )
+                values (
+                  'snap_tenant_user_pro',
+                  'sub_tenant_user_pro',
+                  'pro',
+                  '专业版',
+                  'monthly',
+                  '{"billingPeriod":"monthly","currency":"CNY","amountCents":9900}',
+                  '{"monthlyQuestionLimit":100,"monthlyTokenLimit":50000}',
+                  CURRENT_TIMESTAMP
+                )
+                """
+            )
+            connection.execute(
+                """
+                insert into chat_sessions (
+                  id,
+                  tenant_id,
+                  user_id,
+                  title,
+                  knowledge_base_ids,
+                  agent_options,
+                  status
+                )
+                values (
+                  'session_tenant_user',
+                  'tenant_default',
+                  'tenant_user',
+                  'Usage Session',
+                  '[]',
+                  '{}',
+                  'active'
+                )
+                """
+            )
+            connection.execute(
+                """
+                insert into chat_turns (
+                  id,
+                  session_id,
+                  tenant_id,
+                  user_id,
+                  request_text,
+                  response_text,
+                  status,
+                  is_internal
+                )
+                values
+                  (
+                    'turn_tenant_user_1',
+                    'session_tenant_user',
+                    'tenant_default',
+                    'tenant_user',
+                    'Question 1',
+                    'Answer 1',
+                    'completed',
+                    false
+                  ),
+                  (
+                    'turn_tenant_user_2',
+                    'session_tenant_user',
+                    'tenant_default',
+                    'tenant_user',
+                    'Question 2',
+                    'Answer 2',
+                    'completed',
+                    false
+                  )
+                """
+            )
+            connection.commit()
+
+        admin_login = client.post(
+            "/api/v1/auth/login",
+            json={"email": "platform-admin@example.com", "password": "admin-secret"},
+        )
+        assert admin_login.status_code == 200
+        admin_headers = {"Authorization": f"Bearer {admin_login.json()['accessToken']}"}
+
+        response = client.get(
+            "/api/v1/users",
+            headers=admin_headers,
+            params={
+                "search": "专业版",
+                "subscriptionStatus": "即将到期",
+                "subscriptionType": "专业版 · 月付",
+                "sort": "monthlyUsage",
+                "page": 1,
+                "pageSize": 10,
+            },
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 1
+        assert body["page"] == 1
+        assert body["pageSize"] == 10
+        item = body["items"][0]
+        assert item["id"] == "tenant_user"
+        assert item["currentSubscription"]["subscriptionId"] == "sub_tenant_user_pro"
+        assert item["currentSubscription"]["planName"] == "专业版"
+        assert item["currentSubscription"]["billingPeriod"] == "monthly"
+        assert item["currentSubscription"]["status"] == "expiring_soon"
+        assert item["currentSubscription"]["statusLabel"] == "即将到期"
+        assert item["currentSubscription"]["priceLabel"] == "¥99 / 月"
+        assert item["monthlyUsage"]["questionUsed"] == 2
+        assert item["monthlyUsage"]["questionLimit"] == 100
+        assert item["monthlyUsage"]["tokenUsed"] == 0
+        assert item["monthlyUsage"]["tokenLimit"] == 50000
+        assert item["monthlyUsage"]["status"] == "expiring_soon"
+        assert item["orderSummary"] == {
+            "totalAmountCents": 0,
+            "orderCount": 0,
+            "recentOrders": [],
+        }
+        assert item["usageLifetime"]["usageDays"] >= 1
+
+        detail = client.get("/api/v1/users/tenant_user", headers=admin_headers)
+        assert detail.status_code == 200
+        detail_body = detail.json()
+        assert detail_body["currentSubscription"]["tenantId"] == "tenant_default"
+        assert detail_body["monthlyUsage"]["questionUsagePercent"] == 2
+        assert detail_body["tenants"][0]["id"] == "tenant_default"
 
 
 def test_platform_tenant_management_crud_members_and_guards(tmp_path: Path) -> None:
@@ -1284,6 +1493,7 @@ def test_expert_crud_relations_status_and_permissions(tmp_path: Path) -> None:
             json={
                 "name": "Listing Expert",
                 "categoryId": "expert_cat_ops",
+                "groupId": "expert_group_basic",
                 "abilityIntro": "Helps optimize listings.",
                 "tags": ["listing", "ops", "listing"],
                 "status": "draft",
@@ -1297,6 +1507,8 @@ def test_expert_crud_relations_status_and_permissions(tmp_path: Path) -> None:
         expert = created.json()
         expert_id = expert["id"]
         assert expert["categoryName"] == "Operations"
+        assert expert["groupId"] == "expert_group_basic"
+        assert expert["groupName"] == "基础专家组"
         assert expert["tags"] == ["listing", "ops"]
         assert expert["skillIds"] == ["skill_ops"]
         assert expert["knowledgeBaseIds"] == ["kb_ops"]
@@ -1318,6 +1530,7 @@ def test_expert_crud_relations_status_and_permissions(tmp_path: Path) -> None:
             json={
                 "name": "Growth Expert",
                 "categoryId": "expert_cat_growth",
+                "groupId": "expert_group_professional",
                 "abilityIntro": "Helps grow conversion.",
                 "tags": ["growth"],
                 "skillIds": ["skill_growth"],
@@ -1330,6 +1543,8 @@ def test_expert_crud_relations_status_and_permissions(tmp_path: Path) -> None:
         patched_body = patched.json()
         assert patched_body["name"] == "Growth Expert"
         assert patched_body["categoryName"] == "Growth"
+        assert patched_body["groupId"] == "expert_group_professional"
+        assert patched_body["groupName"] == "专业专家组"
         assert patched_body["skillIds"] == ["skill_growth"]
         assert patched_body["knowledgeBaseIds"] == ["kb_growth"]
         assert patched_body["guideQuestions"] == []
@@ -1354,6 +1569,18 @@ def test_expert_crud_relations_status_and_permissions(tmp_path: Path) -> None:
         after_soft_delete = client.get(f"/api/v1/experts/{expert_id}", headers=admin_headers)
         assert after_soft_delete.status_code == 200
         assert after_soft_delete.json()["knowledgeBaseIds"] == []
+        assert after_soft_delete.json()["groupId"] == "expert_group_professional"
+
+        with open_database_connection(settings) as connection:
+            group_links = connection.execute(
+                """
+                select group_id from expert_group_members
+                where expert_id = ?
+                order by group_id
+                """,
+                (expert_id,),
+            ).fetchall()
+        assert [row["group_id"] for row in group_links] == ["expert_group_professional"]
 
         missing_skill = client.post(
             "/api/v1/experts",
@@ -1366,6 +1593,19 @@ def test_expert_crud_relations_status_and_permissions(tmp_path: Path) -> None:
             },
         )
         assert missing_skill.status_code == 404
+
+        missing_group = client.post(
+            "/api/v1/experts",
+            headers=admin_headers,
+            json={
+                "name": "Broken Group Expert",
+                "categoryId": "expert_cat_ops",
+                "groupId": "missing_group",
+                "abilityIntro": "Broken.",
+            },
+        )
+        assert missing_group.status_code == 404
+        assert missing_group.json()["code"] == "EXPERT_GROUP_NOT_FOUND"
 
         too_many_questions = client.post(
             "/api/v1/experts",
@@ -1550,6 +1790,363 @@ def test_expert_search_by_name_category_and_status(tmp_path: Path) -> None:
         )
         assert combined.status_code == 200
         assert [item["id"] for item in combined.json()["items"]] == ["expert_listing"]
+
+
+def test_plan_phase1_admin_market_and_subscription_snapshot(tmp_path: Path) -> None:
+    database_path = tmp_path / "plans.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+    )
+    test_app = create_app(settings)
+
+    with TestClient(test_app) as client:
+        _seed_platform_user(
+            settings,
+            "platform_admin",
+            "platform-admin@example.com",
+            "Platform Admin",
+            "admin-secret",
+            "admin",
+        )
+        _seed_platform_user(
+            settings,
+            "operator_user",
+            "operator@example.com",
+            "Operator User",
+            "operator-secret",
+            "operator",
+        )
+
+        admin_login = client.post(
+            "/api/v1/auth/login",
+            json={"email": "platform-admin@example.com", "password": "admin-secret"},
+        )
+        admin_headers = {"Authorization": f"Bearer {admin_login.json()['accessToken']}"}
+        operator_login = client.post(
+            "/api/v1/auth/login",
+            json={"email": "operator@example.com", "password": "operator-secret"},
+        )
+        operator_headers = {"Authorization": f"Bearer {operator_login.json()['accessToken']}"}
+
+        seeded = client.get("/api/v1/plans", headers=admin_headers)
+        assert seeded.status_code == 200, seeded.text
+        seeded_codes = [item["code"] for item in seeded.json()["items"]]
+        assert seeded_codes[:4] == ["free", "pro", "max", "business"]
+        free_plan = next(item for item in seeded.json()["items"] if item["code"] == "free")
+        pro_plan = next(item for item in seeded.json()["items"] if item["code"] == "pro")
+        assert free_plan["name"] == "免费版"
+        assert free_plan["description"] == "入门级运营助手，适合首次体验专家问答能力。"
+        assert free_plan["typeLabel"] == "免费版"
+        assert free_plan["subtitle"] == "入门级运营助手"
+        assert free_plan["badgeLabel"] == "入门体验"
+        assert "基础专家问答" in free_plan["highlightItems"]
+        assert pro_plan["name"] == "专业版"
+        assert pro_plan["description"] == "进阶级效率专家，解锁更多专业专家和更高月度额度。"
+        assert pro_plan["typeLabel"] == "个人付费"
+        assert pro_plan["subtitle"] == "进阶级效率专家"
+        assert pro_plan["badgeLabel"] == "最受欢迎"
+        assert "深度评论拆解" in pro_plan["highlightItems"]
+        assert pro_plan["upgradeRules"]["fromPlanIds"] == ["plan_free"]
+        assert pro_plan["upgradeRules"]["selfServiceEnabled"] is True
+        assert pro_plan["isRecommended"] is True
+
+        operator_create = client.post(
+            "/api/v1/plans",
+            headers=operator_headers,
+            json={
+                "code": "operator-plan",
+                "name": "Operator Plan",
+                "level": 99,
+                "description": "Forbidden",
+            },
+        )
+        assert operator_create.status_code == 403
+
+        missing_type = client.post(
+            "/api/v1/plans",
+            headers=admin_headers,
+            json={
+                "name": "Missing Type",
+                "level": 6,
+                "description": "Missing type label",
+            },
+        )
+        assert missing_type.status_code == 400
+        assert missing_type.json()["code"] == "PLAN_TYPE_LABEL_REQUIRED"
+
+        unsupported_type = client.post(
+            "/api/v1/plans",
+            headers=admin_headers,
+            json={
+                "name": "Unsupported Type",
+                "typeLabel": "未知类型",
+                "level": 7,
+                "description": "Unsupported type label",
+            },
+        )
+        assert unsupported_type.status_code == 400
+        assert unsupported_type.json()["code"] == "PLAN_TYPE_LABEL_UNSUPPORTED"
+
+        invalid_level = client.post(
+            "/api/v1/plans",
+            headers=admin_headers,
+            json={
+                "name": "Invalid Level",
+                "typeLabel": "个人付费",
+                "level": 100,
+                "description": "Out of range",
+            },
+        )
+        assert invalid_level.status_code == 422
+
+        invalid_sort = client.post(
+            "/api/v1/plans",
+            headers=admin_headers,
+            json={
+                "name": "Invalid Sort",
+                "typeLabel": "个人付费",
+                "level": 8,
+                "description": "Out of range",
+                "sortOrder": 10000,
+            },
+        )
+        assert invalid_sort.status_code == 422
+
+        created = client.post(
+            "/api/v1/plans",
+            headers=admin_headers,
+            json={
+                "name": "Team",
+                "level": 5,
+                "description": "Team plan",
+                "typeLabel": "团队",
+                "subtitle": "团队协作",
+                "badgeLabel": "团队版",
+                "highlightItems": ["多人协作", "组织管理"],
+                "upgradeRules": {
+                    "fromPlanIds": ["plan_pro"],
+                    "toPlanIds": [],
+                    "rules": ["联系销售"],
+                    "selfServiceEnabled": False,
+                },
+                "isRecommended": True,
+                "sortOrder": 50,
+            },
+        )
+        assert created.status_code == 201, created.text
+        plan = created.json()
+        assert plan["code"] == "business_2"
+        assert plan["typeLabel"] == "团队"
+        assert plan["subtitle"] == "团队协作"
+        assert plan["badgeLabel"] == "团队版"
+        assert plan["highlightItems"] == ["多人协作", "组织管理"]
+        assert plan["upgradeRules"]["rules"] == ["联系销售"]
+        assert plan["isRecommended"] is True
+
+        changed_type = client.patch(
+            f"/api/v1/plans/{plan['id']}",
+            headers=admin_headers,
+            json={"typeLabel": "企业定制"},
+        )
+        assert changed_type.status_code == 200, changed_type.text
+        plan = changed_type.json()
+        assert plan["code"] == "enterprise"
+        assert plan["typeLabel"] == "企业定制"
+
+        with open_database_connection(settings) as connection:
+            connection.execute(
+                """
+                insert into tenants (id, type, name, slug, status)
+                values
+                  ('plan_sub_tenant_1', 'personal', 'Plan Sub Tenant 1', 'plan-sub-tenant-1', 'active'),
+                  ('plan_sub_tenant_2', 'personal', 'Plan Sub Tenant 2', 'plan-sub-tenant-2', 'active'),
+                  ('plan_sub_tenant_cancelled', 'personal', 'Plan Sub Cancelled', 'plan-sub-cancelled', 'active')
+                """
+            )
+            connection.execute(
+                """
+                insert into tenant_subscriptions (
+                  id,
+                  tenant_id,
+                  plan_id,
+                  status,
+                  billing_period,
+                  current_period_start,
+                  current_period_end,
+                  cancel_at_period_end
+                )
+                values
+                  (
+                    'plan_sub_active_1',
+                    'plan_sub_tenant_1',
+                    'plan_pro',
+                    'active',
+                    'monthly',
+                    CURRENT_TIMESTAMP,
+                    datetime('now', '+30 days'),
+                    false
+                  ),
+                  (
+                    'plan_sub_trialing_2',
+                    'plan_sub_tenant_2',
+                    'plan_pro',
+                    'trialing',
+                    'monthly',
+                    CURRENT_TIMESTAMP,
+                    datetime('now', '+14 days'),
+                    false
+                  ),
+                  (
+                    'plan_sub_cancelled_ignored',
+                    'plan_sub_tenant_cancelled',
+                    'plan_pro',
+                    'cancelled',
+                    'monthly',
+                    CURRENT_TIMESTAMP,
+                    datetime('now', '+30 days'),
+                    false
+                  )
+                """
+            )
+            connection.commit()
+
+        after_recommend = client.get("/api/v1/plans", headers=admin_headers)
+        by_code = {item["code"]: item for item in after_recommend.json()["items"]}
+        assert by_code["pro"]["isRecommended"] is False
+        assert by_code["pro"]["subscriptionCount"] == 2
+        assert by_code["enterprise"]["isRecommended"] is True
+
+        pro_detail = client.get("/api/v1/plans/plan_pro", headers=admin_headers)
+        assert pro_detail.status_code == 200
+        assert pro_detail.json()["subscriptionCount"] == 2
+
+        priced = client.put(
+            f"/api/v1/plans/{plan['id']}/prices",
+            headers=admin_headers,
+            json={
+                "items": [
+                    {
+                        "billingPeriod": "monthly",
+                        "currency": "CNY",
+                        "amountCents": 49900,
+                        "isEnabled": True,
+                    }
+                ]
+            },
+        )
+        assert priced.status_code == 200, priced.text
+        assert priced.json()["prices"][0]["amountCents"] == 49900
+
+        entitled = client.put(
+            f"/api/v1/plans/{plan['id']}/entitlements",
+            headers=admin_headers,
+            json={
+                "monthlyQuestionLimit": 2000,
+                "monthlyTokenLimit": 3000000,
+                "seatLimit": 3,
+                "modelTiers": ["core", "enhanced"],
+                "features": {"teamManagement": True},
+            },
+        )
+        assert entitled.status_code == 200, entitled.text
+        assert entitled.json()["entitlements"]["seatLimit"] == 3
+
+        group = client.post(
+            "/api/v1/expert-groups",
+            headers=admin_headers,
+            json={
+                "code": "team_group",
+                "name": "Team Group",
+                "description": "Team experts",
+                "sortOrder": 55,
+            },
+        )
+        assert group.status_code == 201, group.text
+        group_body = group.json()
+
+        with open_database_connection(settings) as connection:
+            connection.execute(
+                """
+                insert into expert_categories (id, name, description)
+                values ('expert_cat_plan', 'Plan Category', null)
+                """
+            )
+            connection.execute(
+                """
+                insert into experts (id, category_id, name, ability_intro, status)
+                values ('expert_plan', 'expert_cat_plan', 'Plan Expert', 'Plan helper.', 'draft')
+                """
+            )
+            connection.commit()
+
+        members = client.put(
+            f"/api/v1/expert-groups/{group_body['id']}/experts",
+            headers=admin_headers,
+            json={"expertIds": ["expert_plan"]},
+        )
+        assert members.status_code == 200, members.text
+        assert members.json()["expertIds"] == ["expert_plan"]
+
+        assigned = client.put(
+            f"/api/v1/plans/{plan['id']}/expert-groups",
+            headers=admin_headers,
+            json={"groupIds": [group_body["id"]]},
+        )
+        assert assigned.status_code == 200, assigned.text
+        assert assigned.json()["expertGroups"][0]["code"] == "team_group"
+
+        delete_used_group = client.delete(
+            f"/api/v1/expert-groups/{group_body['id']}", headers=admin_headers
+        )
+        assert delete_used_group.status_code == 409
+
+        hidden = client.patch(
+            f"/api/v1/plans/{plan['id']}",
+            headers=admin_headers,
+            json={"status": "disabled"},
+        )
+        assert hidden.status_code == 200
+        market = client.get("/api/v1/plan-market/plans", headers=operator_headers)
+        assert market.status_code == 200
+        assert "team" not in [item["code"] for item in market.json()["items"]]
+
+        tenant_register = client.post(
+            "/api/v1/users/register",
+            json={"email": "tenant@example.com", "password": "secret123", "name": "Tenant User"},
+        )
+        assert tenant_register.status_code == 201
+        tenant_headers = {"Authorization": f"Bearer {tenant_register.json()['accessToken']}"}
+
+        current = client.get("/api/v1/plan-market/current-subscription", headers=tenant_headers)
+        assert current.status_code == 200, current.text
+        body = current.json()
+        assert body["subscription"]["planId"] == free_plan["id"]
+        assert body["snapshot"]["planCode"] == "free"
+        assert body["snapshot"]["planName"] == "免费版"
+        assert body["snapshot"]["entitlementsSnapshot"]["monthlyQuestionLimit"] == 100
+        assert body["snapshot"]["entitlementsSnapshot"]["expertGroups"][0]["code"] == "basic"
+
+        client.put(
+            f"/api/v1/plans/{free_plan['id']}/entitlements",
+            headers=admin_headers,
+            json={
+                "monthlyQuestionLimit": 999,
+                "monthlyTokenLimit": 999,
+                "seatLimit": 1,
+                "modelTiers": ["core"],
+                "features": {},
+            },
+        )
+        unchanged = client.get(
+            "/api/v1/plan-market/current-subscription", headers=tenant_headers
+        )
+        assert unchanged.status_code == 200
+        assert unchanged.json()["snapshot"]["entitlementsSnapshot"]["monthlyQuestionLimit"] == 100
+
+        delete_free = client.delete(f"/api/v1/plans/{free_plan['id']}", headers=admin_headers)
+        assert delete_free.status_code == 409
 
 
 def test_expert_market_requires_sign_in_and_only_lists_published_experts(tmp_path: Path) -> None:

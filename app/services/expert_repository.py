@@ -152,6 +152,14 @@ class ExpertRepository:
         )
         return {str(row["id"]) for row in rows}
 
+    def expert_group_exists(self, group_id: str) -> bool:
+        row = fetch_one(
+            self.connection,
+            "select id from expert_groups where id = ? limit 1",
+            (group_id,),
+        )
+        return row is not None
+
     def insert(
         self,
         *,
@@ -262,20 +270,37 @@ class ExpertRepository:
                 (f"expert_kb_{uuid4().hex}", expert_id, knowledge_base_id),
             )
 
+    def replace_primary_group(self, expert_id: str, group_id: str | None) -> None:
+        execute(self.connection, "delete from expert_group_members where expert_id = ?", (expert_id,))
+        if group_id is None:
+            return
+        execute(
+            self.connection,
+            """
+            insert into expert_group_members (id, group_id, expert_id)
+            values (?, ?, ?)
+            """,
+            (f"expert_group_member_{uuid4().hex}", group_id, expert_id),
+        )
+
     def _map_experts(self, rows: list[dict[str, Any]]) -> list[Expert]:
         expert_ids = [str(row["id"]) for row in rows]
         # Batch-fetch links once for the whole page to avoid an N+1 query per expert.
         skills_by_expert = self._skill_ids_by_expert(expert_ids)
         kbs_by_expert = self._knowledge_base_ids_by_expert(expert_ids)
+        groups_by_expert = self._primary_group_by_expert(expert_ids)
         experts = []
         for row in rows:
             expert_id = str(row["id"])
+            group = groups_by_expert.get(expert_id)
             experts.append(
                 Expert(
                     id=expert_id,
                     name=str(row["name"]),
                     categoryId=str(row["category_id"]),
                     categoryName=str(row["category_name"]),
+                    groupId=group["id"] if group else None,
+                    groupName=group["name"] if group else None,
                     abilityIntro=str(row["ability_intro"]),
                     tags=_json_string_list(row["tags"]),
                     status=str(row["status"]),
@@ -292,6 +317,31 @@ class ExpertRepository:
                 )
             )
         return experts
+
+    def _primary_group_by_expert(self, expert_ids: list[str]) -> dict[str, dict[str, str]]:
+        if not expert_ids:
+            return {}
+        placeholders = ", ".join(["?"] * len(expert_ids))
+        rows = fetch_all(
+            self.connection,
+            f"""
+            select egm.expert_id, g.id as group_id, g.name as group_name
+            from expert_group_members egm
+            inner join expert_groups g on g.id = egm.group_id
+            where egm.expert_id in ({placeholders})
+            order by egm.expert_id, g.sort_order asc, egm.created_at asc, g.id asc
+            """,
+            expert_ids,
+        )
+        grouped: dict[str, dict[str, str]] = {}
+        for row in rows:
+            expert_id = str(row["expert_id"])
+            if expert_id not in grouped:
+                grouped[expert_id] = {
+                    "id": str(row["group_id"]),
+                    "name": str(row["group_name"]),
+                }
+        return grouped
 
     def _skill_ids_by_expert(self, expert_ids: list[str]) -> dict[str, list[str]]:
         if not expert_ids:

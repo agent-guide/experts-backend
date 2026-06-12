@@ -59,7 +59,7 @@ def open_database_connection(settings: Settings) -> Iterator[DatabaseConnection]
 def _migrate_sqlite(connection: SqliteConnection, files: list[Path]) -> None:
     connection.execute("pragma foreign_keys = on")
     for file in files:
-        sql = _sqlite_compatible_sql(file.read_text())
+        sql = _sqlite_compatible_sql(file.read_text(encoding="utf-8"))
         for statement in _split_sql_statements(sql):
             _execute_sqlite_statement(connection, statement)
     connection.commit()
@@ -74,7 +74,7 @@ def _migrate_postgres(database_url: str, files: list[Path]) -> None:
     with psycopg.connect(database_url) as connection:
         with connection.cursor() as cursor:
             for file in files:
-                cursor.execute(file.read_text())
+                cursor.execute(file.read_text(encoding="utf-8"))
         connection.commit()
 
 

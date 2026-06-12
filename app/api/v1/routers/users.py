@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import get_auth_service, require_platform_permission
 from app.domain.auth import (
@@ -26,10 +26,24 @@ async def register(body: RegisterRequest, auth: AuthService = Depends(get_auth_s
 
 @router.get("", response_model=ListManagedUsersResponse)
 async def list_users(
+    search: str | None = Query(default=None, min_length=1),
+    subscription_status: str | None = Query(default=None, alias="subscriptionStatus"),
+    subscription_type: str | None = Query(default=None, alias="subscriptionType"),
+    sort: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, alias="pageSize", ge=1, le=100),
     principal: Principal = Depends(require_platform_permission("platform:user_manage")),
     auth: AuthService = Depends(get_auth_service),
 ) -> ListManagedUsersResponse:
-    return ListManagedUsersResponse(items=auth.list_managed_users())
+    items, total = auth.list_managed_users(
+        search=search,
+        subscription_status=subscription_status,
+        subscription_type=subscription_type,
+        sort=sort,
+        page=page,
+        page_size=page_size,
+    )
+    return ListManagedUsersResponse(items=items, total=total, page=page, pageSize=page_size)
 
 
 @router.post("/platform/activate")

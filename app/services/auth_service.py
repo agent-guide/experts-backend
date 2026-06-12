@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import secrets
 import sqlite3
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -25,8 +26,12 @@ from app.domain.auth import (
     Principal,
     TenantRole,
     UserDetail,
+    UserLifetimeUsageSummary,
+    UserMonthlyUsageSummary,
+    UserOrderSummary,
     UserAccessSummary,
     UserSummary,
+    UserSubscriptionSummary,
     UserTenantSummary,
     platform_role_permissions,
     tenant_role_permissions,
@@ -481,7 +486,16 @@ class AuthService:
                 if (user := _map_user_summary(row)) is not None
             ]
 
-    def list_managed_users(self) -> list[UserSummary]:
+    def list_managed_users(
+        self,
+        *,
+        search: str | None = None,
+        subscription_status: str | None = None,
+        subscription_type: str | None = None,
+        sort: str | None = None,
+        page: int = 1,
+        page_size: int = 50,
+    ) -> tuple[list[UserSummary], int]:
         """List non-platform users for ordinary user management."""
         with open_database_connection(self.settings) as connection:
             rows = _fetch_all(
@@ -505,19 +519,20 @@ class AuthService:
                 """,
             )
 
-            return [
-                UserSummary(
-                    id=str(row["id"]),
-                    email=str(row["email"]),
-                    name=str(row["name"]),
-                    status=str(row["status"]),
-                    platformRoles=[],
-                    tenantCount=int(row["tenant_count"]),
-                    createdAt=str(row["created_at"]),
-                    updatedAt=str(row["updated_at"]),
-                )
+            items = [
+                self._managed_user_summary(connection, row)
                 for row in rows
             ]
+            items = _filter_user_summaries(
+                items,
+                search=search,
+                subscription_status=subscription_status,
+                subscription_type=subscription_type,
+            )
+            items = _sort_user_summaries(items, sort)
+            total = len(items)
+            start = max(page - 1, 0) * page_size
+            return items[start : start + page_size], total
 
     def get_managed_user(self, user_id: str) -> UserDetail:
         with open_database_connection(self.settings) as connection:
@@ -737,6 +752,7 @@ class AuthService:
 
     def _user_detail(self, connection: DatabaseConnection, user: UserRecord) -> UserDetail:
         platform_roles = self._list_platform_roles(connection, user.id)
+        subscription = self._current_subscription_summary(connection, user.id)
         return UserDetail(
             id=user.id,
             email=user.email,
@@ -747,9 +763,159 @@ class AuthService:
                 {perm for role in platform_roles for perm in platform_role_permissions(role)}
             ),
             tenants=self._list_user_tenants(connection, user.id),
+            currentSubscription=subscription,
+            monthlyUsage=self._monthly_usage_summary(connection, user.id, subscription),
+            orderSummary=UserOrderSummary(),
+            usageLifetime=_lifetime_usage(user.created_at, subscription),
             createdAt=user.created_at,
             updatedAt=user.updated_at,
         )
+
+    def _managed_user_summary(self, connection: DatabaseConnection, row: dict[str, Any]) -> UserSummary:
+        user_id = str(row["id"])
+        created_at = str(row["created_at"])
+        subscription = self._current_subscription_summary(connection, user_id)
+        return UserSummary(
+            id=user_id,
+            email=str(row["email"]),
+            name=str(row["name"]),
+            status=str(row["status"]),
+            platformRoles=[],
+            tenantCount=int(row["tenant_count"]),
+            currentSubscription=subscription,
+            monthlyUsage=self._monthly_usage_summary(connection, user_id, subscription),
+            orderSummary=UserOrderSummary(),
+            usageLifetime=_lifetime_usage(created_at, subscription),
+            createdAt=created_at,
+            updatedAt=str(row["updated_at"]),
+        )
+
+    def _current_subscription_summary(
+        self, connection: DatabaseConnection, user_id: str
+    ) -> UserSubscriptionSummary | None:
+        row = _fetch_one(
+            connection,
+            """
+            select
+              ts.id,
+              ts.tenant_id,
+              ts.plan_id,
+              ts.status,
+              ts.billing_period,
+              ts.current_period_start,
+              ts.current_period_end,
+              ts.cancel_at_period_end,
+              p.code as plan_code,
+              p.name as plan_name,
+              t.name as tenant_name,
+              ss.price_snapshot,
+              ss.entitlements_snapshot
+            from tenant_members tm
+            inner join tenants t on t.id = tm.tenant_id
+            inner join tenant_subscriptions ts on ts.tenant_id = t.id
+            inner join plans p on p.id = ts.plan_id
+            left join subscription_entitlement_snapshots ss on ss.id = (
+              select ss2.id
+              from subscription_entitlement_snapshots ss2
+              where ss2.subscription_id = ts.id
+              order by ss2.starts_at desc, ss2.created_at desc
+              limit 1
+            )
+            where tm.user_id = ?
+            order by
+              case
+                when ts.status in ('active', 'trialing', 'past_due')
+                 and (ts.current_period_end is null or ts.current_period_end > CURRENT_TIMESTAMP)
+                then 0 else 1
+              end,
+              ts.current_period_start desc,
+              ts.created_at desc
+            limit 1
+            """,
+            (user_id,),
+        )
+        if not row:
+            return None
+        ends_at = str(row["current_period_end"]) if row["current_period_end"] is not None else None
+        days_until_expiry = _days_until(ends_at)
+        status = _subscription_status(str(row["status"]), ends_at)
+        price_snapshot = _json_dict(row["price_snapshot"])
+        return UserSubscriptionSummary(
+            subscriptionId=str(row["id"]),
+            planId=str(row["plan_id"]),
+            planCode=str(row["plan_code"]),
+            planName=str(row["plan_name"]),
+            billingPeriod=str(row["billing_period"]),
+            status=status,
+            statusLabel=_subscription_status_label(status),
+            currentPeriodStart=str(row["current_period_start"]),
+            currentPeriodEnd=ends_at,
+            daysUntilExpiry=days_until_expiry,
+            cancelAtPeriodEnd=bool(row["cancel_at_period_end"]),
+            autoRenew=not bool(row["cancel_at_period_end"]) and str(row["billing_period"]) != "free",
+            priceLabel=_price_label(price_snapshot),
+            currentOrderNo=None,
+            paymentMethod="免费开通" if str(row["billing_period"]) == "free" else None,
+            tenantId=str(row["tenant_id"]),
+            tenantName=str(row["tenant_name"]),
+        )
+
+    def _monthly_usage_summary(
+        self,
+        connection: DatabaseConnection,
+        user_id: str,
+        subscription: UserSubscriptionSummary | None,
+    ) -> UserMonthlyUsageSummary:
+        tenant_id = subscription.tenantId if subscription else None
+        if not tenant_id:
+            return UserMonthlyUsageSummary(status=_usage_status(subscription, 0, 0, 0, 0))
+        month_start = datetime.now(timezone.utc).replace(
+            day=1, hour=0, minute=0, second=0, microsecond=0
+        ).isoformat()
+        row = _fetch_one(
+            connection,
+            """
+            select count(*) as count
+            from chat_turns
+            where tenant_id = ?
+              and user_id = ?
+              and created_at >= ?
+              and is_internal = false
+            """,
+            (tenant_id, user_id, month_start),
+        )
+        question_used = int(row["count"]) if row else 0
+        entitlements = self._subscription_entitlements(connection, subscription)
+        question_limit = int(entitlements.get("monthlyQuestionLimit", 0) or 0)
+        token_limit = int(entitlements.get("monthlyTokenLimit", 0) or 0)
+        token_used = 0
+        status = _usage_status(subscription, question_used, question_limit, token_used, token_limit)
+        return UserMonthlyUsageSummary(
+            questionUsed=question_used,
+            questionLimit=question_limit,
+            tokenUsed=token_used,
+            tokenLimit=token_limit,
+            questionUsagePercent=_percent(question_used, question_limit),
+            tokenUsagePercent=_percent(token_used, token_limit),
+            status=status,
+            isServicePaused=status in {"question_exhausted", "token_exhausted", "expired"},
+        )
+
+    def _subscription_entitlements(
+        self, connection: DatabaseConnection, subscription: UserSubscriptionSummary
+    ) -> dict[str, Any]:
+        row = _fetch_one(
+            connection,
+            """
+            select ss.entitlements_snapshot
+            from subscription_entitlement_snapshots ss
+            where ss.subscription_id = ?
+            order by ss.starts_at desc, ss.created_at desc
+            limit 1
+            """,
+            (subscription.subscriptionId,),
+        )
+        return _json_dict(row["entitlements_snapshot"]) if row else {}
 
     def _list_user_tenants(
         self, connection: DatabaseConnection, user_id: str
@@ -884,6 +1050,189 @@ def _prepare_sql(connection: DatabaseConnection, sql: str) -> str:
 
 def _commit(connection: DatabaseConnection) -> None:
     connection.commit()
+
+
+def _filter_user_summaries(
+    items: list[UserSummary],
+    *,
+    search: str | None,
+    subscription_status: str | None,
+    subscription_type: str | None,
+) -> list[UserSummary]:
+    if search:
+        needle = search.casefold()
+        items = [
+            item
+            for item in items
+            if needle in item.name.casefold()
+            or needle in item.email.casefold()
+            or (
+                item.currentSubscription is not None
+                and needle in (item.currentSubscription.planName or "").casefold()
+            )
+            or needle in str(item.tenantCount)
+        ]
+    if subscription_status:
+        expected = _normalize_subscription_filter(subscription_status)
+        items = [
+            item
+            for item in items
+            if item.currentSubscription is not None
+            and item.currentSubscription.status == expected
+        ]
+    if subscription_type:
+        expected = subscription_type.casefold()
+        items = [
+            item
+            for item in items
+            if item.currentSubscription is not None
+            and (
+                (
+                    f"{item.currentSubscription.planName or ''} "
+                    f"{item.currentSubscription.billingPeriod or ''} "
+                    f"{_billing_period_label(item.currentSubscription.billingPeriod)}"
+                    f" {item.currentSubscription.planName or ''} · "
+                    f"{_billing_period_label(item.currentSubscription.billingPeriod)}"
+                )
+            ).casefold().find(expected)
+            >= 0
+        ]
+    return items
+
+
+def _sort_user_summaries(items: list[UserSummary], sort: str | None) -> list[UserSummary]:
+    if sort == "expiresAt":
+        return sorted(
+            items,
+            key=lambda item: (
+                item.currentSubscription is None
+                or item.currentSubscription.currentPeriodEnd is None,
+                item.currentSubscription.currentPeriodEnd if item.currentSubscription else "",
+            ),
+        )
+    if sort == "monthlyUsage":
+        return sorted(items, key=lambda item: item.monthlyUsage.questionUsed, reverse=True)
+    if sort == "subscriptionStart":
+        return sorted(
+            items,
+            key=lambda item: (
+                item.currentSubscription.currentPeriodStart
+                if item.currentSubscription
+                and item.currentSubscription.currentPeriodStart is not None
+                else ""
+            ),
+            reverse=True,
+        )
+    return items
+
+
+def _normalize_subscription_filter(value: str) -> str:
+    mapping = {
+        "订阅中": "active",
+        "active": "active",
+        "即将到期": "expiring_soon",
+        "expiring_soon": "expiring_soon",
+        "expiringsoon": "expiring_soon",
+        "已过期": "expired",
+        "expired": "expired",
+    }
+    return mapping.get(value.casefold(), value)
+
+
+def _json_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _days_until(value: str | None) -> int | None:
+    if value is None:
+        return None
+    delta = _parse_datetime(value) - datetime.now(timezone.utc)
+    return max(delta.days, 0)
+
+
+def _subscription_status(status: str, ends_at: str | None) -> str:
+    if status in {"cancelled", "expired"}:
+        return "expired"
+    if ends_at is not None:
+        days = _days_until(ends_at)
+        if _parse_datetime(ends_at) <= datetime.now(timezone.utc):
+            return "expired"
+        if days is not None and days <= 14:
+            return "expiring_soon"
+    return "active"
+
+
+def _subscription_status_label(status: str) -> str:
+    return {
+        "active": "订阅中",
+        "expiring_soon": "即将到期",
+        "expired": "已过期",
+    }.get(status, status)
+
+
+def _price_label(price_snapshot: dict[str, Any]) -> str | None:
+    period = str(price_snapshot.get("billingPeriod") or "")
+    amount = int(price_snapshot.get("amountCents") or 0)
+    if period == "free":
+        return "免费"
+    if period == "sales":
+        return "联系销售"
+    suffix = {"monthly": " / 月", "yearly": " / 年"}.get(period, "")
+    return f"¥{amount / 100:g}{suffix}"
+
+
+def _billing_period_label(period: str | None) -> str:
+    return {
+        "free": "免费",
+        "monthly": "月付",
+        "yearly": "年付",
+        "sales": "商务报价",
+    }.get(str(period or ""), "")
+
+
+def _percent(used: int, limit: int) -> float:
+    if limit <= 0:
+        return 0
+    return round(min((used / limit) * 100, 100), 2)
+
+
+def _usage_status(
+    subscription: UserSubscriptionSummary | None,
+    question_used: int,
+    question_limit: int,
+    token_used: int,
+    token_limit: int,
+) -> str:
+    if subscription is not None and subscription.status == "expired":
+        return "expired"
+    if question_limit > 0 and question_used >= question_limit:
+        return "question_exhausted"
+    if token_limit > 0 and token_used >= token_limit:
+        return "token_exhausted"
+    if subscription is not None and subscription.status == "expiring_soon":
+        return "expiring_soon"
+    return "normal"
+
+
+def _lifetime_usage(
+    created_at: str, subscription: UserSubscriptionSummary | None
+) -> UserLifetimeUsageSummary:
+    start = _parse_datetime(created_at)
+    usage_days = max((datetime.now(timezone.utc) - start).days + 1, 1)
+    stopped = subscription is not None and subscription.status == "expired"
+    return UserLifetimeUsageSummary(
+        startDate=created_at,
+        usageDays=usage_days,
+        stopped=stopped,
+    )
 
 
 def _now_iso() -> str:

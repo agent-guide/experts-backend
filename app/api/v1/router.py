@@ -6,11 +6,14 @@ from app.api.v1.routers import (
     chat,
     documents,
     expert_categories,
+    expert_groups,
     expert_market,
     experts,
     knowledge_bases,
     models,
     ops,
+    plan_market,
+    plans,
     rbac,
     skills,
     tenants,
@@ -28,9 +31,20 @@ api_router.include_router(
 )
 api_router.include_router(experts.router, prefix="/experts", tags=["experts"])
 api_router.include_router(
+    expert_groups.router,
+    prefix="/expert-groups",
+    tags=["expert-groups"],
+)
+api_router.include_router(
     expert_market.router,
     prefix="/expert-market",
     tags=["expert-market"],
+)
+api_router.include_router(plans.router, prefix="/plans", tags=["plans"])
+api_router.include_router(
+    plan_market.router,
+    prefix="/plan-market",
+    tags=["plan-market"],
 )
 api_router.include_router(rbac.router, prefix="/rbac", tags=["rbac"])
 api_router.include_router(models.router, prefix="/models", tags=["models"])

@@ -3,6 +3,10 @@
 Expert management is platform-scoped. Expert categories are the taxonomy used
 by experts; each expert belongs to exactly one category.
 
+Expert groups are authorization groups used by plans. They are separate from
+expert categories: categories are for marketplace taxonomy, while groups are for
+plan access control.
+
 ## Expert Categories
 
 Base path:
@@ -172,6 +176,8 @@ expert:write
   "name": "Amazon Listing Expert",
   "categoryId": "expert_cat_123",
   "categoryName": "Amazon Operations",
+  "groupId": "expert_group_basic",
+  "groupName": "基础专家组",
   "abilityIntro": "Helps optimize Amazon listings and reviews.",
   "tags": ["listing", "reviews"],
   "status": "draft",
@@ -281,6 +287,7 @@ Request:
 {
   "name": "Amazon Listing Expert",
   "categoryId": "expert_cat_123",
+  "groupId": "expert_group_basic",
   "abilityIntro": "Helps optimize Amazon listings and reviews.",
   "tags": ["listing", "reviews"],
   "status": "draft",
@@ -299,6 +306,8 @@ Request:
 `guideQuestions` default to empty arrays. `guideQuestions` accepts at most three
 items. `tags`, `skillIds`, `knowledgeBaseIds`, and `guideQuestions` are
 de-duplicated and empty strings are dropped, preserving first-seen order.
+`groupId` is optional. When provided, the backend validates the expert group and
+adds the new expert to that group as its primary authorization group.
 
 Response `201`: the expert shape.
 
@@ -306,6 +315,7 @@ Errors:
 
 ```text
 404 EXPERT_CATEGORY_NOT_FOUND
+404 EXPERT_GROUP_NOT_FOUND
 404 SKILL_NOT_FOUND
 404 KB_NOT_FOUND
 422 validation error
@@ -321,6 +331,7 @@ Request:
 {
   "name": "Updated Expert",
   "categoryId": "expert_cat_456",
+  "groupId": "expert_group_professional",
   "abilityIntro": "Updated intro.",
   "tags": ["updated"],
   "skillIds": ["skill_2"],
@@ -332,6 +343,9 @@ Request:
 
 All fields are optional. Passing `skillIds` or `knowledgeBaseIds` replaces that
 relationship set. Passing `guideQuestions` replaces the guide question list.
+Passing `groupId` switches the expert's primary authorization group. Passing
+`groupId: null` clears the primary group. Omitting `groupId` leaves the current
+group unchanged.
 
 Response `200`: the expert shape.
 
@@ -340,6 +354,7 @@ Errors:
 ```text
 404 EXPERT_NOT_FOUND
 404 EXPERT_CATEGORY_NOT_FOUND
+404 EXPERT_GROUP_NOT_FOUND
 404 SKILL_NOT_FOUND
 404 KB_NOT_FOUND
 422 validation error
@@ -384,3 +399,174 @@ Errors:
 ```text
 404 EXPERT_NOT_FOUND
 ```
+
+## Expert Groups
+
+Base path:
+
+```text
+/api/v1/expert-groups
+```
+
+All endpoints require:
+
+```text
+Authorization: Bearer <accessToken>
+```
+
+Read permission:
+
+```text
+expert:read
+```
+
+Write permission:
+
+```text
+expert:write
+```
+
+## Expert Group Shape
+
+```json
+{
+  "id": "expert_group_basic",
+  "code": "basic",
+  "name": "基础专家组",
+  "description": "Free 版及以上可访问",
+  "sortOrder": 10,
+  "expertIds": ["expert_123"],
+  "createdAt": "2026-06-12T00:00:00+00:00",
+  "updatedAt": "2026-06-12T00:00:00+00:00"
+}
+```
+
+The database supports many-to-many membership: one expert can belong to multiple
+groups, and one group can contain many experts. Product UX may still choose to
+limit each expert to one primary authorization group in Phase 1.
+
+## GET /
+
+List expert groups. Required permission: `expert:read`.
+
+Response `200`:
+
+```json
+{
+  "items": [
+    {
+      "id": "expert_group_basic",
+      "code": "basic",
+      "name": "基础专家组",
+      "description": "Free 版及以上可访问",
+      "sortOrder": 10,
+      "expertIds": [],
+      "createdAt": "2026-06-12T00:00:00+00:00",
+      "updatedAt": "2026-06-12T00:00:00+00:00"
+    }
+  ]
+}
+```
+
+## GET /{group_id}
+
+Get an expert group. Required permission: `expert:read`.
+
+Response `200`: the expert group shape.
+
+Errors:
+
+```text
+404 EXPERT_GROUP_NOT_FOUND
+```
+
+## POST /
+
+Create an expert group. Required permission: `expert:write`.
+
+Request:
+
+```json
+{
+  "code": "team_group",
+  "name": "Team Group",
+  "description": "Team experts",
+  "sortOrder": 55
+}
+```
+
+Response `201`: the expert group shape.
+
+Errors:
+
+```text
+409 EXPERT_GROUP_CODE_EXISTS
+422 validation error
+```
+
+## PATCH /{group_id}
+
+Update an expert group. Required permission: `expert:write`.
+
+Request:
+
+```json
+{
+  "code": "advanced",
+  "name": "高级专家组",
+  "description": "Max 版及以上可访问",
+  "sortOrder": 30
+}
+```
+
+All fields are optional. `description` is retained when omitted.
+
+Response `200`: the expert group shape.
+
+Errors:
+
+```text
+404 EXPERT_GROUP_NOT_FOUND
+409 EXPERT_GROUP_CODE_EXISTS
+422 validation error
+```
+
+## PUT /{group_id}/experts
+
+Replace the experts in an expert group. Required permission: `expert:write`.
+
+Request:
+
+```json
+{
+  "expertIds": ["expert_1", "expert_2"]
+}
+```
+
+Response `200`: the expert group shape.
+
+Errors:
+
+```text
+404 EXPERT_GROUP_NOT_FOUND
+404 EXPERT_NOT_FOUND
+```
+
+## DELETE /{group_id}
+
+Delete an expert group. Required permission: `expert:write`.
+
+Response:
+
+```text
+204 No Content
+```
+
+Errors:
+
+```text
+404 EXPERT_GROUP_NOT_FOUND
+409 EXPERT_GROUP_IN_USE
+```
+
+`EXPERT_GROUP_IN_USE` protects groups that are still referenced by plans.

@@ -56,6 +56,7 @@ class ExpertService:
         skill_ids = _unique_strings(request.skillIds)
         knowledge_base_ids = _unique_strings(request.knowledgeBaseIds)
         self._require_category(request.categoryId)
+        self._require_expert_group(request.groupId)
         self._require_skills(skill_ids)
         self._require_knowledge_bases(knowledge_base_ids)
         expert_id = f"expert_{uuid4().hex}"
@@ -69,6 +70,7 @@ class ExpertService:
             guide_questions=_unique_strings(request.guideQuestions),
             summon_button_text=request.summonButtonText,
         )
+        self.repo.replace_primary_group(expert_id, request.groupId)
         self.repo.replace_skills(expert_id, skill_ids)
         self.repo.replace_knowledge_bases(expert_id, knowledge_base_ids)
         self.connection.commit()
@@ -80,6 +82,9 @@ class ExpertService:
             request.categoryId if request.categoryId is not None else current.categoryId
         )
         self._require_category(next_category_id)
+        group_was_provided = "groupId" in request.model_fields_set
+        if group_was_provided:
+            self._require_expert_group(request.groupId)
 
         skill_ids = _unique_strings(request.skillIds) if request.skillIds is not None else None
         knowledge_base_ids = (
@@ -111,6 +116,8 @@ class ExpertService:
                 else current.summonButtonText
             ),
         )
+        if group_was_provided:
+            self.repo.replace_primary_group(expert_id, request.groupId)
         if skill_ids is not None:
             self.repo.replace_skills(expert_id, skill_ids)
         if knowledge_base_ids is not None:
@@ -133,6 +140,10 @@ class ExpertService:
     def _require_category(self, category_id: str) -> None:
         if not self.repo.category_exists(category_id):
             raise ApiError(404, "EXPERT_CATEGORY_NOT_FOUND", "Expert category not found")
+
+    def _require_expert_group(self, group_id: str | None) -> None:
+        if group_id is not None and not self.repo.expert_group_exists(group_id):
+            raise ApiError(404, "EXPERT_GROUP_NOT_FOUND", "Expert group not found")
 
     def _require_skills(self, skill_ids: list[str]) -> None:
         existing = self.repo.existing_skill_ids(skill_ids)
