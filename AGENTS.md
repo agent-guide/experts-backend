@@ -87,6 +87,48 @@ PageIndex / ngent / Codex are upstream/optional integrations, not the source of 
 - **Expert marketplace (`/expert-market/*`) requires sign-in** (`require_principal`, any
   authenticated caller) but no specific permission; it lists only `published` experts/categories.
 
+### Pluggable compute backend (`EXPERT_NEXT_CHAT_BACKEND` = `ngent` | `acp`)
+
+- `ChatService` is backend-agnostic; the local DB stays the source of truth either way. The
+  router (`build_chat_service`) injects both clients and the configured backend. ngent is the
+  default and unchanged; `acp` targets the agent-gateway ACP data plane (`AcpGatewayClient`).
+- **ACP has only two data-plane endpoints**: `POST {prefix}/turn` (SSE) and
+  `POST {prefix}/permission`. There is **no thread/turn lifecycle, no cancel, no event-replay**.
+  Consequences, all hidden behind the same public chat API:
+  - `create_session` mints the `thread_id` locally (no upstream call); the agent materializes the
+    session lazily on the first turn.
+  - The agent-assigned ACP session id arrives via a `session` event on the first turn and is
+    stored in `chat_sessions.acp_session_id`, then echoed back as `TurnRequest.session_id` on
+    follow-up turns so the gateway resumes the same pooled instance (scope keys on
+    `service|cwd|thread_id|session_id|model`, so cwd/model must stay stable per thread).
+  - A turn has no server id, so `ChatService` generates one locally and emits `turn_started`
+    before any text. ACP events are **translated to the same public contract** ngent exposes
+    (`delta`→`message_delta`, `done`→`turn_completed`, `permission`→`permission_required`,
+    `error`→`error`), so the frontend is unchanged. `rename`/`delete` are local-only; `cancel`
+    best-effort marks the local turn cancelled; turn-event replay reads the stored turn.
+- **Knowledge-base selection for ACP is a TODO**: it is JSON-encoded into `config_overrides`
+  under `knowledge_base_ids` (`_acp_config_overrides`) pending confirmation of the agent contract.
+- **Permission resolution is in-memory on the gateway**: the answer (`POST {prefix}/permission`,
+  request id in the body) must reach the same gateway replica holding the pending request — keep
+  the ACP gateway single-replica or session-affine.
+- **History replay** (`GET /sessions/{id}/transcript`, `ChatService.get_transcript`): returns
+  `{sessionId, messages: [{role, text}], source}` with a uniform shape across backends. For ACP,
+  when the session has an `acp_session_id` and the admin plane is configured, it loads the
+  agent-side coalesced transcript (user/assistant/reasoning) from the **admin plane**
+  (`AcpAdminClient`); otherwise (ngent, or no turn yet, or admin unconfigured) it rebuilds from
+  the durable local `chat_turns` (`source: "local"`). The ACP admin plane is a **separate address**
+  from the data plane (`EXPERT_NEXT_ACP_ADMIN_BASE_URL`, gateway default `:8019`) with
+  username/password login minting an **in-memory** Bearer session token — `AcpAdminClient` caches
+  it process-wide and re-logs-in on `401` (e.g. after a gateway restart). Admin paths are keyed by
+  `EXPERT_NEXT_ACP_SERVICE_ID` and the transcript is addressed by the ACP session id + tenant cwd
+  (not the local thread id). `list_sessions` is also available on the client for reconciliation.
+- **Live smoke test**: `python scripts/acp_smoke.py` drives the real `AcpGatewayClient` /
+  `AcpAdminClient` against a running gateway (config from env/.env or `--base-url` etc.). It runs a
+  turn and prints the translated events, with `--resume` (session resume), `--transcript` /
+  `--list-sessions` (admin plane), and `--auto-permission` (answer prompts). Use it to validate the
+  integration against a real gateway before relying on the backend — the pytest suite only covers
+  fakes.
+
 ## Tests & lint
 
 - `python -m pytest tests/test_app.py -q` and `ruff check app/ tests/`. Run both before finishing.
