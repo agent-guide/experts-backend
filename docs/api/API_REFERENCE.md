@@ -1524,6 +1524,13 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 | Location | Name | Required | Type | Description |
 | --- | --- | --- | --- | --- |
+| query | search | no | string \| null | - |
+| query | type | no | string \| null | - |
+| query | subscriptionType | no | string \| null | - |
+| query | subscriptionStatus | no | string \| null | - |
+| query | sort | no | string \| null | - |
+| query | page | no | integer | - |
+| query | pageSize | no | integer | - |
 | header | Authorization | no | string \| null | - |
 
 #### Response
@@ -1675,6 +1682,25 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | path | tenant_id | yes | string | - |
 | header | Authorization | no | string \| null | - |
 | body | application/json | yes | UpdateTenantStatusRequest | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | Tenant |
+| 422 | application/json | HTTPValidationError |
+
+### PATCH `/api/v1/tenants/{tenant_id}/subscription`
+
+- Summary: Update Tenant Subscription
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| path | tenant_id | yes | string | - |
+| header | Authorization | no | string \| null | - |
+| body | application/json | yes | UpdateTenantSubscriptionRequest | - |
 
 #### Response
 
@@ -2443,8 +2469,14 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | slug | yes | string | - |
 | ownerUserId | no | string \| null | - |
 | ownerUserName | no | string \| null | - |
+| ownerUserEmail | no | string \| null | - |
 | status | yes | string | - |
 | memberCount | yes | integer | - |
+| currentSubscription | no | TenantSubscriptionSummary \| null | - |
+| currentPlan | no | TenantPlanSummary \| null | - |
+| monthlyUsage | no | TenantMonthlyUsageSummary | - |
+| orderSummary | no | TenantOrderSummary | - |
+| members | no | array[TenantMember] | - |
 | createdAt | yes | string | - |
 | updatedAt | yes | string | - |
 
@@ -2453,6 +2485,9 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
 | items | yes | array[Tenant] | - |
+| total | no | integer | - |
+| page | no | integer | - |
+| pageSize | no | integer | - |
 
 ### `TenantMember`
 
@@ -2470,6 +2505,51 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
 | items | yes | array[TenantMember] | - |
+
+### `TenantMonthlyUsageSummary`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| questionUsed | no | integer | - |
+| questionLimit | no | integer | - |
+| tokenUsed | no | integer | - |
+| tokenLimit | no | integer | - |
+| questionUsagePercent | no | number | - |
+| tokenUsagePercent | no | number | - |
+| status | no | string | - |
+| isServicePaused | no | boolean | - |
+
+### `TenantOrderItem`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| orderNo | yes | string | - |
+| planName | no | string \| null | - |
+| billingPeriod | no | string \| null | - |
+| amountCents | no | integer | - |
+| paidAt | no | string \| null | - |
+| status | yes | string | - |
+
+### `TenantOrderSummary`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| totalAmountCents | no | integer | - |
+| orderCount | no | integer | - |
+| recentOrders | no | array[TenantOrderItem] | - |
+
+### `TenantPlanSummary`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| id | yes | string | - |
+| code | yes | string | - |
+| name | yes | string | - |
+| typeLabel | no | string \| null | - |
+| billingPeriod | yes | string | - |
+| priceLabel | no | string \| null | - |
+| priceSnapshot | no | object | - |
+| entitlementsSnapshot | no | object | - |
 
 ### `TenantRole`
 
@@ -2489,6 +2569,24 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | cancelAtPeriodEnd | yes | boolean | - |
 | createdAt | yes | string | - |
 | updatedAt | yes | string | - |
+
+### `TenantSubscriptionSummary`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| subscriptionId | yes | string | - |
+| planId | yes | string | - |
+| planCode | yes | string | - |
+| planName | yes | string | - |
+| billingPeriod | yes | string | - |
+| status | yes | string | - |
+| rawStatus | yes | string | - |
+| currentPeriodStart | yes | string | - |
+| currentPeriodEnd | no | string \| null | - |
+| daysUntilExpiry | no | integer \| null | - |
+| cancelAtPeriodEnd | yes | boolean | - |
+| autoRenew | yes | boolean | - |
+| priceLabel | no | string \| null | - |
 
 ### `UpdateDocumentRequest`
 
@@ -2577,6 +2675,17 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
 | status | yes | string | - |
+
+### `UpdateTenantSubscriptionRequest`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| planId | yes | string | - |
+| billingPeriod | yes | string | - |
+| status | no | string | - |
+| currentPeriodStart | no | string \| null | - |
+| currentPeriodEnd | no | string \| null | - |
+| cancelAtPeriodEnd | no | boolean | - |
 
 ### `UpdateUserRequest`
 

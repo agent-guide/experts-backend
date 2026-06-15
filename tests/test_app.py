@@ -1204,15 +1204,23 @@ def test_platform_tenant_management_crud_members_and_guards(tmp_path: Path) -> N
         assert tenant["type"] == "team"
         assert tenant["slug"] == "acme-team"
         assert tenant["ownerUserName"] == "Owner User"
+        assert tenant["ownerUserEmail"] == "owner@example.com"
         assert tenant["memberCount"] == 1
+        assert tenant["currentSubscription"]["planCode"] == "free"
+        assert tenant["currentPlan"]["code"] == "free"
+        assert tenant["monthlyUsage"]["questionUsed"] == 0
 
         listed = client.get("/api/v1/tenants", headers=admin_headers)
         assert listed.status_code == 200
-        assert any(item["id"] == tenant_id for item in listed.json()["items"])
+        listed_body = listed.json()
+        assert listed_body["total"] >= 1
+        assert any(item["id"] == tenant_id for item in listed_body["items"])
 
         got = client.get(f"/api/v1/tenants/{tenant_id}", headers=admin_headers)
         assert got.status_code == 200
-        assert got.json()["memberCount"] == 1
+        got_body = got.json()
+        assert got_body["memberCount"] == 1
+        assert got_body["members"][0]["userId"] == "owner_user"
 
         members = client.get(f"/api/v1/tenants/{tenant_id}/members", headers=admin_headers)
         assert members.status_code == 200
@@ -1274,6 +1282,16 @@ def test_platform_tenant_management_crud_members_and_guards(tmp_path: Path) -> N
         assert disabled.status_code == 200
         assert disabled.json()["status"] == "disabled"
 
+        subscription = client.patch(
+            f"/api/v1/tenants/{tenant_id}/subscription",
+            headers=admin_headers,
+            json={"planId": "plan_pro", "billingPeriod": "monthly"},
+        )
+        assert subscription.status_code == 200, subscription.text
+        assert subscription.json()["currentSubscription"]["planCode"] == "pro"
+        assert subscription.json()["currentSubscription"]["billingPeriod"] == "monthly"
+        assert subscription.json()["currentPlan"]["id"] == "plan_pro"
+
         duplicate = client.post(
             "/api/v1/tenants",
             headers=admin_headers,
@@ -1287,6 +1305,204 @@ def test_platform_tenant_management_crud_members_and_guards(tmp_path: Path) -> N
             json={"name": "Missing Owner", "slug": "missing-owner", "ownerUserId": "missing"},
         )
         assert missing_owner.status_code == 404
+
+
+def test_tenant_management_subscription_usage_filters_and_personal_guards(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "tenant_management_subscription.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+    )
+    test_app = create_app(settings)
+
+    with TestClient(test_app) as client:
+        _seed_tenant(settings)
+        _seed_platform_user(
+            settings,
+            "platform_admin",
+            "platform-admin@example.com",
+            "Platform Admin",
+            "admin-secret",
+            "admin",
+        )
+        _seed_tenant_user(
+            settings,
+            "tenant_user",
+            "tenant@example.com",
+            "Tenant User",
+            "tenant-secret",
+            "member",
+        )
+        with open_database_connection(settings) as connection:
+            connection.execute(
+                """
+                update tenants
+                set type = 'personal',
+                    owner_user_id = 'tenant_user'
+                where id = 'tenant_default'
+                """
+            )
+            connection.execute(
+                """
+                insert into tenant_subscriptions (
+                  id,
+                  tenant_id,
+                  plan_id,
+                  status,
+                  billing_period,
+                  current_period_start,
+                  current_period_end,
+                  cancel_at_period_end
+                )
+                values (
+                  'sub_tenant_default_pro',
+                  'tenant_default',
+                  'plan_pro',
+                  'active',
+                  'monthly',
+                  CURRENT_TIMESTAMP,
+                  datetime('now', '+9 days'),
+                  false
+                )
+                """
+            )
+            connection.execute(
+                """
+                insert into subscription_entitlement_snapshots (
+                  id,
+                  subscription_id,
+                  plan_code,
+                  plan_name,
+                  billing_period,
+                  price_snapshot,
+                  entitlements_snapshot,
+                  starts_at
+                )
+                values (
+                  'snap_tenant_default_pro',
+                  'sub_tenant_default_pro',
+                  'pro',
+                  'Pro',
+                  'monthly',
+                  '{"billingPeriod":"monthly","currency":"CNY","amountCents":9900}',
+                  '{"monthlyQuestionLimit":100,"monthlyTokenLimit":50000}',
+                  CURRENT_TIMESTAMP
+                )
+                """
+            )
+            connection.execute(
+                """
+                insert into chat_sessions (
+                  id,
+                  tenant_id,
+                  user_id,
+                  title,
+                  knowledge_base_ids,
+                  agent_options,
+                  status
+                )
+                values (
+                  'session_tenant_default',
+                  'tenant_default',
+                  'tenant_user',
+                  'Usage Session',
+                  '[]',
+                  '{}',
+                  'active'
+                )
+                """
+            )
+            connection.execute(
+                """
+                insert into chat_turns (
+                  id,
+                  session_id,
+                  tenant_id,
+                  user_id,
+                  request_text,
+                  response_text,
+                  status,
+                  is_internal
+                )
+                values
+                  (
+                    'turn_tenant_default_1',
+                    'session_tenant_default',
+                    'tenant_default',
+                    'tenant_user',
+                    'Question 1',
+                    'Answer 1',
+                    'completed',
+                    false
+                  ),
+                  (
+                    'turn_tenant_default_2',
+                    'session_tenant_default',
+                    'tenant_default',
+                    'tenant_user',
+                    'Question 2',
+                    'Answer 2',
+                    'completed',
+                    false
+                  )
+                """
+            )
+            connection.commit()
+
+        admin_login = client.post(
+            "/api/v1/auth/login",
+            json={"email": "platform-admin@example.com", "password": "admin-secret"},
+        )
+        assert admin_login.status_code == 200
+        admin_headers = {"Authorization": f"Bearer {admin_login.json()['accessToken']}"}
+
+        listed = client.get(
+            "/api/v1/tenants",
+            headers=admin_headers,
+            params={
+                "search": "default",
+                "type": "personal",
+                "subscriptionType": "monthly",
+                "subscriptionStatus": "expiring_soon",
+                "sort": "monthlyUsage",
+                "page": 1,
+                "pageSize": 10,
+            },
+        )
+        assert listed.status_code == 200, listed.text
+        body = listed.json()
+        assert body["total"] == 1
+        item = body["items"][0]
+        assert item["id"] == "tenant_default"
+        assert item["type"] == "personal"
+        assert item["ownerUserEmail"] == "tenant@example.com"
+        assert item["currentSubscription"]["subscriptionId"] == "sub_tenant_default_pro"
+        assert item["currentSubscription"]["status"] == "expiring_soon"
+        assert item["currentPlan"]["code"] == "pro"
+        assert item["monthlyUsage"]["questionUsed"] == 2
+        assert item["monthlyUsage"]["questionLimit"] == 100
+        assert item["monthlyUsage"]["tokenUsed"] == 0
+        assert item["monthlyUsage"]["tokenLimit"] == 50000
+        assert item["orderSummary"] == {
+            "totalAmountCents": 0,
+            "orderCount": 0,
+            "recentOrders": [],
+        }
+
+        detail = client.get("/api/v1/tenants/tenant_default", headers=admin_headers)
+        assert detail.status_code == 200
+        detail_body = detail.json()
+        assert detail_body["members"] == []
+
+        blocked = client.post(
+            "/api/v1/tenants/tenant_default/members",
+            headers=admin_headers,
+            json={"userId": "platform_admin", "role": "member"},
+        )
+        assert blocked.status_code == 409
 
         tenant_register = client.post(
             "/api/v1/users/register",

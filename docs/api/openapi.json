@@ -735,6 +735,110 @@
         "operationId": "list_tenants_api_v1_tenants_get",
         "parameters": [
           {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type"
+            }
+          },
+          {
+            "name": "subscriptionType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Subscriptiontype"
+            }
+          },
+          {
+            "name": "subscriptionStatus",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Subscriptionstatus"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Pagesize"
+            }
+          },
+          {
             "name": "Authorization",
             "in": "header",
             "required": false,
@@ -996,6 +1100,74 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/UpdateTenantStatusRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tenant"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/{tenant_id}/subscription": {
+      "patch": {
+        "tags": [
+          "tenants"
+        ],
+        "summary": "Update Tenant Subscription",
+        "operationId": "update_tenant_subscription_api_v1_tenants__tenant_id__subscription_patch",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTenantSubscriptionRequest"
               }
             }
           }
@@ -8435,6 +8607,17 @@
             ],
             "title": "Ownerusername"
           },
+          "ownerUserEmail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owneruseremail"
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -8446,6 +8629,39 @@
           "memberCount": {
             "type": "integer",
             "title": "Membercount"
+          },
+          "currentSubscription": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TenantSubscriptionSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "currentPlan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TenantPlanSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "monthlyUsage": {
+            "$ref": "#/components/schemas/TenantMonthlyUsageSummary"
+          },
+          "orderSummary": {
+            "$ref": "#/components/schemas/TenantOrderSummary"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/TenantMember"
+            },
+            "type": "array",
+            "title": "Members"
           },
           "createdAt": {
             "type": "string",
@@ -8477,6 +8693,21 @@
             },
             "type": "array",
             "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page",
+            "default": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "title": "Pagesize",
+            "default": 50
           }
         },
         "type": "object",
@@ -8537,6 +8768,201 @@
           "items"
         ],
         "title": "TenantMemberListResponse"
+      },
+      "TenantMonthlyUsageSummary": {
+        "properties": {
+          "questionUsed": {
+            "type": "integer",
+            "title": "Questionused",
+            "default": 0
+          },
+          "questionLimit": {
+            "type": "integer",
+            "title": "Questionlimit",
+            "default": 0
+          },
+          "tokenUsed": {
+            "type": "integer",
+            "title": "Tokenused",
+            "default": 0
+          },
+          "tokenLimit": {
+            "type": "integer",
+            "title": "Tokenlimit",
+            "default": 0
+          },
+          "questionUsagePercent": {
+            "type": "number",
+            "title": "Questionusagepercent",
+            "default": 0
+          },
+          "tokenUsagePercent": {
+            "type": "number",
+            "title": "Tokenusagepercent",
+            "default": 0
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "normal"
+          },
+          "isServicePaused": {
+            "type": "boolean",
+            "title": "Isservicepaused",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "TenantMonthlyUsageSummary"
+      },
+      "TenantOrderItem": {
+        "properties": {
+          "orderNo": {
+            "type": "string",
+            "title": "Orderno"
+          },
+          "planName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Planname"
+          },
+          "billingPeriod": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "free",
+                  "monthly",
+                  "yearly",
+                  "sales"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Billingperiod"
+          },
+          "amountCents": {
+            "type": "integer",
+            "title": "Amountcents",
+            "default": 0
+          },
+          "paidAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paidat"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "orderNo",
+          "status"
+        ],
+        "title": "TenantOrderItem"
+      },
+      "TenantOrderSummary": {
+        "properties": {
+          "totalAmountCents": {
+            "type": "integer",
+            "title": "Totalamountcents",
+            "default": 0
+          },
+          "orderCount": {
+            "type": "integer",
+            "title": "Ordercount",
+            "default": 0
+          },
+          "recentOrders": {
+            "items": {
+              "$ref": "#/components/schemas/TenantOrderItem"
+            },
+            "type": "array",
+            "title": "Recentorders"
+          }
+        },
+        "type": "object",
+        "title": "TenantOrderSummary"
+      },
+      "TenantPlanSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "typeLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Typelabel"
+          },
+          "billingPeriod": {
+            "type": "string",
+            "enum": [
+              "free",
+              "monthly",
+              "yearly",
+              "sales"
+            ],
+            "title": "Billingperiod"
+          },
+          "priceLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pricelabel"
+          },
+          "priceSnapshot": {
+            "type": "object",
+            "title": "Pricesnapshot"
+          },
+          "entitlementsSnapshot": {
+            "type": "object",
+            "title": "Entitlementssnapshot"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "billingPeriod"
+        ],
+        "title": "TenantPlanSummary"
       },
       "TenantRole": {
         "type": "string",
@@ -8622,6 +9048,110 @@
           "updatedAt"
         ],
         "title": "TenantSubscription"
+      },
+      "TenantSubscriptionSummary": {
+        "properties": {
+          "subscriptionId": {
+            "type": "string",
+            "title": "Subscriptionid"
+          },
+          "planId": {
+            "type": "string",
+            "title": "Planid"
+          },
+          "planCode": {
+            "type": "string",
+            "title": "Plancode"
+          },
+          "planName": {
+            "type": "string",
+            "title": "Planname"
+          },
+          "billingPeriod": {
+            "type": "string",
+            "enum": [
+              "free",
+              "monthly",
+              "yearly",
+              "sales"
+            ],
+            "title": "Billingperiod"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "rawStatus": {
+            "type": "string",
+            "enum": [
+              "active",
+              "trialing",
+              "past_due",
+              "cancelled",
+              "expired"
+            ],
+            "title": "Rawstatus"
+          },
+          "currentPeriodStart": {
+            "type": "string",
+            "title": "Currentperiodstart"
+          },
+          "currentPeriodEnd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currentperiodend"
+          },
+          "daysUntilExpiry": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daysuntilexpiry"
+          },
+          "cancelAtPeriodEnd": {
+            "type": "boolean",
+            "title": "Cancelatperiodend"
+          },
+          "autoRenew": {
+            "type": "boolean",
+            "title": "Autorenew"
+          },
+          "priceLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pricelabel"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subscriptionId",
+          "planId",
+          "planCode",
+          "planName",
+          "billingPeriod",
+          "status",
+          "rawStatus",
+          "currentPeriodStart",
+          "cancelAtPeriodEnd",
+          "autoRenew"
+        ],
+        "title": "TenantSubscriptionSummary"
       },
       "UpdateDocumentRequest": {
         "properties": {
@@ -9121,6 +9651,69 @@
           "status"
         ],
         "title": "UpdateTenantStatusRequest"
+      },
+      "UpdateTenantSubscriptionRequest": {
+        "properties": {
+          "planId": {
+            "type": "string",
+            "title": "Planid"
+          },
+          "billingPeriod": {
+            "type": "string",
+            "enum": [
+              "free",
+              "monthly",
+              "yearly",
+              "sales"
+            ],
+            "title": "Billingperiod"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "trialing",
+              "past_due",
+              "cancelled",
+              "expired"
+            ],
+            "title": "Status",
+            "default": "active"
+          },
+          "currentPeriodStart": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currentperiodstart"
+          },
+          "currentPeriodEnd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currentperiodend"
+          },
+          "cancelAtPeriodEnd": {
+            "type": "boolean",
+            "title": "Cancelatperiodend",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "planId",
+          "billingPeriod"
+        ],
+        "title": "UpdateTenantSubscriptionRequest"
       },
       "UpdateUserRequest": {
         "properties": {
