@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import get_database, require_platform_permission
 from app.db import DatabaseConnection
@@ -11,6 +11,7 @@ from app.domain.tenants import (
     TenantMember,
     TenantMemberListResponse,
     UpdateTenantMemberRequest,
+    UpdateTenantSubscriptionRequest,
     UpdateTenantRequest,
     UpdateTenantStatusRequest,
 )
@@ -21,10 +22,26 @@ router = APIRouter()
 
 @router.get("", response_model=TenantListResponse)
 async def list_tenants(
+    search: str | None = Query(default=None, min_length=1),
+    tenant_type: str | None = Query(default=None, alias="type"),
+    subscription_type: str | None = Query(default=None, alias="subscriptionType"),
+    subscription_status: str | None = Query(default=None, alias="subscriptionStatus"),
+    sort: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, alias="pageSize", ge=1, le=100),
     principal: Principal = Depends(require_platform_permission("platform:tenant_manage")),
     connection: DatabaseConnection = Depends(get_database),
 ) -> TenantListResponse:
-    return TenantListResponse(items=TenantService(connection).list())
+    items, total = TenantService(connection).list(
+        search=search,
+        tenant_type=tenant_type,
+        subscription_type=subscription_type,
+        subscription_status=subscription_status,
+        sort=sort,
+        page=page,
+        page_size=page_size,
+    )
+    return TenantListResponse(items=items, total=total, page=page, pageSize=page_size)
 
 
 @router.post("", response_model=Tenant, status_code=201)
@@ -63,6 +80,16 @@ async def update_tenant_status(
     connection: DatabaseConnection = Depends(get_database),
 ) -> Tenant:
     return TenantService(connection).update_status(tenant_id, body.status)
+
+
+@router.patch("/{tenant_id}/subscription", response_model=Tenant)
+async def update_tenant_subscription(
+    tenant_id: str,
+    body: UpdateTenantSubscriptionRequest,
+    principal: Principal = Depends(require_platform_permission("platform:tenant_manage")),
+    connection: DatabaseConnection = Depends(get_database),
+) -> Tenant:
+    return TenantService(connection).update_subscription(tenant_id, body)
 
 
 @router.get("/{tenant_id}/members", response_model=TenantMemberListResponse)
