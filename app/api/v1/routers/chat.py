@@ -1,7 +1,15 @@
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 
-from app.api.deps import get_database, get_ngent_client, require_tenant_permission
+from app.api.deps import (
+    get_acp_admin_client,
+    get_acp_gateway_client,
+    get_database,
+    get_ngent_client,
+    require_tenant_permission,
+)
+from app.clients.acp_admin import AcpAdminClient
+from app.clients.acp_gateway import AcpGatewayClient
 from app.clients.ngent import NgentClient
 from app.core.config import Settings, get_settings
 from app.db import DatabaseConnection
@@ -19,11 +27,30 @@ from app.services.chat_service import ChatService
 router = APIRouter()
 
 
+def build_chat_service(
+    connection: DatabaseConnection,
+    settings: Settings,
+    ngent: NgentClient,
+    acp: AcpGatewayClient,
+    acp_admin: AcpAdminClient,
+) -> ChatService:
+    return ChatService(
+        connection,
+        backend=settings.chat_backend,
+        ngent=ngent,
+        acp=acp,
+        acp_admin=acp_admin,
+    )
+
+
 def get_chat_service(
     connection: DatabaseConnection = Depends(get_database),
+    settings: Settings = Depends(get_settings),
     ngent: NgentClient = Depends(get_ngent_client),
+    acp: AcpGatewayClient = Depends(get_acp_gateway_client),
+    acp_admin: AcpAdminClient = Depends(get_acp_admin_client),
 ) -> ChatService:
-    return ChatService(connection, ngent)
+    return build_chat_service(connection, settings, ngent, acp, acp_admin)
 
 
 # --- Sessions -----------------------------------------------------------------
@@ -74,6 +101,17 @@ async def list_messages(
     return {"items": service.list_messages(principal, session_id)}
 
 
+@router.get("/sessions/{session_id}/transcript")
+async def get_transcript(
+    session_id: str,
+    principal: Principal = Depends(require_tenant_permission("chat:ask")),
+    service: ChatService = Depends(get_chat_service),
+) -> dict:
+    # History replay: the agent-side transcript (ACP admin plane) when available, else the
+    # durable local turn records. Shape: {sessionId, messages: [{role, text}], source}.
+    return await service.get_transcript(principal, session_id)
+
+
 @router.patch("/sessions/{session_id}/title")
 async def rename_session(
     session_id: str,
@@ -104,13 +142,15 @@ async def create_turn(
     principal: Principal = Depends(require_tenant_permission("chat:ask")),
     settings: Settings = Depends(get_settings),
     ngent: NgentClient = Depends(get_ngent_client),
+    acp: AcpGatewayClient = Depends(get_acp_gateway_client),
+    acp_admin: AcpAdminClient = Depends(get_acp_admin_client),
 ) -> StreamingResponse:
-    # ngent creates and streams a turn in one shot; the turnId arrives in the first
-    # `turn_started` event. The service tees the SSE stream: forwards it to the caller while
-    # persisting the assembled turn record locally.
+    # The compute engine creates and streams a turn in one shot; the service forwards the SSE
+    # stream to the caller while persisting the assembled turn record locally (translating ACP
+    # events to the same public contract when the ACP backend is active).
     async def events():
         with open_database_connection(settings) as connection:
-            service = ChatService(connection, ngent)
+            service = build_chat_service(connection, settings, ngent, acp, acp_admin)
             async for line in service.stream_turn(principal, session_id, body):
                 yield line
 

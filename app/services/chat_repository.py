@@ -77,6 +77,14 @@ class ChatRepository:
         )
         return rowcount(cursor) > 0
 
+    def set_acp_session_id(self, session_id: str, acp_session_id: str, now: str) -> bool:
+        cursor = execute(
+            self.connection,
+            "update chat_sessions set acp_session_id = ?, updated_at = ? where id = ?",
+            (acp_session_id, now, session_id),
+        )
+        return rowcount(cursor) > 0
+
     def set_session_pin(self, session_id: str, is_pinned: bool, pinned_at: str | None, now: str) -> bool:
         cursor = execute(
             self.connection,
@@ -156,6 +164,18 @@ class ChatRepository:
             "select id, session_id, tenant_id, user_id, status from chat_turns where id = ? limit 1",
             (turn_id,),
         )
+
+    def get_turn(self, turn_id: str) -> ChatTurn | None:
+        row = fetch_one(self.connection, "select * from chat_turns where id = ? limit 1", (turn_id,))
+        return _map_turn(row) if row is not None else None
+
+    def cancel_running_turn(self, turn_id: str, completed_at: str) -> bool:
+        cursor = execute(
+            self.connection,
+            "update chat_turns set status = 'cancelled', completed_at = ? where id = ? and status = 'running'",
+            (completed_at, turn_id),
+        )
+        return rowcount(cursor) > 0
 
     def list_turns(self, session_id: str) -> list[ChatTurn]:
         rows = fetch_all(

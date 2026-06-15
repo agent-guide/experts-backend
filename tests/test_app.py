@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 from io import BytesIO
 from zipfile import ZipFile
@@ -5,7 +6,13 @@ from zipfile import ZipFile
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.deps import get_ngent_client, get_skill_storage
+from app.api.deps import (
+    get_acp_admin_client,
+    get_acp_gateway_client,
+    get_ngent_client,
+    get_skill_storage,
+)
+from app.clients.acp_gateway import AcpGatewayClient
 from app.clients.ngent import NgentClient
 from app.core.config import Settings
 from app.core.security import hash_opaque_token, hash_password
@@ -2839,6 +2846,149 @@ def test_chat_turn_uses_ngent_input_protocol(tmp_path: Path) -> None:
         assert messages.json()["items"][0]["responseText"] == "ok"
 
 
+def test_chat_acp_backend_creates_locally_and_translates_turn(tmp_path: Path) -> None:
+    database_path = tmp_path / "chat_acp.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+        chat_backend="acp",
+        acp_gateway_base_url="http://gateway.test",
+        acp_route_prefix="/acp",
+        acp_default_cwd=str(tmp_path / "acp-workspace"),
+    )
+    fake_acp = FakeAcpGatewayClient()
+    test_app = create_app(settings)
+    test_app.dependency_overrides[get_acp_gateway_client] = lambda: fake_acp
+
+    with TestClient(test_app) as client:
+        _seed_tenant(settings)
+        _seed_tenant_user(
+            settings,
+            "tenant_user",
+            "tenant@example.com",
+            "Tenant User",
+            "tenant-secret",
+            "member",
+        )
+        login = client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "tenant@example.com",
+                "password": "tenant-secret",
+                "tenantId": "tenant_default",
+            },
+        )
+        assert login.status_code == 200
+        headers = {
+            "Authorization": f"Bearer {login.json()['accessToken']}",
+            "x-tenant-id": "tenant_default",
+        }
+
+        created = client.post(
+            "/api/v1/chat/sessions",
+            headers=headers,
+            json={"title": "ACP Test", "knowledgeBaseIds": ["kb_1"]},
+        )
+        assert created.status_code == 201
+        session_id = created.json()["id"]
+        # The ACP backend mints the thread id locally; no upstream create call is made.
+        assert session_id.startswith("thread_")
+
+        turn = client.post(
+            f"/api/v1/chat/sessions/{session_id}/turns",
+            headers=headers,
+            json={"question": "hello"},
+        )
+        assert turn.status_code == 200
+        # ACP session/delta/done events are translated to the public ngent-shaped contract.
+        assert "event: turn_started" in turn.text
+        assert "event: message_delta" in turn.text
+        assert "event: turn_completed" in turn.text
+        assert "event: session" not in turn.text
+
+        first_call = fake_acp.turn_calls[0]
+        assert first_call["thread_id"] == session_id
+        assert first_call["session_id"] is None  # first turn has no id to resume
+        assert first_call["cwd"] == fake_acp.default_cwd
+        # knowledge base selection rides along JSON-encoded in config_overrides.
+        assert first_call["config_overrides"] == {"knowledge_base_ids": '["kb_1"]'}
+
+        messages = client.get(f"/api/v1/chat/sessions/{session_id}/messages", headers=headers)
+        assert messages.status_code == 200
+        assert messages.json()["items"][0]["responseText"] == "ok"
+
+        # A follow-up turn echoes back the agent-assigned ACP session id to resume the instance.
+        client.post(
+            f"/api/v1/chat/sessions/{session_id}/turns",
+            headers=headers,
+            json={"question": "again"},
+        )
+        assert fake_acp.turn_calls[1]["session_id"] == "acp_sess_1"
+
+
+def test_chat_acp_transcript_replays_from_admin_plane(tmp_path: Path) -> None:
+    database_path = tmp_path / "chat_acp_transcript.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+        chat_backend="acp",
+        acp_gateway_base_url="http://gateway.test",
+        acp_admin_base_url="http://gateway.test:8019",
+        acp_admin_username="admin",
+        acp_admin_password="secret",
+        acp_service_id="acp_svc",
+        acp_default_cwd=str(tmp_path / "acp-workspace"),
+    )
+    fake_acp = FakeAcpGatewayClient()
+    fake_admin = FakeAcpAdminClient()
+    test_app = create_app(settings)
+    test_app.dependency_overrides[get_acp_gateway_client] = lambda: fake_acp
+    test_app.dependency_overrides[get_acp_admin_client] = lambda: fake_admin
+
+    with TestClient(test_app) as client:
+        _seed_tenant(settings)
+        _seed_tenant_user(
+            settings, "tenant_user", "tenant@example.com", "Tenant User", "tenant-secret", "member"
+        )
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"email": "tenant@example.com", "password": "tenant-secret", "tenantId": "tenant_default"},
+        )
+        headers = {
+            "Authorization": f"Bearer {login.json()['accessToken']}",
+            "x-tenant-id": "tenant_default",
+        }
+
+        session_id = client.post(
+            "/api/v1/chat/sessions", headers=headers, json={"title": "Replay"}
+        ).json()["id"]
+
+        # Before any turn there is no ACP session, so replay falls back to the local record.
+        empty = client.get(f"/api/v1/chat/sessions/{session_id}/transcript", headers=headers)
+        assert empty.status_code == 200
+        assert empty.json() == {"sessionId": session_id, "messages": [], "source": "local"}
+
+        # Run a turn so the agent-assigned session id is captured and persisted.
+        client.post(
+            f"/api/v1/chat/sessions/{session_id}/turns", headers=headers, json={"question": "hello"}
+        )
+
+        transcript = client.get(f"/api/v1/chat/sessions/{session_id}/transcript", headers=headers)
+        assert transcript.status_code == 200
+        body = transcript.json()
+        assert body["source"] == "agent"
+        assert body["sessionId"] == session_id
+        assert body["messages"] == [
+            {"role": "user", "text": "hello"},
+            {"role": "assistant", "text": "ok"},
+        ]
+        # The admin plane is addressed by the agent session id + the tenant cwd, not the thread id.
+        assert fake_admin.transcript_calls[-1]["session_id"] == "acp_sess_1"
+        assert fake_admin.transcript_calls[-1]["cwd"] == fake_acp.default_cwd
+
+
 def test_ngent_preserves_remote_posix_cwd() -> None:
     client = NgentClient(Settings(ngent_default_cwd="/usr/local/ngent-workspace"))
 
@@ -2854,6 +3004,113 @@ def test_ngent_preserves_remote_posix_cwd() -> None:
         tenant_client.prepare_cwd("tenant_default")
         == "/usr/local/ngent-workspace/tenants/tenant_default"
     )
+
+
+def test_acp_gateway_preserves_remote_posix_cwd() -> None:
+    client = AcpGatewayClient(Settings(acp_default_cwd="/usr/local/acp-workspace"))
+
+    assert client.prepare_cwd("tenant_default") == "/usr/local/acp-workspace"
+
+    tenant_client = AcpGatewayClient(
+        Settings(
+            acp_default_cwd="/unused",
+            acp_cwd_base="/usr/local/acp-workspace/tenants",
+        )
+    )
+    assert (
+        tenant_client.prepare_cwd("tenant_default")
+        == "/usr/local/acp-workspace/tenants/tenant_default"
+    )
+
+
+def test_acp_gateway_prepare_cwd_creates_per_tenant_dir(tmp_path: Path) -> None:
+    # The agent chdirs into cwd, so the per-tenant subdir under an absolute base must be created
+    # (regression: an absolute cwd_base used to return early without mkdir, breaking codex chdir).
+    base = tmp_path / "acp-roots"
+    client = AcpGatewayClient(Settings(acp_default_cwd="/unused", acp_cwd_base=str(base)))
+
+    cwd = client.prepare_cwd("tenant_default")
+
+    assert cwd == str(base / "tenant_default")
+    assert (base / "tenant_default").is_dir()
+
+
+def test_acp_stream_turn_builds_turn_request_payload() -> None:
+    client = AcpGatewayClient(
+        Settings(
+            acp_gateway_base_url="http://gateway.test",
+            acp_route_prefix="/acp",
+            acp_default_model="claude-opus",
+        )
+    )
+    captured: dict = {}
+
+    def fake_stream(method, path, *, tenant_id=None, **kwargs):
+        captured.update(method=method, path=path, tenant_id=tenant_id, json=kwargs.get("json"))
+
+        async def empty():
+            return
+            yield  # pragma: no cover - marks this an async generator
+
+        return empty()
+
+    client.stream = fake_stream  # type: ignore[assignment]
+
+    async def drive() -> None:
+        agen = client.stream_turn(
+            thread_id="thread_1",
+            input="hello",
+            tenant_id="tenant_default",
+            session_id="",  # falsy -> omitted, lets the agent assign one on the first turn
+            config_overrides={"knowledge_base_ids": "kb_1"},
+        )
+        async for _ in agen:
+            pass
+
+    asyncio.run(drive())
+
+    assert captured["method"] == "POST"
+    assert captured["path"] == "/acp/turn"
+    assert captured["tenant_id"] == "tenant_default"
+    # Required fields plus the default model; empty optionals (session_id, cwd,
+    # fresh_session) are omitted so the gateway falls back to service defaults.
+    assert captured["json"] == {
+        "thread_id": "thread_1",
+        "input": "hello",
+        "model": "claude-opus",
+        "config_overrides": {"knowledge_base_ids": "kb_1"},
+    }
+
+
+def test_acp_resolve_permission_sends_request_id_in_body() -> None:
+    client = AcpGatewayClient(
+        Settings(acp_gateway_base_url="http://gateway.test", acp_route_prefix="/acp")
+    )
+    captured: dict = {}
+
+    async def fake_request(method, path, *, tenant_id=None, **kwargs):
+        captured.update(method=method, path=path, tenant_id=tenant_id, json=kwargs.get("json"))
+        return {"status": "resolved"}
+
+    client.request = fake_request  # type: ignore[assignment]
+
+    result = asyncio.run(
+        client.resolve_permission(
+            request_id="req_1",
+            outcome="selected",
+            option_id="allow",
+            tenant_id="tenant_default",
+        )
+    )
+
+    assert result == {"status": "resolved"}
+    assert captured["method"] == "POST"
+    assert captured["path"] == "/acp/permission"
+    assert captured["json"] == {
+        "request_id": "req_1",
+        "outcome": "selected",
+        "option_id": "allow",
+    }
 
 
 def _seed_tenant(settings: Settings) -> None:
@@ -2965,6 +3222,70 @@ class FakeNgentClient:
         yield "event: turn_completed"
         yield 'data: {"stopReason": "end_turn"}'
         yield ""
+
+
+class FakeAcpGatewayClient:
+    def __init__(self) -> None:
+        self.default_model = "claude-opus"
+        self.default_cwd = "/tmp/acp"
+        self.turn_calls: list[dict] = []
+
+    def prepare_cwd(self, tenant_id: str | None = None) -> str:
+        return self.default_cwd
+
+    def stream_turn(
+        self,
+        *,
+        thread_id: str,
+        input: str,
+        tenant_id: str | None = None,
+        session_id: str | None = None,
+        cwd: str | None = None,
+        model: str | None = None,
+        fresh_session: bool = False,
+        config_overrides: dict | None = None,
+    ):
+        self.turn_calls.append(
+            {
+                "thread_id": thread_id,
+                "input": input,
+                "tenant_id": tenant_id,
+                "session_id": session_id,
+                "cwd": cwd,
+                "config_overrides": config_overrides,
+            }
+        )
+
+        async def gen():
+            yield "event: session"
+            yield 'data: {"session_id": "acp_sess_1"}'
+            yield ""
+            yield "event: delta"
+            yield 'data: {"text": "ok"}'
+            yield ""
+            yield "event: done"
+            yield 'data: {"stop_reason": "end_turn"}'
+            yield ""
+
+        return gen()
+
+
+class FakeAcpAdminClient:
+    def __init__(self) -> None:
+        self.transcript_calls: list[dict] = []
+
+    async def get_transcript(self, *, session_id: str, cwd: str | None = None) -> dict:
+        self.transcript_calls.append({"session_id": session_id, "cwd": cwd})
+        return {
+            "session_id": session_id,
+            "messages": [
+                {"role": "user", "text": "hello"},
+                {"role": "assistant", "text": "ok"},
+            ],
+        }
+
+    async def list_sessions(self, *, cwd: str | None = None, cursor: str | None = None) -> dict:
+        return {"sessions": [], "next_cursor": ""}
 
 
 def _skill_zip() -> BytesIO:
