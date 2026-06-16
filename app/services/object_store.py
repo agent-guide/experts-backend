@@ -30,10 +30,22 @@ class ObjectStore:
     ) -> str:
         raise NotImplementedError
 
-    def presigned_get_url(self, object_key: str, *, expires: timedelta) -> str:
+    def presigned_get_url(
+        self,
+        object_key: str,
+        *,
+        expires: timedelta,
+        response_headers: dict[str, str] | None = None,
+    ) -> str:
         raise NotImplementedError
 
     def stat(self, object_key: str) -> ObjectStat:
+        raise NotImplementedError
+
+    def put(self, object_key: str, data: bytes, *, content_type: str | None = None) -> None:
+        raise NotImplementedError
+
+    def read(self, object_key: str, *, max_bytes: int | None = None) -> bytes:
         raise NotImplementedError
 
     def remove(self, object_key: str) -> None:
@@ -80,8 +92,19 @@ class MinioObjectStore(ObjectStore):
         # the presigned PUT URL itself does not bind it. See design section 11.
         return self.client.presigned_put_object(self._bucket, object_key, expires=expires)
 
-    def presigned_get_url(self, object_key: str, *, expires: timedelta) -> str:
-        return self.client.presigned_get_object(self._bucket, object_key, expires=expires)
+    def presigned_get_url(
+        self,
+        object_key: str,
+        *,
+        expires: timedelta,
+        response_headers: dict[str, str] | None = None,
+    ) -> str:
+        return self.client.presigned_get_object(
+            self._bucket,
+            object_key,
+            expires=expires,
+            response_headers=response_headers,
+        )
 
     def stat(self, object_key: str) -> ObjectStat:
         try:
@@ -91,6 +114,33 @@ class MinioObjectStore(ObjectStore):
                 raise ApiError(404, "DOC_OBJECT_NOT_FOUND", "Uploaded object not found") from exc
             raise
         return ObjectStat(size=int(info.size or 0), etag=info.etag)
+
+    def put(self, object_key: str, data: bytes, *, content_type: str | None = None) -> None:
+        from io import BytesIO
+
+        self.client.put_object(
+            self._bucket,
+            object_key,
+            BytesIO(data),
+            length=len(data),
+            content_type=content_type or "application/octet-stream",
+        )
+
+    def read(self, object_key: str, *, max_bytes: int | None = None) -> bytes:
+        try:
+            response = self.client.get_object(self._bucket, object_key)
+        except self._s3_error as exc:
+            if getattr(exc, "code", None) in {"NoSuchKey", "NoSuchObject", "NotFound"}:
+                raise ApiError(404, "DOC_OBJECT_NOT_FOUND", "Object not found") from exc
+            raise
+        try:
+            data = response.read(max_bytes + 1 if max_bytes is not None else None)
+        finally:
+            response.close()
+            response.release_conn()
+        if max_bytes is not None and len(data) > max_bytes:
+            raise ApiError(413, "OBJECT_TOO_LARGE", "Object is too large to read inline")
+        return data
 
     def remove(self, object_key: str) -> None:
         self.client.remove_object(self._bucket, object_key)
