@@ -1,4 +1,8 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+ChatSessionStatus = Literal["active", "archived"]
 
 
 class CreateSessionRequest(BaseModel):
@@ -21,6 +25,10 @@ class PinSessionRequest(BaseModel):
     isPinned: bool = True
 
 
+class ArchiveSessionRequest(BaseModel):
+    archived: bool = True
+
+
 class ResolvePermissionRequest(BaseModel):
     # Mirrors ngent POST /v1/permissions/{permissionId}: one of outcome/optionId is required.
     outcome: str | None = None
@@ -31,6 +39,7 @@ class ChatSession(BaseModel):
     id: str
     title: str | None = None
     knowledgeBaseIds: list[str] = Field(default_factory=list)
+    status: ChatSessionStatus = "active"
     isPinned: bool = False
     createdAt: str
     updatedAt: str

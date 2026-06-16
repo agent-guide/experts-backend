@@ -17,7 +17,8 @@ create table if not exists chat_sessions (
   is_pinned boolean not null default false,
   pinned_at timestamptz,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
 );
 
 create index if not exists idx_chat_sessions_tenant_user
@@ -28,6 +29,7 @@ create index if not exists idx_chat_sessions_tenant_user
 alter table chat_sessions add column if not exists agent_options jsonb not null default '{}'::jsonb;
 alter table chat_sessions add column if not exists summary text;
 alter table chat_sessions add column if not exists acp_session_id text;
+alter table chat_sessions add column if not exists deleted_at timestamptz;
 
 -- chat_messages was removed: turn-level conversation records now live in chat_turns (005), and
 -- ngent owns the fine-grained event stream.

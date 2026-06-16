@@ -51,28 +51,38 @@ class ChatRepository:
             self.connection,
             """
             select * from chat_sessions
-            where id = ? and tenant_id = ? and user_id = ?
+            where id = ? and tenant_id = ? and user_id = ? and deleted_at is null
             limit 1
             """,
             (session_id, tenant_id, user_id),
         )
 
-    def list_sessions(self, tenant_id: str, user_id: str) -> list[ChatSession]:
+    def get_session(self, tenant_id: str, user_id: str, session_id: str) -> ChatSession | None:
+        row = self.get_session_row(tenant_id, user_id, session_id)
+        return _map_session(row) if row is not None else None
+
+    def list_sessions(
+        self, tenant_id: str, user_id: str, status: str = "active"
+    ) -> list[ChatSession]:
         rows = fetch_all(
             self.connection,
             """
             select * from chat_sessions
-            where tenant_id = ? and user_id = ?
+            where tenant_id = ? and user_id = ? and status = ? and deleted_at is null
             order by is_pinned desc, pinned_at desc, updated_at desc
             """,
-            (tenant_id, user_id),
+            (tenant_id, user_id, status),
         )
         return [_map_session(row) for row in rows]
 
     def update_session_title(self, session_id: str, title: str, now: str) -> bool:
         cursor = execute(
             self.connection,
-            "update chat_sessions set title = ?, updated_at = ? where id = ?",
+            """
+            update chat_sessions
+            set title = ?, updated_at = ?
+            where id = ? and deleted_at is null
+            """,
             (title, now, session_id),
         )
         return rowcount(cursor) > 0
@@ -88,14 +98,38 @@ class ChatRepository:
     def set_session_pin(self, session_id: str, is_pinned: bool, pinned_at: str | None, now: str) -> bool:
         cursor = execute(
             self.connection,
-            "update chat_sessions set is_pinned = ?, pinned_at = ?, updated_at = ? where id = ?",
+            """
+            update chat_sessions
+            set is_pinned = ?, pinned_at = ?, updated_at = ?
+            where id = ? and deleted_at is null
+            """,
             (is_pinned, pinned_at, now, session_id),
         )
         return rowcount(cursor) > 0
 
-    def delete_session(self, session_id: str) -> None:
-        # chat_turns cascade via the session_id foreign key.
-        execute(self.connection, "delete from chat_sessions where id = ?", (session_id,))
+    def set_session_status(self, session_id: str, status: str, now: str) -> bool:
+        cursor = execute(
+            self.connection,
+            """
+            update chat_sessions
+            set status = ?, updated_at = ?
+            where id = ? and deleted_at is null
+            """,
+            (status, now, session_id),
+        )
+        return rowcount(cursor) > 0
+
+    def delete_session(self, session_id: str, now: str) -> bool:
+        cursor = execute(
+            self.connection,
+            """
+            update chat_sessions
+            set deleted_at = ?, updated_at = ?
+            where id = ? and deleted_at is null
+            """,
+            (now, now, session_id),
+        )
+        return rowcount(cursor) > 0
 
     # --- Turns ----------------------------------------------------------------
 
@@ -161,7 +195,13 @@ class ChatRepository:
     def get_turn_owner(self, turn_id: str) -> dict[str, Any] | None:
         return fetch_one(
             self.connection,
-            "select id, session_id, tenant_id, user_id, status from chat_turns where id = ? limit 1",
+            """
+            select t.id, t.session_id, t.tenant_id, t.user_id, t.status
+            from chat_turns t
+            join chat_sessions s on s.id = t.session_id
+            where t.id = ? and s.deleted_at is null
+            limit 1
+            """,
             (turn_id,),
         )
 
@@ -206,6 +246,7 @@ def _map_session(row: dict[str, Any]) -> ChatSession:
         id=str(row["id"]),
         title=str(row["title"]) if row.get("title") is not None else None,
         knowledgeBaseIds=_json_list(row.get("knowledge_base_ids")),
+        status=str(row.get("status", "active")),
         isPinned=bool(row.get("is_pinned")),
         createdAt=str(row["created_at"]),
         updatedAt=str(row["updated_at"]),
