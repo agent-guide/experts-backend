@@ -106,6 +106,7 @@ OPENAPI_OPERATION_SUMMARIES = {
     ("GET", "/api/v1/chat/sessions/{session_id}/messages"): "List chat messages",
     ("PATCH", "/api/v1/chat/sessions/{session_id}/title"): "Rename a chat session",
     ("PATCH", "/api/v1/chat/sessions/{session_id}/pin"): "Pin or unpin a chat session",
+    ("PATCH", "/api/v1/chat/sessions/{session_id}/archive"): "Archive or unarchive a chat session",
     ("POST", "/api/v1/chat/sessions/{session_id}/turns"): "Create and stream a chat turn",
     ("POST", "/api/v1/chat/turns/{turn_id}/cancel"): "Cancel a chat turn",
     ("GET", "/api/v1/chat/turns/{turn_id}/events"): "Stream chat turn events",

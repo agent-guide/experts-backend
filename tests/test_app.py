@@ -3172,6 +3172,165 @@ def test_chat_acp_auto_title_from_admin_session_list(tmp_path: Path) -> None:
         assert len(fake_admin.list_calls) == calls_before  # skipped while the title is non-empty
 
 
+def test_chat_sessions_can_be_listed_by_archive_status(tmp_path: Path) -> None:
+    database_path = tmp_path / "chat_archive.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+        ngent_base_url="http://ngent.test",
+        ngent_default_cwd=str(tmp_path / "ngent-workspace"),
+    )
+    fake_ngent = FakeNgentClient()
+    test_app = create_app(settings)
+    test_app.dependency_overrides[get_ngent_client] = lambda: fake_ngent
+
+    with TestClient(test_app) as client:
+        _seed_tenant(settings)
+        _seed_tenant_user(
+            settings,
+            "tenant_user",
+            "tenant@example.com",
+            "Tenant User",
+            "tenant-secret",
+            "member",
+        )
+        login = client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "tenant@example.com",
+                "password": "tenant-secret",
+                "tenantId": "tenant_default",
+            },
+        )
+        assert login.status_code == 200
+        headers = {
+            "Authorization": f"Bearer {login.json()['accessToken']}",
+            "x-tenant-id": "tenant_default",
+        }
+
+        created = client.post(
+            "/api/v1/chat/sessions",
+            headers=headers,
+            json={"title": "Archive Test"},
+        )
+        assert created.status_code == 201
+        session_id = created.json()["id"]
+        assert created.json()["status"] == "active"
+
+        archived = client.patch(
+            f"/api/v1/chat/sessions/{session_id}/archive",
+            headers=headers,
+            json={"archived": True},
+        )
+        assert archived.status_code == 200
+        assert archived.json()["status"] == "archived"
+
+        active_list = client.get("/api/v1/chat/sessions", headers=headers)
+        assert active_list.status_code == 200
+        assert active_list.json()["items"] == []
+
+        archived_list = client.get(
+            "/api/v1/chat/sessions",
+            headers=headers,
+            params={"status": "archived"},
+        )
+        assert archived_list.status_code == 200
+        assert [item["id"] for item in archived_list.json()["items"]] == [session_id]
+
+        restored = client.patch(
+            f"/api/v1/chat/sessions/{session_id}/archive",
+            headers=headers,
+            json={"archived": False},
+        )
+        assert restored.status_code == 200
+        assert restored.json()["status"] == "active"
+
+        active_list = client.get("/api/v1/chat/sessions", headers=headers)
+        assert active_list.status_code == 200
+        assert [item["id"] for item in active_list.json()["items"]] == [session_id]
+
+
+def test_chat_session_delete_is_soft_delete(tmp_path: Path) -> None:
+    database_path = tmp_path / "chat_soft_delete.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+        ngent_base_url="http://ngent.test",
+        ngent_default_cwd=str(tmp_path / "ngent-workspace"),
+    )
+    fake_ngent = FakeNgentClient()
+    test_app = create_app(settings)
+    test_app.dependency_overrides[get_ngent_client] = lambda: fake_ngent
+
+    with TestClient(test_app) as client:
+        _seed_tenant(settings)
+        _seed_tenant_user(
+            settings,
+            "tenant_user",
+            "tenant@example.com",
+            "Tenant User",
+            "tenant-secret",
+            "member",
+        )
+        login = client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "tenant@example.com",
+                "password": "tenant-secret",
+                "tenantId": "tenant_default",
+            },
+        )
+        assert login.status_code == 200
+        headers = {
+            "Authorization": f"Bearer {login.json()['accessToken']}",
+            "x-tenant-id": "tenant_default",
+        }
+
+        created = client.post(
+            "/api/v1/chat/sessions",
+            headers=headers,
+            json={"title": "Soft Delete Test"},
+        )
+        assert created.status_code == 201
+        session_id = created.json()["id"]
+
+        turn = client.post(
+            f"/api/v1/chat/sessions/{session_id}/turns",
+            headers=headers,
+            json={"question": "hello"},
+        )
+        assert turn.status_code == 200
+
+        deleted = client.delete(f"/api/v1/chat/sessions/{session_id}", headers=headers)
+        assert deleted.status_code == 200
+        assert deleted.json() == {"id": session_id, "status": "deleted"}
+
+        listed = client.get("/api/v1/chat/sessions", headers=headers)
+        assert listed.status_code == 200
+        assert listed.json()["items"] == []
+        assert client.get(f"/api/v1/chat/sessions/{session_id}", headers=headers).status_code == 404
+        assert (
+            client.get(f"/api/v1/chat/sessions/{session_id}/messages", headers=headers).status_code
+            == 404
+        )
+
+    with open_database_connection(settings) as connection:
+        session = connection.execute(
+            "select deleted_at from chat_sessions where id = ?",
+            (session_id,),
+        ).fetchone()
+        turns = connection.execute(
+            "select count(*) as count from chat_turns where session_id = ?",
+            (session_id,),
+        ).fetchone()
+
+    assert session is not None
+    assert session["deleted_at"] is not None
+    assert turns["count"] == 1
+
+
 def test_ngent_preserves_remote_posix_cwd() -> None:
     client = NgentClient(Settings(ngent_default_cwd="/usr/local/ngent-workspace"))
 
@@ -3370,6 +3529,7 @@ class FakeNgentClient:
     def __init__(self) -> None:
         self.default_agent = "codex"
         self.default_cwd = "/tmp/ngent"
+        self.request_calls: list[dict] = []
         self.stream_calls: list[dict] = []
 
     def prepare_cwd(self, tenant_id: str | None = None) -> str:
@@ -3378,6 +3538,17 @@ class FakeNgentClient:
     async def request(
         self, method: str, path: str, *, tenant_id: str | None = None, **kwargs
     ) -> dict:
+        self.request_calls.append(
+            {
+                "method": method,
+                "path": path,
+                "tenant_id": tenant_id,
+                "json": kwargs.get("json"),
+            }
+        )
+        if method == "DELETE" and path.startswith("/v1/threads/"):
+            assert tenant_id == "tenant_default"
+            return {}
         assert method == "POST"
         assert path == "/v1/threads"
         assert tenant_id == "tenant_default"

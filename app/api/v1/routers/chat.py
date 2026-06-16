@@ -16,6 +16,7 @@ from app.db import DatabaseConnection
 from app.db import open_database_connection
 from app.domain.auth import Principal
 from app.domain.chat import (
+    ArchiveSessionRequest,
     ChatTurnRequest,
     CreateSessionRequest,
     PinSessionRequest,
@@ -67,10 +68,11 @@ async def create_session(
 
 @router.get("/sessions")
 async def list_sessions(
+    status: str = Query(default="active", pattern="^(active|archived)$"),
     principal: Principal = Depends(require_tenant_permission("chat:ask")),
     service: ChatService = Depends(get_chat_service),
 ) -> dict:
-    return {"items": [s.model_dump() for s in service.list_sessions(principal)]}
+    return {"items": [s.model_dump() for s in service.list_sessions(principal, status)]}
 
 
 @router.get("/sessions/{session_id}")
@@ -130,6 +132,16 @@ async def pin_session(
     service: ChatService = Depends(get_chat_service),
 ) -> dict:
     return service.pin_session(principal, session_id, body.isPinned).model_dump()
+
+
+@router.patch("/sessions/{session_id}/archive")
+def archive_session(
+    session_id: str,
+    body: ArchiveSessionRequest,
+    principal: Principal = Depends(require_tenant_permission("chat:ask")),
+    service: ChatService = Depends(get_chat_service),
+) -> dict:
+    return service.archive_session(principal, session_id, body.archived).model_dump()
 
 
 # --- Turns --------------------------------------------------------------------

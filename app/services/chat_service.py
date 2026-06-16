@@ -13,6 +13,7 @@ from app.db import DatabaseConnection
 from app.domain.auth import Principal
 from app.domain.chat import (
     ChatSession,
+    ChatSessionStatus,
     ChatTurnRequest,
     CreateSessionRequest,
     ResolvePermissionRequest,
@@ -100,19 +101,19 @@ class ChatService:
             id=thread_id,
             title=request.title,
             knowledgeBaseIds=request.knowledgeBaseIds,
+            status="active",
             isPinned=False,
             createdAt=now,
             updatedAt=now,
         )
 
-    def list_sessions(self, principal: Principal) -> list[ChatSession]:
-        return self.repo.list_sessions(str(principal.active_tenant_id), principal.user_id)
+    def list_sessions(
+        self, principal: Principal, status: ChatSessionStatus = "active"
+    ) -> list[ChatSession]:
+        return self.repo.list_sessions(str(principal.active_tenant_id), principal.user_id, status)
 
     def get_session(self, principal: Principal, session_id: str) -> ChatSession:
-        self._require_session(principal, session_id)
-        # Re-read through list mapping for a consistent shape.
-        sessions = {s.id: s for s in self.repo.list_sessions(str(principal.active_tenant_id), principal.user_id)}
-        session = sessions.get(session_id)
+        session = self.repo.get_session(str(principal.active_tenant_id), principal.user_id, session_id)
         if session is None:
             raise _session_not_found()
         return session
@@ -142,8 +143,18 @@ class ChatService:
         self.connection.commit()
         return self.get_session(principal, session_id)
 
+    def archive_session(
+        self, principal: Principal, session_id: str, archived: bool
+    ) -> ChatSession:
+        self._require_session(principal, session_id)
+        now = _now_iso()
+        self.repo.set_session_status(session_id, "archived" if archived else "active", now)
+        self.connection.commit()
+        return self.get_session(principal, session_id)
+
     async def delete_session(self, principal: Principal, session_id: str) -> None:
         self._require_session(principal, session_id)
+
         # The ACP data plane has no thread-delete endpoint (sessions are evicted via the admin
         # plane); the local store is authoritative, so drop our record either way.
         if self.backend != "acp":
@@ -154,7 +165,7 @@ class ChatService:
             except ApiError:
                 # Local store is authoritative; drop our record even if ngent already lost it.
                 pass
-        self.repo.delete_session(session_id)
+        self.repo.delete_session(session_id, _now_iso())
         self.connection.commit()
 
     def list_messages(self, principal: Principal, session_id: str) -> list[dict]:
