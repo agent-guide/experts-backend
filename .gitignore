@@ -11,6 +11,7 @@ __pycache__/
 # Environment files (secrets)
 .env
 .env.local
+.env.remote
 
 # Local data / databases
 .data/
@@ -23,3 +24,5 @@ data/
 
 # ngent workspace
 ngent-workspace/
+
+docs_my/

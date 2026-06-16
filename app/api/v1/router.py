@@ -10,6 +10,7 @@ from app.api.v1.routers import (
     expert_market,
     experts,
     knowledge_bases,
+    library,
     models,
     ops,
     plan_market,
@@ -50,6 +51,7 @@ api_router.include_router(rbac.router, prefix="/rbac", tags=["rbac"])
 api_router.include_router(models.router, prefix="/models", tags=["models"])
 api_router.include_router(ops.router, prefix="/ops", tags=["ops"])
 api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
+api_router.include_router(library.router, prefix="/library", tags=["library"])
 api_router.include_router(knowledge_bases.router, prefix="/knowledge-bases", tags=["knowledge-bases"])
 # Documents and builds are nested under a knowledge base. There are no top-level /documents or
 # /uploads routes any more (see KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section 4).
