@@ -5,7 +5,6 @@ from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from app.clients.acp_admin import AcpAdminClient
 from app.clients.acp_gateway import AcpGatewayClient
 from app.clients.ngent import NgentClient
 from app.core.errors import ApiError
@@ -45,13 +44,11 @@ class ChatService:
         backend: str = "ngent",
         ngent: NgentClient | None = None,
         acp: AcpGatewayClient | None = None,
-        acp_admin: AcpAdminClient | None = None,
     ) -> None:
         self.connection = connection
         self.backend = backend
         self.ngent = ngent
         self.acp = acp
-        self.acp_admin = acp_admin
         self.repo = ChatRepository(connection)
 
     def _require_acp(self) -> AcpGatewayClient:
@@ -176,16 +173,20 @@ class ChatService:
         """Replay a session's conversation history.
 
         For the ACP backend the agent-side transcript (coalesced user/assistant/reasoning
-        messages) is loaded from the gateway admin plane when a session has been materialized and
-        the admin plane is configured; otherwise it falls back to the durable local turn records.
-        ngent has no session-transcript admin endpoint, so it always uses the local records. The
-        shape is uniform: {sessionId, messages: [{role, text}], source: "agent" | "local"}.
+        messages) is loaded from the gateway's route-scoped sessions API when a session has been
+        materialized; otherwise it falls back to the durable local turn records. ngent has no
+        session-transcript endpoint, so it always uses the local records. The shape is uniform:
+        {sessionId, messages: [{role, text}], source: "agent" | "local"}.
         """
         row = self._require_session(principal, session_id)
         acp_session_id = str(row["acp_session_id"]) if row.get("acp_session_id") else None
-        if self.backend == "acp" and acp_session_id and self.acp_admin is not None:
-            cwd = self._require_acp().prepare_cwd(str(principal.active_tenant_id))
-            data = await self.acp_admin.get_transcript(session_id=acp_session_id, cwd=cwd)
+        if self.backend == "acp" and acp_session_id and self.acp is not None:
+            acp = self._require_acp()
+            tenant_id = str(principal.active_tenant_id)
+            cwd = acp.prepare_cwd(tenant_id)
+            data = await acp.get_transcript(
+                session_id=acp_session_id, tenant_id=tenant_id, cwd=cwd
+            )
             messages = list((data or {}).get("messages") or [])
             return {"sessionId": session_id, "messages": messages, "source": "agent"}
         return {"sessionId": session_id, "messages": self._local_transcript(session_id), "source": "local"}
@@ -394,8 +395,8 @@ class ChatService:
                     elif current_event == "session_info":
                         # Agents that push session_info_update (e.g. opencode) surface the title
                         # live here; the gateway wraps the raw ACP update under `data`, so it is
-                        # nested. codex-acp does NOT emit it -- that title comes from the admin
-                        # session/list reconciliation after the turn (below).
+                        # nested. codex-acp does NOT emit it -- that title comes from the
+                        # route-scoped session/list reconciliation after the turn (below).
                         title = str(((data.get("data") or {}).get("title")) or "").strip()
                         if title and not local_title:
                             self.repo.update_session_title(session_id, title, _now_iso())
@@ -407,16 +408,11 @@ class ChatService:
 
         self._finalize(turn_id, parts, stop_reason, error_message)
         # codex-acp never emits session_info_update, so the live event above never fires for it;
-        # its title is only exposed via the admin session/list (codex auto-derives it from the
-        # first user message). Pull it once the turn has bound an acp_session_id, filling only an
-        # empty local title so a manual rename is never clobbered. Best-effort: a missing/unhealthy
-        # admin plane must never fail the turn.
-        if (
-            error_message is None
-            and not local_title
-            and bound_session_id
-            and self.acp_admin is not None
-        ):
+        # its title is only exposed via the route-scoped session list (codex auto-derives it from
+        # the first user message). Pull it once the turn has bound an acp_session_id, filling only
+        # an empty local title so a manual rename is never clobbered. Best-effort: an unhealthy
+        # gateway must never fail the turn.
+        if error_message is None and not local_title and bound_session_id:
             title = await self._fetch_acp_title(str(tenant_id), bound_session_id, cwd)
             if title:
                 self.repo.update_session_title(session_id, title, _now_iso())
@@ -429,16 +425,17 @@ class ChatService:
     async def _fetch_acp_title(
         self, tenant_id: str, acp_session_id: str, cwd: str
     ) -> str | None:
-        """Look up a session's auto-derived title via the admin session/list.
+        """Look up a session's auto-derived title via the route-scoped session list.
 
         Keyed by the agent-assigned ACP session id (chat_sessions.acp_session_id), not the local
         thread id. Pages the cwd-filtered list until the id is found; bounded so an absent id can
-        never loop forever. Returns None (never raises) if the admin plane is unhealthy.
+        never loop forever. Returns None (never raises) if the gateway is unhealthy.
         """
+        acp = self._require_acp()
         cursor: str | None = None
         for _ in range(20):
             try:
-                data = await self.acp_admin.list_sessions(cwd=cwd, cursor=cursor)
+                data = await acp.list_sessions(tenant_id=tenant_id, cwd=cwd, cursor=cursor)
             except ApiError:
                 return None
             for s in (data or {}).get("sessions") or []:

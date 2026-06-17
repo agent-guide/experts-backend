@@ -1,8 +1,8 @@
 """Smoke-test the agent-gateway ACP backend against a live gateway.
 
-Drives the real AcpGatewayClient / AcpAdminClient (the same code the chat backend uses), so a
-green run validates the actual integration, not a re-implementation. Connection config is read
-from the environment / .env (EXPERT_NEXT_ACP_*) and can be overridden per flag.
+Drives the real AcpGatewayClient (the same code the chat backend uses), so a green run validates
+the actual integration, not a re-implementation. Connection config is read from the environment /
+.env (EXPERT_NEXT_ACP_*) and can be overridden per flag.
 
 Examples:
     # Run one turn against the data plane configured in .env
@@ -11,7 +11,7 @@ Examples:
     # Point at an ad-hoc gateway, run a turn, then a resume turn on the same session
     python scripts/acp_smoke.py --base-url http://localhost:8080 --prefix /acp --resume
 
-    # Also exercise the admin plane (login -> list sessions -> transcript)
+    # Also exercise the route-scoped history APIs (list sessions -> transcript)
     python scripts/acp_smoke.py --transcript --list-sessions
 """
 
@@ -29,8 +29,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from app.clients.acp_admin import AcpAdminClient  # noqa: E402  (after sys.path bootstrap)
-from app.clients.acp_gateway import AcpGatewayClient  # noqa: E402
+from app.clients.acp_gateway import AcpGatewayClient  # noqa: E402  (after sys.path bootstrap)
 from app.core.config import Settings  # noqa: E402
 from app.core.errors import ApiError  # noqa: E402
 
@@ -58,10 +57,6 @@ def _settings_from_args(args: argparse.Namespace) -> Settings:
         "acp_auth_token": args.token,
         "acp_default_model": args.model,
         "acp_default_cwd": args.cwd,
-        "acp_admin_base_url": args.admin_base_url,
-        "acp_admin_username": args.admin_user,
-        "acp_admin_password": args.admin_password,
-        "acp_service_id": args.service_id,
     }
     return Settings(**{k: v for k, v in overrides.items() if v is not None})
 
@@ -160,16 +155,18 @@ def _handle_event(
         print(f"\n[{event}] {preview}")
 
 
-async def _run_admin(admin: AcpAdminClient, *, cwd: str | None, session_id: str | None, list_sessions: bool) -> None:
-    print("\n=== admin plane ===")
+async def _run_history(
+    acp: AcpGatewayClient, *, tenant_id: str | None, cwd: str | None, session_id: str | None, list_sessions: bool
+) -> None:
+    print("\n=== route-scoped history ===")
     if list_sessions:
-        sessions = await admin.list_sessions(cwd=cwd)
+        sessions = await acp.list_sessions(tenant_id=tenant_id, cwd=cwd)
         items = (sessions or {}).get("sessions") or []
         print(f"[list_sessions] {len(items)} session(s) under cwd={cwd or '(service default)'}")
         for item in items[:10]:
             print(f"  - {item.get('session_id')} title={item.get('title')!r} updated_at={item.get('updated_at')}")
     if session_id:
-        transcript = await admin.get_transcript(session_id=session_id, cwd=cwd)
+        transcript = await acp.get_transcript(session_id=session_id, tenant_id=tenant_id, cwd=cwd)
         messages = (transcript or {}).get("messages") or []
         print(f"[transcript] session_id={session_id} {len(messages)} message(s)")
         for message in messages:
@@ -215,8 +212,13 @@ async def _main(args: argparse.Namespace) -> int:
             )
 
         if args.transcript or args.list_sessions:
-            admin = AcpAdminClient(settings)
-            await _run_admin(admin, cwd=cwd, session_id=result.session_id, list_sessions=args.list_sessions)
+            await _run_history(
+                acp,
+                tenant_id=args.tenant_id,
+                cwd=cwd,
+                session_id=result.session_id,
+                list_sessions=args.list_sessions,
+            )
     except ApiError as exc:
         print(f"\nERROR: {exc.code}: {exc.message} details={exc.details}")
         return 1
@@ -232,8 +234,8 @@ def main() -> None:
     parser.add_argument("--tenant-id", default=None, help="X-Tenant-Id header (optional).")
     parser.add_argument("--resume", action="store_true", help="Run a second turn resuming the captured session.")
     parser.add_argument("--resume-input", default="And what did I just ask?", help="Prompt for the resume turn.")
-    parser.add_argument("--transcript", action="store_true", help="Load the session transcript from the admin plane.")
-    parser.add_argument("--list-sessions", action="store_true", help="List ACP sessions from the admin plane.")
+    parser.add_argument("--transcript", action="store_true", help="Load the session transcript from the route API.")
+    parser.add_argument("--list-sessions", action="store_true", help="List ACP sessions from the route API.")
     parser.add_argument(
         "--auto-permission",
         default=None,
@@ -251,10 +253,6 @@ def main() -> None:
     parser.add_argument("--token", default=None, help="Override EXPERT_NEXT_ACP_AUTH_TOKEN.")
     parser.add_argument("--model", default=None, help="Override EXPERT_NEXT_ACP_DEFAULT_MODEL.")
     parser.add_argument("--cwd", default=None, help="Override EXPERT_NEXT_ACP_DEFAULT_CWD.")
-    parser.add_argument("--admin-base-url", default=None, help="Override EXPERT_NEXT_ACP_ADMIN_BASE_URL.")
-    parser.add_argument("--admin-user", default=None, help="Override EXPERT_NEXT_ACP_ADMIN_USERNAME.")
-    parser.add_argument("--admin-password", default=None, help="Override EXPERT_NEXT_ACP_ADMIN_PASSWORD.")
-    parser.add_argument("--service-id", default=None, help="Override EXPERT_NEXT_ACP_SERVICE_ID.")
     args = parser.parse_args()
 
     raise SystemExit(asyncio.run(_main(args)))

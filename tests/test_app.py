@@ -7,7 +7,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.deps import (
-    get_acp_admin_client,
     get_acp_gateway_client,
     get_ngent_client,
     get_skill_storage,
@@ -2927,7 +2926,7 @@ def test_chat_acp_backend_creates_locally_and_translates_turn(tmp_path: Path) ->
         assert fake_acp.turn_calls[1]["session_id"] == "acp_sess_1"
 
 
-def test_chat_acp_transcript_replays_from_admin_plane(tmp_path: Path) -> None:
+def test_chat_acp_transcript_replays_from_route_api(tmp_path: Path) -> None:
     database_path = tmp_path / "chat_acp_transcript.sqlite3"
     settings = Settings(
         database_url=f"sqlite:///{database_path}",
@@ -2935,17 +2934,11 @@ def test_chat_acp_transcript_replays_from_admin_plane(tmp_path: Path) -> None:
         jwt_secret="test-secret-with-at-least-32-bytes",
         chat_backend="acp",
         acp_gateway_base_url="http://gateway.test",
-        acp_admin_base_url="http://gateway.test:8019",
-        acp_admin_username="admin",
-        acp_admin_password="secret",
-        acp_service_id="acp_svc",
         acp_default_cwd=str(tmp_path / "acp-workspace"),
     )
     fake_acp = FakeAcpGatewayClient()
-    fake_admin = FakeAcpAdminClient()
     test_app = create_app(settings)
     test_app.dependency_overrides[get_acp_gateway_client] = lambda: fake_acp
-    test_app.dependency_overrides[get_acp_admin_client] = lambda: fake_admin
 
     with TestClient(test_app) as client:
         _seed_tenant(settings)
@@ -2984,9 +2977,9 @@ def test_chat_acp_transcript_replays_from_admin_plane(tmp_path: Path) -> None:
             {"role": "user", "text": "hello"},
             {"role": "assistant", "text": "ok"},
         ]
-        # The admin plane is addressed by the agent session id + the tenant cwd, not the thread id.
-        assert fake_admin.transcript_calls[-1]["session_id"] == "acp_sess_1"
-        assert fake_admin.transcript_calls[-1]["cwd"] == fake_acp.default_cwd
+        # The route API is addressed by the agent session id + the tenant cwd, not the thread id.
+        assert fake_acp.transcript_calls[-1]["session_id"] == "acp_sess_1"
+        assert fake_acp.transcript_calls[-1]["cwd"] == fake_acp.default_cwd
 
 
 def _login_tenant_member(client: TestClient, settings: Settings) -> dict[str, str]:
@@ -3064,7 +3057,7 @@ def test_chat_ngent_auto_title_fills_only_when_empty(tmp_path: Path) -> None:
 
 def test_chat_acp_auto_title_via_session_info_event(tmp_path: Path) -> None:
     # The live `session_info` SSE path, for agents like opencode that DO emit session_info_update.
-    # No admin plane is configured, so the title can only come from the stream event.
+    # The session list returns no title for this fake, so the title can only come from the stream event.
     database_path = tmp_path / "chat_acp_title.sqlite3"
     settings = Settings(
         database_url=f"sqlite:///{database_path}",
@@ -3115,10 +3108,10 @@ def test_chat_acp_auto_title_via_session_info_event(tmp_path: Path) -> None:
         )
 
 
-def test_chat_acp_auto_title_from_admin_session_list(tmp_path: Path) -> None:
+def test_chat_acp_auto_title_from_route_session_list(tmp_path: Path) -> None:
     # The codex-acp path: the gateway emits no session_info, so the title is reconciled from the
-    # admin session/list after the turn, keyed by the bound acp_session_id.
-    database_path = tmp_path / "chat_acp_title_admin.sqlite3"
+    # route-scoped session list after the turn, keyed by the bound acp_session_id.
+    database_path = tmp_path / "chat_acp_title_list.sqlite3"
     settings = Settings(
         database_url=f"sqlite:///{database_path}",
         default_tenant_id="tenant_default",
@@ -3126,17 +3119,11 @@ def test_chat_acp_auto_title_from_admin_session_list(tmp_path: Path) -> None:
         chat_backend="acp",
         acp_gateway_base_url="http://gateway.test",
         acp_route_prefix="/acp",
-        acp_admin_base_url="http://gateway.test:8019",
-        acp_admin_username="admin",
-        acp_admin_password="secret",
-        acp_service_id="acp_svc",
         acp_default_cwd=str(tmp_path / "acp-workspace"),
     )
-    fake_acp = FakeAcpGatewayClient()  # base fake emits session/delta/done, no session_info
-    fake_admin = FakeAcpAdminTitleClient()
+    fake_acp = FakeAcpTitleListGatewayClient()  # streams session/delta/done, title via session/list
     test_app = create_app(settings)
     test_app.dependency_overrides[get_acp_gateway_client] = lambda: fake_acp
-    test_app.dependency_overrides[get_acp_admin_client] = lambda: fake_admin
 
     with TestClient(test_app) as client:
         headers = _login_tenant_member(client, settings)
@@ -3152,12 +3139,12 @@ def test_chat_acp_auto_title_from_admin_session_list(tmp_path: Path) -> None:
             client.get(f"/api/v1/chat/sessions/{session_id}", headers=headers).json()["title"]
             == "Codex Title"
         )
-        assert fake_admin.list_calls  # admin plane was consulted
+        assert fake_acp.list_calls  # the route session list was consulted
         # Lookup is keyed by the agent session id + tenant cwd, not the local thread id.
-        assert fake_admin.list_calls[-1]["cwd"] == fake_acp.default_cwd
+        assert fake_acp.list_calls[-1]["cwd"] == fake_acp.default_cwd
 
-        # Preset title: reconciliation is short-circuited -- no admin lookup, no clobber.
-        calls_before = len(fake_admin.list_calls)
+        # Preset title: reconciliation is short-circuited -- no session list lookup, no clobber.
+        calls_before = len(fake_acp.list_calls)
         preset_id = client.post(
             "/api/v1/chat/sessions", headers=headers, json={"title": "Preset"}
         ).json()["id"]
@@ -3169,7 +3156,7 @@ def test_chat_acp_auto_title_from_admin_session_list(tmp_path: Path) -> None:
             client.get(f"/api/v1/chat/sessions/{preset_id}", headers=headers).json()["title"]
             == "Preset"
         )
-        assert len(fake_admin.list_calls) == calls_before  # skipped while the title is non-empty
+        assert len(fake_acp.list_calls) == calls_before  # skipped while the title is non-empty
 
 
 def test_chat_sessions_can_be_listed_by_archive_status(tmp_path: Path) -> None:
@@ -3583,9 +3570,31 @@ class FakeAcpGatewayClient:
         self.default_model = "claude-opus"
         self.default_cwd = "/tmp/acp"
         self.turn_calls: list[dict] = []
+        self.transcript_calls: list[dict] = []
+        self.list_calls: list[dict] = []
 
     def prepare_cwd(self, tenant_id: str | None = None) -> str:
         return self.default_cwd
+
+    async def get_transcript(
+        self, *, session_id: str, tenant_id: str | None = None, cwd: str | None = None
+    ) -> dict:
+        self.transcript_calls.append(
+            {"session_id": session_id, "tenant_id": tenant_id, "cwd": cwd}
+        )
+        return {
+            "session_id": session_id,
+            "messages": [
+                {"role": "user", "text": "hello"},
+                {"role": "assistant", "text": "ok"},
+            ],
+        }
+
+    async def list_sessions(
+        self, *, tenant_id: str | None = None, cwd: str | None = None, cursor: str | None = None
+    ) -> dict:
+        self.list_calls.append({"tenant_id": tenant_id, "cwd": cwd, "cursor": cursor})
+        return {"sessions": [], "next_cursor": ""}
 
     def stream_turn(
         self,
@@ -3622,24 +3631,6 @@ class FakeAcpGatewayClient:
             yield ""
 
         return gen()
-
-
-class FakeAcpAdminClient:
-    def __init__(self) -> None:
-        self.transcript_calls: list[dict] = []
-
-    async def get_transcript(self, *, session_id: str, cwd: str | None = None) -> dict:
-        self.transcript_calls.append({"session_id": session_id, "cwd": cwd})
-        return {
-            "session_id": session_id,
-            "messages": [
-                {"role": "user", "text": "hello"},
-                {"role": "assistant", "text": "ok"},
-            ],
-        }
-
-    async def list_sessions(self, *, cwd: str | None = None, cursor: str | None = None) -> dict:
-        return {"sessions": [], "next_cursor": ""}
 
 
 class FakeNgentTitleClient(FakeNgentClient):
@@ -3720,25 +3711,22 @@ class FakeAcpTitleGatewayClient(FakeAcpGatewayClient):
         return gen()
 
 
-class FakeAcpAdminTitleClient:
-    """Admin fake whose session/list carries the codex-derived title.
+class FakeAcpTitleListGatewayClient(FakeAcpGatewayClient):
+    """ACP gateway fake whose route-scoped session/list carries the codex-derived title.
 
-    codex-acp never emits `session_info_update`, so its title is only reachable through the admin
-    session/list, keyed by the agent-assigned ACP session id.
+    codex-acp never emits `session_info_update`, so its title is only reachable through the
+    route-scoped session list, keyed by the agent-assigned ACP session id. The turn stream from
+    the base fake emits session/delta/done with no session_info.
     """
 
-    def __init__(self) -> None:
-        self.list_calls: list[dict] = []
-
-    async def list_sessions(self, *, cwd: str | None = None, cursor: str | None = None) -> dict:
-        self.list_calls.append({"cwd": cwd, "cursor": cursor})
+    async def list_sessions(
+        self, *, tenant_id: str | None = None, cwd: str | None = None, cursor: str | None = None
+    ) -> dict:
+        self.list_calls.append({"tenant_id": tenant_id, "cwd": cwd, "cursor": cursor})
         return {
             "sessions": [{"session_id": "acp_sess_1", "title": "Codex Title", "cwd": cwd}],
             "next_cursor": "",
         }
-
-    async def get_transcript(self, *, session_id: str, cwd: str | None = None) -> dict:
-        return {"session_id": session_id, "messages": []}
 
 
 def _skill_zip() -> BytesIO:

@@ -2,13 +2,11 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import (
-    get_acp_admin_client,
     get_acp_gateway_client,
     get_database,
     get_ngent_client,
     require_tenant_permission,
 )
-from app.clients.acp_admin import AcpAdminClient
 from app.clients.acp_gateway import AcpGatewayClient
 from app.clients.ngent import NgentClient
 from app.core.config import Settings, get_settings
@@ -33,14 +31,12 @@ def build_chat_service(
     settings: Settings,
     ngent: NgentClient,
     acp: AcpGatewayClient,
-    acp_admin: AcpAdminClient,
 ) -> ChatService:
     return ChatService(
         connection,
         backend=settings.chat_backend,
         ngent=ngent,
         acp=acp,
-        acp_admin=acp_admin,
     )
 
 
@@ -49,9 +45,8 @@ def get_chat_service(
     settings: Settings = Depends(get_settings),
     ngent: NgentClient = Depends(get_ngent_client),
     acp: AcpGatewayClient = Depends(get_acp_gateway_client),
-    acp_admin: AcpAdminClient = Depends(get_acp_admin_client),
 ) -> ChatService:
-    return build_chat_service(connection, settings, ngent, acp, acp_admin)
+    return build_chat_service(connection, settings, ngent, acp)
 
 
 # --- Sessions -----------------------------------------------------------------
@@ -109,8 +104,8 @@ async def get_transcript(
     principal: Principal = Depends(require_tenant_permission("chat:ask")),
     service: ChatService = Depends(get_chat_service),
 ) -> dict:
-    # History replay: the agent-side transcript (ACP admin plane) when available, else the
-    # durable local turn records. Shape: {sessionId, messages: [{role, text}], source}.
+    # History replay: the agent-side transcript (ACP route-scoped sessions API) when available,
+    # else the durable local turn records. Shape: {sessionId, messages: [{role, text}], source}.
     return await service.get_transcript(principal, session_id)
 
 
@@ -155,14 +150,13 @@ async def create_turn(
     settings: Settings = Depends(get_settings),
     ngent: NgentClient = Depends(get_ngent_client),
     acp: AcpGatewayClient = Depends(get_acp_gateway_client),
-    acp_admin: AcpAdminClient = Depends(get_acp_admin_client),
 ) -> StreamingResponse:
     # The compute engine creates and streams a turn in one shot; the service forwards the SSE
     # stream to the caller while persisting the assembled turn record locally (translating ACP
     # events to the same public contract when the ACP backend is active).
     async def events():
         with open_database_connection(settings) as connection:
-            service = build_chat_service(connection, settings, ngent, acp, acp_admin)
+            service = build_chat_service(connection, settings, ngent, acp)
             async for line in service.stream_turn(principal, session_id, body):
                 yield line
 
