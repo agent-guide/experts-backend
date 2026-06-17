@@ -78,6 +78,19 @@ PageIndex / ngent / Codex are upstream/optional integrations, not the source of 
   `turn_started` (captures turnId → insert) / `message_delta` (assemble) / `turn_completed`
   (finalize). Client disconnect before completion can leave a turn `running` (known gap; reconcile
   on read later). Only the assembled turn is stored — no per-event log table yet.
+- **Auto session title**: persisted via `repo.update_session_title` and re-emitted to the caller
+  as a unified `session_title_updated` SSE frame. Fill-only-when-empty: written solely while the
+  local title is blank, so a user's manual rename (`PATCH /sessions/{id}/title`) is never
+  clobbered. Source differs per backend:
+  - ngent: rides the turn stream as a `session_info_update` event (title at `data.title`). Note
+    `GET /v1/threads/{id}` returns the manual `thread.title`, a *separate* field from this evolving
+    session title.
+  - ACP: **codex-acp does NOT emit `session_info_update`**, so the live `session_info` SSE event
+    never fires for it — codex's title is only on the admin `session/list`
+    (`GET /admin/acp/services/{id}/sessions` → `sessions[].title`, auto-derived from the first user
+    message). `_stream_turn_acp` reconciles it after the turn via `_fetch_acp_title` (admin plane
+    must be configured), matching `sessions[].session_id` to `chat_sessions.acp_session_id`. The
+    inline `session_info` branch is kept for agents that *do* emit it (e.g. opencode).
 - The turn request body is **`question` only**. ngent's turn API takes just the prompt
   (`{input, stream}`), so model / knowledge-base / retrieval options are not accepted and the
   `chat_turns` option columns are stored as defaults — do not re-add request fields without

@@ -202,7 +202,7 @@ class ChatService:
     async def _stream_turn_ngent(
         self, principal: Principal, session_id: str, request: ChatTurnRequest
     ) -> AsyncIterator[str]:
-        self._require_session(principal, session_id)
+        row = self._require_session(principal, session_id)
         tenant_id = principal.active_tenant_id
         payload = {
             "input": request.question,
@@ -216,9 +216,14 @@ class ChatService:
         parts: list[str] = []
         stop_reason: str | None = None
         error_message: str | None = None
+        # Auto session title: the agent's generated title rides the turn stream as a
+        # `session_info_update` event. Persist it only while the local title is still empty so a
+        # user's manual rename is never clobbered.
+        local_title = str(row.get("title") or "").strip()
+        pending_title: str | None = None
 
         def dispatch() -> None:
-            nonlocal turn_id, stop_reason, error_message
+            nonlocal turn_id, stop_reason, error_message, pending_title
             if not current_event:
                 return
             try:
@@ -255,6 +260,10 @@ class ChatService:
             elif current_event == "turn_completed":
                 reason = data.get("stopReason")
                 stop_reason = str(reason) if reason is not None else None
+            elif current_event == "session_info_update":
+                title = str(data.get("title") or "").strip()
+                if title:
+                    pending_title = title
 
         async for line in self.ngent.stream(
             "POST", f"/v1/threads/{session_id}/turns", tenant_id=tenant_id, json=payload
@@ -268,9 +277,23 @@ class ChatService:
                 current_event = None
                 data_line = ""
             yield f"{line}\n"
+            # Flush a captured title as its own frame, emitted after the blank line that
+            # terminates the upstream frame so SSE framing stays valid.
+            if pending_title is not None:
+                if not local_title:
+                    self.repo.update_session_title(session_id, pending_title, _now_iso())
+                    self.connection.commit()
+                    local_title = pending_title
+                    yield _sse("session_title_updated", {"title": pending_title})
+                pending_title = None
 
         # Tail flush in case the stream ends without a trailing blank line.
         dispatch()
+        if pending_title is not None and not local_title:
+            self.repo.update_session_title(session_id, pending_title, _now_iso())
+            self.connection.commit()
+            local_title = pending_title
+            yield _sse("session_title_updated", {"title": pending_title})
 
         if turn_id is not None:
             self._finalize(turn_id, parts, stop_reason, error_message)
@@ -309,6 +332,10 @@ class ChatService:
         bound_session_id = acp_session_id
         current_event: str | None = None
         data_line = ""
+        # Auto session title: the gateway replays the agent's title as a `session_info` event at
+        # turn start. Persist it only while the local title is still empty so a user's manual
+        # rename is never clobbered.
+        local_title = str(row.get("title") or "").strip()
 
         async for line in acp.stream_turn(
             thread_id=session_id,
@@ -353,12 +380,63 @@ class ChatService:
                     elif current_event == "done":
                         reason = data.get("stop_reason")
                         stop_reason = str(reason) if reason is not None else None
+                    elif current_event == "session_info":
+                        # Agents that push session_info_update (e.g. opencode) surface the title
+                        # live here; the gateway wraps the raw ACP update under `data`, so it is
+                        # nested. codex-acp does NOT emit it -- that title comes from the admin
+                        # session/list reconciliation after the turn (below).
+                        title = str(((data.get("data") or {}).get("title")) or "").strip()
+                        if title and not local_title:
+                            self.repo.update_session_title(session_id, title, _now_iso())
+                            self.connection.commit()
+                            local_title = title
+                            yield _sse("session_title_updated", {"title": title})
                 current_event = None
                 data_line = ""
 
         self._finalize(turn_id, parts, stop_reason, error_message)
+        # codex-acp never emits session_info_update, so the live event above never fires for it;
+        # its title is only exposed via the admin session/list (codex auto-derives it from the
+        # first user message). Pull it once the turn has bound an acp_session_id, filling only an
+        # empty local title so a manual rename is never clobbered. Best-effort: a missing/unhealthy
+        # admin plane must never fail the turn.
+        if (
+            error_message is None
+            and not local_title
+            and bound_session_id
+            and self.acp_admin is not None
+        ):
+            title = await self._fetch_acp_title(str(tenant_id), bound_session_id, cwd)
+            if title:
+                self.repo.update_session_title(session_id, title, _now_iso())
+                self.connection.commit()
+                local_title = title
+                yield _sse("session_title_updated", {"title": title})
         if error_message is None:
             yield _sse("turn_completed", {"stopReason": stop_reason})
+
+    async def _fetch_acp_title(
+        self, tenant_id: str, acp_session_id: str, cwd: str
+    ) -> str | None:
+        """Look up a session's auto-derived title via the admin session/list.
+
+        Keyed by the agent-assigned ACP session id (chat_sessions.acp_session_id), not the local
+        thread id. Pages the cwd-filtered list until the id is found; bounded so an absent id can
+        never loop forever. Returns None (never raises) if the admin plane is unhealthy.
+        """
+        cursor: str | None = None
+        for _ in range(20):
+            try:
+                data = await self.acp_admin.list_sessions(cwd=cwd, cursor=cursor)
+            except ApiError:
+                return None
+            for s in (data or {}).get("sessions") or []:
+                if str(s.get("session_id") or "") == acp_session_id:
+                    return str(s.get("title") or "").strip() or None
+            cursor = (data or {}).get("next_cursor") or ""
+            if not cursor:
+                return None
+        return None
 
     def _finalize(
         self,
