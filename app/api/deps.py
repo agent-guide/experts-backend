@@ -2,7 +2,6 @@ from collections.abc import Iterator
 
 from fastapi import Depends, Header
 
-from app.clients.acp_admin import AcpAdminClient
 from app.clients.acp_gateway import AcpGatewayClient
 from app.clients.ngent import NgentClient
 from app.clients.pageindex import PageIndexClient
@@ -30,10 +29,6 @@ def get_ngent_client(settings: Settings = Depends(get_settings)) -> NgentClient:
 
 def get_acp_gateway_client(settings: Settings = Depends(get_settings)) -> AcpGatewayClient:
     return AcpGatewayClient(settings)
-
-
-def get_acp_admin_client(settings: Settings = Depends(get_settings)) -> AcpAdminClient:
-    return AcpAdminClient(settings)
 
 
 def get_skill_storage(settings: Settings = Depends(get_settings)) -> SkillStorage:

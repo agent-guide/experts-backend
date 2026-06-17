@@ -47,7 +47,9 @@ class Settings(BaseSettings):
 
     # agent-gateway ACP data plane (alternative chat backend to ngent). The route
     # prefix is the gateway's external path prefix for the ACP route; the client
-    # posts to <prefix>/turn and <prefix>/permission. cwd handling mirrors ngent:
+    # posts to <prefix>/turn and <prefix>/permission and reads history from
+    # <prefix>/sessions and <prefix>/sessions/{id}/transcript (all route-scoped and
+    # authenticated by acp_auth_token, so no admin plane is needed). cwd handling mirrors ngent:
     # when acp_cwd_base is set each session's cwd is <base>/<tenant_id>, and it
     # must resolve under the ACP service's allowedRoots (shared filesystem).
     acp_gateway_base_url: str | None = None
@@ -57,13 +59,6 @@ class Settings(BaseSettings):
     acp_default_model: str | None = None
     acp_default_cwd: str = Field(default_factory=lambda: str(Path.cwd()))
     acp_cwd_base: str | None = None
-    # ACP admin plane (separate address from the data plane, default :8019). Used for history
-    # replay: list sessions and load a session transcript. Auth is a username/password login
-    # that mints an in-memory session token. acp_service_id is the gateway's ACP service id.
-    acp_admin_base_url: str | None = None
-    acp_admin_username: str | None = None
-    acp_admin_password: str | None = None
-    acp_service_id: str | None = None
 
     codex_home: str = Field(default_factory=lambda: str(Path.home() / ".codex"))
     codex_skills_dir: str | None = None

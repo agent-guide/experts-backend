@@ -86,11 +86,11 @@ PageIndex / ngent / Codex are upstream/optional integrations, not the source of 
     `GET /v1/threads/{id}` returns the manual `thread.title`, a *separate* field from this evolving
     session title.
   - ACP: **codex-acp does NOT emit `session_info_update`**, so the live `session_info` SSE event
-    never fires for it — codex's title is only on the admin `session/list`
-    (`GET /admin/acp/services/{id}/sessions` → `sessions[].title`, auto-derived from the first user
-    message). `_stream_turn_acp` reconciles it after the turn via `_fetch_acp_title` (admin plane
-    must be configured), matching `sessions[].session_id` to `chat_sessions.acp_session_id`. The
-    inline `session_info` branch is kept for agents that *do* emit it (e.g. opencode).
+    never fires for it — codex's title is only on the route-scoped `session/list`
+    (`GET {prefix}/sessions` → `sessions[].title`, auto-derived from the first user message).
+    `_stream_turn_acp` reconciles it after the turn via `_fetch_acp_title` (`AcpGatewayClient.list_sessions`),
+    matching `sessions[].session_id` to `chat_sessions.acp_session_id`. The inline `session_info`
+    branch is kept for agents that *do* emit it (e.g. opencode).
 - The turn request body is **`question` only**. ngent's turn API takes just the prompt
   (`{input, stream}`), so model / knowledge-base / retrieval options are not accepted and the
   `chat_turns` option columns are stored as defaults — do not re-add request fields without
@@ -105,8 +105,10 @@ PageIndex / ngent / Codex are upstream/optional integrations, not the source of 
 - `ChatService` is backend-agnostic; the local DB stays the source of truth either way. The
   router (`build_chat_service`) injects both clients and the configured backend. ngent is the
   default and unchanged; `acp` targets the agent-gateway ACP data plane (`AcpGatewayClient`).
-- **ACP has only two data-plane endpoints**: `POST {prefix}/turn` (SSE) and
-  `POST {prefix}/permission`. There is **no thread/turn lifecycle, no cancel, no event-replay**.
+- **ACP exposes four route-scoped data-plane endpoints**: `POST {prefix}/turn` (SSE),
+  `POST {prefix}/permission`, `GET {prefix}/sessions`, and `GET {prefix}/sessions/{id}/transcript`
+  — all authenticated by the route's VirtualKey (`acp_auth_token`), no admin plane. There is
+  **no thread/turn lifecycle, no cancel, no event-replay**.
   Consequences, all hidden behind the same public chat API:
   - `create_session` mints the `thread_id` locally (no upstream call); the agent materializes the
     session lazily on the first turn.
@@ -126,19 +128,18 @@ PageIndex / ngent / Codex are upstream/optional integrations, not the source of 
   the ACP gateway single-replica or session-affine.
 - **History replay** (`GET /sessions/{id}/transcript`, `ChatService.get_transcript`): returns
   `{sessionId, messages: [{role, text}], source}` with a uniform shape across backends. For ACP,
-  when the session has an `acp_session_id` and the admin plane is configured, it loads the
-  agent-side coalesced transcript (user/assistant/reasoning) from the **admin plane**
-  (`AcpAdminClient`); otherwise (ngent, or no turn yet, or admin unconfigured) it rebuilds from
-  the durable local `chat_turns` (`source: "local"`). The ACP admin plane is a **separate address**
-  from the data plane (`EXPERT_NEXT_ACP_ADMIN_BASE_URL`, gateway default `:8019`) with
-  username/password login minting an **in-memory** Bearer session token — `AcpAdminClient` caches
-  it process-wide and re-logs-in on `401` (e.g. after a gateway restart). Admin paths are keyed by
-  `EXPERT_NEXT_ACP_SERVICE_ID` and the transcript is addressed by the ACP session id + tenant cwd
-  (not the local thread id). `list_sessions` is also available on the client for reconciliation.
-- **Live smoke test**: `python scripts/acp_smoke.py` drives the real `AcpGatewayClient` /
-  `AcpAdminClient` against a running gateway (config from env/.env or `--base-url` etc.). It runs a
+  when the session has an `acp_session_id`, it loads the agent-side coalesced transcript
+  (user/assistant/reasoning) from the **route-scoped** `GET {prefix}/sessions/{id}/transcript`
+  (`AcpGatewayClient.get_transcript`); otherwise (ngent, or no turn yet) it rebuilds from the
+  durable local `chat_turns` (`source: "local"`). The route-scoped sessions/transcript APIs share
+  the data plane's base URL + route prefix and are authenticated by the same VirtualKey
+  (`acp_auth_token`) — **no separate admin address, login, or service id** (the route is the scope).
+  The transcript is addressed by the ACP session id + tenant cwd (not the local thread id);
+  `list_sessions` on the same client backs title reconciliation.
+- **Live smoke test**: `python scripts/acp_smoke.py` drives the real `AcpGatewayClient`
+  against a running gateway (config from env/.env or `--base-url` etc.). It runs a
   turn and prints the translated events, with `--resume` (session resume), `--transcript` /
-  `--list-sessions` (admin plane), and `--auto-permission` (answer prompts). Use it to validate the
+  `--list-sessions` (route history APIs), and `--auto-permission` (answer prompts). Use it to validate the
   integration against a real gateway before relying on the backend — the pytest suite only covers
   fakes.
 

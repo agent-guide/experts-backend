@@ -1,6 +1,7 @@
 from pathlib import Path
 import posixpath
 from typing import Any, AsyncIterator
+from urllib.parse import quote
 
 import httpx
 
@@ -12,12 +13,16 @@ class AcpGatewayClient:
     """Client for the agent-gateway ACP data plane.
 
     Unlike ngent (thread/turn resources with server-assigned ids), the ACP data
-    plane exposes only two routed endpoints under a configured path prefix:
+    plane exposes routed endpoints under a configured path prefix:
       - POST {prefix}/turn       -> SSE stream (events: session, delta, permission, done, error)
       - POST {prefix}/permission -> answers one in-flight interactive permission request
-    There is no server-side thread/turn lifecycle: `thread_id` is caller-owned and
-    `session_id` is assigned by the agent and surfaced via the first `session` event.
-    The local DB stays the system of record; this client only drives compute.
+      - GET  {prefix}/sessions   -> list materialized ACP sessions (history replay)
+      - GET  {prefix}/sessions/{id}/transcript -> coalesced session transcript
+    All are route-scoped and authenticated by the route's VirtualKey, so history
+    replay no longer needs the gateway admin plane. There is no server-side
+    thread/turn lifecycle: `thread_id` is caller-owned and `session_id` is assigned
+    by the agent and surfaced via the first `session` event. The local DB stays the
+    system of record; this client only drives compute.
     """
 
     def __init__(self, settings: Settings) -> None:
@@ -157,6 +162,46 @@ class AcpGatewayClient:
         return await self.request(
             "POST", self._path("/permission"), tenant_id=tenant_id, json=payload
         )
+
+    async def list_sessions(
+        self,
+        *,
+        tenant_id: str | None = None,
+        cwd: str | None = None,
+        cursor: str | None = None,
+    ) -> Any:
+        """List materialized ACP sessions via GET {prefix}/sessions.
+
+        Returns the gateway's ListSessionsResponse: {sessions: [{session_id, cwd,
+        title, updated_at}], next_cursor}. The route's VirtualKey is the only auth;
+        scope is the route's service, so no service id is passed.
+        """
+        params: dict[str, str] = {}
+        if cwd:
+            params["cwd"] = cwd
+        if cursor:
+            params["cursor"] = cursor
+        return await self.request(
+            "GET", self._path("/sessions"), tenant_id=tenant_id, params=params or None
+        )
+
+    async def get_transcript(
+        self,
+        *,
+        session_id: str,
+        tenant_id: str | None = None,
+        cwd: str | None = None,
+    ) -> Any:
+        """Load a session's coalesced transcript via GET {prefix}/sessions/{id}/transcript.
+
+        Returns the gateway's TranscriptResponse: {session_id, messages: [{role,
+        text}]} with role in user/assistant/reasoning.
+        """
+        params: dict[str, str] = {}
+        if cwd:
+            params["cwd"] = cwd
+        path = self._path(f"/sessions/{quote(session_id, safe='')}/transcript")
+        return await self.request("GET", path, tenant_id=tenant_id, params=params or None)
 
 
 def _is_posix_absolute(path: str) -> bool:
