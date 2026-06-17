@@ -2989,6 +2989,189 @@ def test_chat_acp_transcript_replays_from_admin_plane(tmp_path: Path) -> None:
         assert fake_admin.transcript_calls[-1]["cwd"] == fake_acp.default_cwd
 
 
+def _login_tenant_member(client: TestClient, settings: Settings) -> dict[str, str]:
+    _seed_tenant(settings)
+    _seed_tenant_user(
+        settings,
+        "tenant_user",
+        "tenant@example.com",
+        "Tenant User",
+        "tenant-secret",
+        "member",
+    )
+    login = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "tenant@example.com",
+            "password": "tenant-secret",
+            "tenantId": "tenant_default",
+        },
+    )
+    assert login.status_code == 200
+    return {
+        "Authorization": f"Bearer {login.json()['accessToken']}",
+        "x-tenant-id": "tenant_default",
+    }
+
+
+def test_chat_ngent_auto_title_fills_only_when_empty(tmp_path: Path) -> None:
+    database_path = tmp_path / "chat_ngent_title.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+        ngent_base_url="http://ngent.test",
+        ngent_default_cwd=str(tmp_path / "ngent-workspace"),
+    )
+    fake_ngent = FakeNgentTitleClient()
+    test_app = create_app(settings)
+    test_app.dependency_overrides[get_ngent_client] = lambda: fake_ngent
+
+    with TestClient(test_app) as client:
+        headers = _login_tenant_member(client, settings)
+
+        # Create without a title so the agent's generated title can fill it.
+        created = client.post("/api/v1/chat/sessions", headers=headers, json={})
+        assert created.status_code == 201
+        session_id = created.json()["id"]
+
+        # First turn fills the empty title and re-emits a unified session_title_updated frame.
+        turn1 = client.post(
+            f"/api/v1/chat/sessions/{session_id}/turns",
+            headers=headers,
+            json={"question": "hello"},
+        )
+        assert "event: session_title_updated" in turn1.text
+        assert "Auto 1" in turn1.text
+        assert (
+            client.get(f"/api/v1/chat/sessions/{session_id}", headers=headers).json()["title"]
+            == "Auto 1"
+        )
+
+        # Second turn: the title is already set (the same guard a manual rename would hit), so a
+        # new agent title must NOT clobber it and no frame is emitted.
+        turn2 = client.post(
+            f"/api/v1/chat/sessions/{session_id}/turns",
+            headers=headers,
+            json={"question": "again"},
+        )
+        assert "event: session_title_updated" not in turn2.text
+        assert (
+            client.get(f"/api/v1/chat/sessions/{session_id}", headers=headers).json()["title"]
+            == "Auto 1"
+        )
+
+
+def test_chat_acp_auto_title_via_session_info_event(tmp_path: Path) -> None:
+    # The live `session_info` SSE path, for agents like opencode that DO emit session_info_update.
+    # No admin plane is configured, so the title can only come from the stream event.
+    database_path = tmp_path / "chat_acp_title.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+        chat_backend="acp",
+        acp_gateway_base_url="http://gateway.test",
+        acp_route_prefix="/acp",
+        acp_default_cwd=str(tmp_path / "acp-workspace"),
+    )
+    fake_acp = FakeAcpTitleGatewayClient()
+    test_app = create_app(settings)
+    test_app.dependency_overrides[get_acp_gateway_client] = lambda: fake_acp
+
+    with TestClient(test_app) as client:
+        headers = _login_tenant_member(client, settings)
+
+        # Create with a preset title: the agent's nested session_info title must not clobber it.
+        preset = client.post(
+            "/api/v1/chat/sessions", headers=headers, json={"title": "Preset"}
+        )
+        assert preset.status_code == 201
+        preset_id = preset.json()["id"]
+        turn_preset = client.post(
+            f"/api/v1/chat/sessions/{preset_id}/turns",
+            headers=headers,
+            json={"question": "hello"},
+        )
+        assert "event: session_title_updated" not in turn_preset.text
+        assert (
+            client.get(f"/api/v1/chat/sessions/{preset_id}", headers=headers).json()["title"]
+            == "Preset"
+        )
+
+        # Create without a title: the nested ACP session_info title fills it and emits a frame.
+        created = client.post("/api/v1/chat/sessions", headers=headers, json={})
+        session_id = created.json()["id"]
+        turn = client.post(
+            f"/api/v1/chat/sessions/{session_id}/turns",
+            headers=headers,
+            json={"question": "hello"},
+        )
+        assert "event: session_title_updated" in turn.text
+        assert "Auto 2" in turn.text  # second stream_turn call on this fake
+        assert (
+            client.get(f"/api/v1/chat/sessions/{session_id}", headers=headers).json()["title"]
+            == "Auto 2"
+        )
+
+
+def test_chat_acp_auto_title_from_admin_session_list(tmp_path: Path) -> None:
+    # The codex-acp path: the gateway emits no session_info, so the title is reconciled from the
+    # admin session/list after the turn, keyed by the bound acp_session_id.
+    database_path = tmp_path / "chat_acp_title_admin.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+        chat_backend="acp",
+        acp_gateway_base_url="http://gateway.test",
+        acp_route_prefix="/acp",
+        acp_admin_base_url="http://gateway.test:8019",
+        acp_admin_username="admin",
+        acp_admin_password="secret",
+        acp_service_id="acp_svc",
+        acp_default_cwd=str(tmp_path / "acp-workspace"),
+    )
+    fake_acp = FakeAcpGatewayClient()  # base fake emits session/delta/done, no session_info
+    fake_admin = FakeAcpAdminTitleClient()
+    test_app = create_app(settings)
+    test_app.dependency_overrides[get_acp_gateway_client] = lambda: fake_acp
+    test_app.dependency_overrides[get_acp_admin_client] = lambda: fake_admin
+
+    with TestClient(test_app) as client:
+        headers = _login_tenant_member(client, settings)
+
+        # Empty title: reconciled from session/list after the turn binds the acp_session_id.
+        session_id = client.post("/api/v1/chat/sessions", headers=headers, json={}).json()["id"]
+        turn = client.post(
+            f"/api/v1/chat/sessions/{session_id}/turns", headers=headers, json={"question": "hi"}
+        )
+        assert "event: session_title_updated" in turn.text
+        assert "Codex Title" in turn.text
+        assert (
+            client.get(f"/api/v1/chat/sessions/{session_id}", headers=headers).json()["title"]
+            == "Codex Title"
+        )
+        assert fake_admin.list_calls  # admin plane was consulted
+        # Lookup is keyed by the agent session id + tenant cwd, not the local thread id.
+        assert fake_admin.list_calls[-1]["cwd"] == fake_acp.default_cwd
+
+        # Preset title: reconciliation is short-circuited -- no admin lookup, no clobber.
+        calls_before = len(fake_admin.list_calls)
+        preset_id = client.post(
+            "/api/v1/chat/sessions", headers=headers, json={"title": "Preset"}
+        ).json()["id"]
+        preset_turn = client.post(
+            f"/api/v1/chat/sessions/{preset_id}/turns", headers=headers, json={"question": "hi"}
+        )
+        assert "event: session_title_updated" not in preset_turn.text
+        assert (
+            client.get(f"/api/v1/chat/sessions/{preset_id}", headers=headers).json()["title"]
+            == "Preset"
+        )
+        assert len(fake_admin.list_calls) == calls_before  # skipped while the title is non-empty
+
+
 def test_ngent_preserves_remote_posix_cwd() -> None:
     client = NgentClient(Settings(ngent_default_cwd="/usr/local/ngent-workspace"))
 
@@ -3286,6 +3469,105 @@ class FakeAcpAdminClient:
 
     async def list_sessions(self, *, cwd: str | None = None, cursor: str | None = None) -> dict:
         return {"sessions": [], "next_cursor": ""}
+
+
+class FakeNgentTitleClient(FakeNgentClient):
+    """ngent fake whose turn stream carries a per-turn auto-generated session title.
+
+    The title rides the stream as a `session_info_update` event (title at the top level),
+    distinct each turn so a test can prove the second one does not clobber the first.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._turn = 0
+
+    async def stream(
+        self, method: str, path: str, *, tenant_id: str | None = None, **kwargs
+    ):
+        self.stream_calls.append(
+            {"method": method, "path": path, "tenant_id": tenant_id, "json": kwargs["json"]}
+        )
+        self._turn += 1
+        title = f"Auto {self._turn}"
+        yield "event: turn_started"
+        yield f'data: {{"turnId": "turn_{self._turn}"}}'
+        yield ""
+        yield "event: session_info_update"
+        yield f'data: {{"title": "{title}"}}'
+        yield ""
+        yield "event: message_delta"
+        yield 'data: {"delta": "ok"}'
+        yield ""
+        yield "event: turn_completed"
+        yield 'data: {"stopReason": "end_turn"}'
+        yield ""
+
+
+class FakeAcpTitleGatewayClient(FakeAcpGatewayClient):
+    """ACP gateway fake whose turn stream carries a per-turn auto-generated session title.
+
+    The gateway wraps the raw ACP update under `data`, so the title is nested at
+    `data.data.title` -- the shape the handler must dig through.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._turn = 0
+
+    def stream_turn(self, **kwargs):
+        self.turn_calls.append(
+            {
+                "thread_id": kwargs.get("thread_id"),
+                "input": kwargs.get("input"),
+                "tenant_id": kwargs.get("tenant_id"),
+                "session_id": kwargs.get("session_id"),
+                "cwd": kwargs.get("cwd"),
+                "config_overrides": kwargs.get("config_overrides"),
+            }
+        )
+        self._turn += 1
+        title = f"Auto {self._turn}"
+
+        async def gen():
+            yield "event: session"
+            yield 'data: {"session_id": "acp_sess_1"}'
+            yield ""
+            yield "event: session_info"
+            yield (
+                'data: {"data": {"sessionUpdate": "session_info_update", '
+                f'"title": "{title}"}}}}'
+            )
+            yield ""
+            yield "event: delta"
+            yield 'data: {"text": "ok"}'
+            yield ""
+            yield "event: done"
+            yield 'data: {"stop_reason": "end_turn"}'
+            yield ""
+
+        return gen()
+
+
+class FakeAcpAdminTitleClient:
+    """Admin fake whose session/list carries the codex-derived title.
+
+    codex-acp never emits `session_info_update`, so its title is only reachable through the admin
+    session/list, keyed by the agent-assigned ACP session id.
+    """
+
+    def __init__(self) -> None:
+        self.list_calls: list[dict] = []
+
+    async def list_sessions(self, *, cwd: str | None = None, cursor: str | None = None) -> dict:
+        self.list_calls.append({"cwd": cwd, "cursor": cursor})
+        return {
+            "sessions": [{"session_id": "acp_sess_1", "title": "Codex Title", "cwd": cwd}],
+            "next_cursor": "",
+        }
+
+    async def get_transcript(self, *, session_id: str, cwd: str | None = None) -> dict:
+        return {"session_id": session_id, "messages": []}
 
 
 def _skill_zip() -> BytesIO:
