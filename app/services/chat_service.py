@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from collections.abc import AsyncIterator
@@ -48,6 +49,34 @@ class ChatService:
         if self.acp is None:
             raise ApiError(503, "ACP_UNCONFIGURED", "acp gateway client is not configured")
         return self.acp
+
+    def _acp_route(self, row: dict, web_search_enabled: bool | None) -> _AcpRoute:
+        acp = self._require_acp()
+        search_enabled = web_search_enabled is True
+
+        if search_enabled:
+            prefix = acp.search_route_prefix or acp.route_prefix
+            column = "search"
+            field = "acp_search_session_id"
+        else:
+            prefix = acp.route_prefix
+            column = "no_search"
+            field = "acp_session_id"
+
+        session_id = str(row[field]) if row.get(field) else None
+        return _AcpRoute(
+            route_prefix=prefix,
+            search_mode="auto" if search_enabled else "off",
+            session_id=session_id,
+            session_column=column,
+        )
+
+    def _set_acp_route_session(
+        self, route: _AcpRoute, session_id: str, acp_session_id: str | None
+    ) -> bool:
+        if route.session_column == "search":
+            return self.repo.set_acp_search_session_id(session_id, acp_session_id, _now_iso())
+        return self.repo.set_acp_session_id(session_id, acp_session_id, _now_iso())
 
     # --- Sessions -------------------------------------------------------------
 
@@ -131,7 +160,10 @@ class ChatService:
             tenant_id = str(principal.active_tenant_id)
             cwd = acp.prepare_cwd(tenant_id)
             data = await acp.get_transcript(
-                session_id=acp_session_id, tenant_id=tenant_id, cwd=cwd
+                session_id=acp_session_id,
+                tenant_id=tenant_id,
+                cwd=cwd,
+                route_prefix=acp.route_prefix,
             )
             messages = list((data or {}).get("messages") or [])
             return {"sessionId": session_id, "messages": messages, "source": "agent"}
@@ -161,7 +193,8 @@ class ChatService:
         row = self._require_session(principal, session_id)
         acp = self._require_acp()
         tenant_id = principal.active_tenant_id
-        acp_session_id = str(row["acp_session_id"]) if row.get("acp_session_id") else None
+        route = self._acp_route(row, request.webSearchEnabled)
+        acp_session_id = route.session_id
         cwd = acp.prepare_cwd(str(tenant_id))
 
         # The ACP data plane has no server turn id; generate one up front and persist immediately
@@ -181,10 +214,10 @@ class ChatService:
         self.connection.commit()
         yield _sse("turn_started", {"turnId": turn_id})
 
+        result = _AcpTurnResult(bound_session_id=acp_session_id)
+        attempt_events: list[str] | None = [] if acp_session_id else None
+        committed = attempt_events is None
         try:
-            result = _AcpTurnResult(bound_session_id=acp_session_id)
-            attempt_events: list[str] | None = [] if acp_session_id else None
-
             drive = self._drive_acp_turn(
                 acp=acp,
                 principal=principal,
@@ -192,6 +225,7 @@ class ChatService:
                 request=request,
                 initial_acp_session_id=acp_session_id,
                 cwd=cwd,
+                route=route,
                 turn_id=turn_id,
                 result=result,
             )
@@ -200,7 +234,6 @@ class ChatService:
             # the resume has "taken": flush what was held and stream the rest live so
             # follow-up turns are not stalled until the whole turn completes. A fresh
             # session (attempt_events is None) streams live from the first event.
-            committed = attempt_events is None
             async for event in drive:
                 if committed:
                     yield event
@@ -218,9 +251,24 @@ class ChatService:
                         yield buffered
                     attempt_events = None
         except ApiError as exc:
-            self._finalize(turn_id, [], None, exc.message)
-            yield _sse("error", {"code": exc.code, "message": exc.message, "details": exc.details})
+            friendly_message = _friendly_acp_error_message(exc.message, exc.details)
+            self._finalize(turn_id, [], None, friendly_message)
+            yield _sse(
+                "error",
+                {"code": exc.code, "message": friendly_message, "details": exc.details},
+            )
             return
+        except asyncio.CancelledError:
+            # ACP has no explicit turn-cancel API. When the caller disconnects, persist a
+            # cancelled terminal state locally instead of leaving the turn `running`.
+            self._finalize(
+                turn_id,
+                [_normalize_answer_markdown("".join(result.parts))],
+                result.stop_reason or "cancelled",
+                result.error_message,
+                reasoning_parts=result.reasoning_parts,
+            )
+            raise
 
         # A buffered resume that produced nothing and errored means the upstream session
         # is gone. Drop the dead binding and retry once with a fresh session, streaming the
@@ -231,7 +279,7 @@ class ChatService:
             and not committed
             and result.bound_session_id == acp_session_id
         ):
-            self.repo.set_acp_session_id(session_id, None, _now_iso())
+            self._set_acp_route_session(route, session_id, None)
             self.connection.commit()
             result = _AcpTurnResult()
             attempt_events = None
@@ -242,6 +290,7 @@ class ChatService:
                 request=request,
                 initial_acp_session_id=None,
                 cwd=cwd,
+                route=route,
                 turn_id=turn_id,
                 result=result,
                 fresh_session=True,
@@ -251,6 +300,10 @@ class ChatService:
         if attempt_events is not None:
             for event in attempt_events:
                 yield event
+
+        if result.error_message is None and not result.saw_done:
+            result.error_message = "ACP gateway stream ended before turn completion."
+            yield _sse("error", {"message": result.error_message})
 
         answer = _normalize_answer_markdown("".join(result.parts))
         self._finalize(
@@ -265,7 +318,9 @@ class ChatService:
         )
         local_title = str((current_row or {}).get("title") or "").strip()
         if result.error_message is None and not local_title and result.bound_session_id:
-            title = await self._fetch_acp_title(str(tenant_id), result.bound_session_id, cwd)
+            title = await self._fetch_acp_title(
+                str(tenant_id), result.bound_session_id, cwd, route.route_prefix
+            )
             if title:
                 self.repo.update_session_title(session_id, title, _now_iso())
                 self.connection.commit()
@@ -282,6 +337,7 @@ class ChatService:
         request: ChatTurnRequest,
         initial_acp_session_id: str | None,
         cwd: str,
+        route: _AcpRoute,
         turn_id: str,
         result: _AcpTurnResult,
         fresh_session: bool = False,
@@ -337,6 +393,8 @@ class ChatService:
             session_id=initial_acp_session_id,
             cwd=cwd,
             fresh_session=fresh_session,
+            search_mode=route.search_mode,
+            route_prefix=route.route_prefix,
         ):
             if line.startswith("event:"):
                 current_event = line[len("event:"):].strip()
@@ -353,7 +411,7 @@ class ChatService:
                         if sid and sid != result.bound_session_id:
                             # Persist the agent-assigned id so follow-up turns resume this instance.
                             result.bound_session_id = sid
-                            self.repo.set_acp_session_id(session_id, sid, _now_iso())
+                            self._set_acp_route_session(route, session_id, sid)
                             self.connection.commit()
                     elif current_event == "delta":
                         text = data.get("text")
@@ -372,7 +430,10 @@ class ChatService:
                             payload["data"] = data["data"]
                         yield _sse("permission_required", payload)
                     elif current_event == "error":
-                        result.error_message = str(data.get("message") or "") or "error"
+                        result.error_message = _friendly_acp_error_message(
+                            str(data.get("message") or "") or "error",
+                            data.get("details") if isinstance(data.get("details"), dict) else None,
+                        )
                         yield _sse("error", {"message": result.error_message})
                     elif current_event == "done":
                         result.saw_done = True
@@ -402,7 +463,7 @@ class ChatService:
             yield event
 
     async def _fetch_acp_title(
-        self, tenant_id: str, acp_session_id: str, cwd: str
+        self, tenant_id: str, acp_session_id: str, cwd: str, route_prefix: str
     ) -> str | None:
         """Look up a session's auto-derived title via the route-scoped session list.
 
@@ -414,7 +475,9 @@ class ChatService:
         cursor: str | None = None
         for _ in range(20):
             try:
-                data = await acp.list_sessions(tenant_id=tenant_id, cwd=cwd, cursor=cursor)
+                data = await acp.list_sessions(
+                    tenant_id=tenant_id, cwd=cwd, cursor=cursor, route_prefix=route_prefix
+                )
             except ApiError:
                 return None
             for s in (data or {}).get("sessions") or []:
@@ -683,6 +746,33 @@ def _acp_reasoning_text(event: str, data: dict) -> str | None:
     if isinstance(nested, str):
         return nested
     return json.dumps(nested, ensure_ascii=False) + "\n"
+
+
+def _friendly_acp_error_message(message: str | None, details: dict | None = None) -> str:
+    raw_message = str(message or "").strip()
+    haystack_parts = [raw_message.lower()]
+    if details:
+        try:
+            haystack_parts.append(json.dumps(details, ensure_ascii=False).lower())
+        except TypeError:
+            pass
+    haystack = " ".join(part for part in haystack_parts if part)
+    if (
+        "token_invalidated" in haystack
+        or "authentication token has been invalidated" in haystack
+        or ("session/prompt" in haystack and "acp error -32603" in haystack)
+        or ("401" in haystack and "unauthorized" in haystack and "session/prompt" in haystack)
+    ):
+        return "Codex login has expired. Please sign in again and retry."
+    return raw_message or "error"
+
+
+@dataclass
+class _AcpRoute:
+    route_prefix: str
+    search_mode: str
+    session_id: str | None
+    session_column: str
 
 
 @dataclass

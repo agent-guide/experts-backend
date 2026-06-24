@@ -174,12 +174,15 @@ Request:
 
 ```json
 {
-  "question": "Analyze recent review trends"
+  "question": "Analyze recent review trends",
+  "webSearchEnabled": true
 }
 ```
 
-`question` is the only field. Model / knowledge-base / retrieval options are not
-accepted here unless explicitly wired into the ACP turn payload.
+`question` is required. `webSearchEnabled` is optional and only applies to the ACP
+agent-gateway backend: `true` routes to the configured search ACP prefix with
+`search_mode: "auto"`, while `false` or omitted routes to the default ACP prefix with
+`search_mode: "off"`. Model / knowledge-base / retrieval options are not accepted here.
 
 Response content type:
 

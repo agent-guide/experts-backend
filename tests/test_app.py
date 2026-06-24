@@ -89,6 +89,9 @@ def test_sqlite_migration_uses_infra_sql(tmp_path: Path) -> None:
         chat_turn_columns = {
             row["name"] for row in connection.execute("pragma table_info(chat_turns)").fetchall()
         }
+        chat_session_columns = {
+            row["name"] for row in connection.execute("pragma table_info(chat_sessions)").fetchall()
+        }
 
     assert "tenants" in tables
     assert "knowledge_bases" in tables
@@ -98,6 +101,7 @@ def test_sqlite_migration_uses_infra_sql(tmp_path: Path) -> None:
     assert "chat_tasks" not in tables
     assert "chat_task_events" not in tables
     assert "chat_messages" not in tables
+    assert "acp_search_session_id" in chat_session_columns
     assert "request_text" in chat_turn_columns
     assert "response_text" in chat_turn_columns
     assert "expert_categories" in tables
@@ -2855,6 +2859,8 @@ def test_chat_acp_backend_creates_locally_and_translates_turn(tmp_path: Path) ->
         assert first_call["cwd"] == fake_acp.default_cwd
         assert first_call["input"] == "hello"
         assert first_call.get("config_overrides") is None
+        assert first_call.get("search_mode") == "off"
+        assert first_call.get("route_prefix") == fake_acp.route_prefix
 
         messages = client.get(f"/api/v1/chat/sessions/{session_id}/messages", headers=headers)
         assert messages.status_code == 200
@@ -2867,6 +2873,121 @@ def test_chat_acp_backend_creates_locally_and_translates_turn(tmp_path: Path) ->
             json={"question": "again"},
         )
         assert fake_acp.turn_calls[1]["session_id"] == "acp_sess_1"
+
+
+def test_chat_acp_turn_forwards_web_search_mode(tmp_path: Path) -> None:
+    database_path = tmp_path / "chat_acp_web_search.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+        chat_backend="acp",
+        acp_gateway_base_url="http://gateway.test",
+        acp_route_prefix="/acp",
+        acp_default_cwd=str(tmp_path / "acp-workspace"),
+    )
+    fake_acp = FakeAcpGatewayClient()
+    test_app = create_app(settings)
+    test_app.dependency_overrides[get_acp_gateway_client] = lambda: fake_acp
+
+    with TestClient(test_app) as client:
+        _seed_tenant(settings)
+        _seed_tenant_user(
+            settings,
+            "tenant_user",
+            "tenant@example.com",
+            "Tenant User",
+            "tenant-secret",
+            "member",
+        )
+        login = client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "tenant@example.com",
+                "password": "tenant-secret",
+                "tenantId": "tenant_default",
+            },
+        )
+        assert login.status_code == 200
+        headers = {
+            "Authorization": f"Bearer {login.json()['accessToken']}",
+            "x-tenant-id": "tenant_default",
+        }
+
+        session_id = client.post(
+            "/api/v1/chat/sessions", headers=headers, json={"title": "Search Test"}
+        ).json()["id"]
+
+        enabled = client.post(
+            f"/api/v1/chat/sessions/{session_id}/turns",
+            headers=headers,
+            json={"question": "hello", "webSearchEnabled": True},
+        )
+        disabled = client.post(
+            f"/api/v1/chat/sessions/{session_id}/turns",
+            headers=headers,
+            json={"question": "again", "webSearchEnabled": False},
+        )
+
+        assert enabled.status_code == 200
+        assert disabled.status_code == 200
+        assert fake_acp.turn_calls[0]["search_mode"] == "auto"
+        assert fake_acp.turn_calls[0]["route_prefix"] == fake_acp.search_route_prefix
+        assert fake_acp.turn_calls[0]["session_id"] is None
+        assert fake_acp.turn_calls[0]["input"] == "hello"
+        assert fake_acp.turn_calls[1]["search_mode"] == "off"
+        assert fake_acp.turn_calls[1]["route_prefix"] == fake_acp.route_prefix
+        assert fake_acp.turn_calls[1]["session_id"] is None
+        assert fake_acp.turn_calls[1]["input"] == "again"
+
+        resumed_search = client.post(
+            f"/api/v1/chat/sessions/{session_id}/turns",
+            headers=headers,
+            json={"question": "search again", "webSearchEnabled": True},
+        )
+
+        assert resumed_search.status_code == 200
+        assert fake_acp.turn_calls[2]["search_mode"] == "auto"
+        assert fake_acp.turn_calls[2]["route_prefix"] == fake_acp.search_route_prefix
+        assert fake_acp.turn_calls[2]["session_id"] == "acp_sess_1"
+
+
+def test_chat_acp_empty_stream_fails_turn(tmp_path: Path) -> None:
+    database_path = tmp_path / "chat_acp_empty_stream.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+        chat_backend="acp",
+        acp_gateway_base_url="http://gateway.test",
+        acp_route_prefix="/acp",
+        acp_default_cwd=str(tmp_path / "acp-workspace"),
+    )
+    fake_acp = FakeAcpEmptyStreamGatewayClient()
+    test_app = create_app(settings)
+    test_app.dependency_overrides[get_acp_gateway_client] = lambda: fake_acp
+
+    with TestClient(test_app) as client:
+        headers = _login_tenant_member(client, settings)
+        session_id = client.post("/api/v1/chat/sessions", headers=headers, json={}).json()["id"]
+
+        turn = client.post(
+            f"/api/v1/chat/sessions/{session_id}/turns",
+            headers=headers,
+            json={"question": "hello"},
+        )
+
+        assert turn.status_code == 200
+        assert "event: turn_started" in turn.text
+        assert "event: error" in turn.text
+        assert "ended before turn completion" in turn.text
+
+        messages = client.get(f"/api/v1/chat/sessions/{session_id}/messages", headers=headers)
+        assert messages.status_code == 200
+        item = messages.json()["items"][0]
+        assert item["status"] == "failed"
+        assert item["responseText"] == ""
+        assert "ended before turn completion" in item["errorMessage"]
 
 
 def test_chat_acp_backend_translates_reasoning_and_tool_call(tmp_path: Path) -> None:
@@ -3405,6 +3526,8 @@ def test_acp_stream_turn_builds_turn_request_payload() -> None:
             tenant_id="tenant_default",
             session_id="",  # falsy -> omitted, lets the agent assign one on the first turn
             config_overrides={"thought_level": "medium"},
+            search_mode="auto",
+            route_prefix="/acp-search",
         )
         async for _ in agen:
             pass
@@ -3412,7 +3535,7 @@ def test_acp_stream_turn_builds_turn_request_payload() -> None:
     asyncio.run(drive())
 
     assert captured["method"] == "POST"
-    assert captured["path"] == "/acp/turn"
+    assert captured["path"] == "/acp-search/turn"
     assert captured["tenant_id"] == "tenant_default"
     # Required fields plus the default model; empty optionals (session_id, cwd,
     # fresh_session) are omitted so the gateway falls back to service defaults.
@@ -3421,6 +3544,7 @@ def test_acp_stream_turn_builds_turn_request_payload() -> None:
         "input": "hello",
         "model": "claude-opus",
         "config_overrides": {"thought_level": "medium"},
+        "search_mode": "auto",
     }
 
 
@@ -3527,21 +3651,34 @@ def _seed_platform_user(
 
 class FakeAcpGatewayClient:
     def __init__(self) -> None:
+        self.route_prefix = "/acp"
+        self.search_route_prefix = "/acp-search"
         self.default_model = "claude-opus"
         self.default_cwd = "/tmp/acp"
         self.turn_calls: list[dict] = []
         self.transcript_calls: list[dict] = []
         self.list_calls: list[dict] = []
         self.fail_next_resume = False
+        self._sessions_by_route: dict[str, str] = {}
 
     def prepare_cwd(self, tenant_id: str | None = None) -> str:
         return self.default_cwd
 
     async def get_transcript(
-        self, *, session_id: str, tenant_id: str | None = None, cwd: str | None = None
+        self,
+        *,
+        session_id: str,
+        tenant_id: str | None = None,
+        cwd: str | None = None,
+        route_prefix: str | None = None,
     ) -> dict:
         self.transcript_calls.append(
-            {"session_id": session_id, "tenant_id": tenant_id, "cwd": cwd}
+            {
+                "session_id": session_id,
+                "tenant_id": tenant_id,
+                "cwd": cwd,
+                "route_prefix": route_prefix,
+            }
         )
         return {
             "session_id": session_id,
@@ -3552,9 +3689,16 @@ class FakeAcpGatewayClient:
         }
 
     async def list_sessions(
-        self, *, tenant_id: str | None = None, cwd: str | None = None, cursor: str | None = None
+        self,
+        *,
+        tenant_id: str | None = None,
+        cwd: str | None = None,
+        cursor: str | None = None,
+        route_prefix: str | None = None,
     ) -> dict:
-        self.list_calls.append({"tenant_id": tenant_id, "cwd": cwd, "cursor": cursor})
+        self.list_calls.append(
+            {"tenant_id": tenant_id, "cwd": cwd, "cursor": cursor, "route_prefix": route_prefix}
+        )
         return {"sessions": [], "next_cursor": ""}
 
     def stream_turn(
@@ -3568,6 +3712,8 @@ class FakeAcpGatewayClient:
         model: str | None = None,
         fresh_session: bool = False,
         config_overrides: dict | None = None,
+        search_mode: str | None = None,
+        route_prefix: str | None = None,
     ):
         self.turn_calls.append(
             {
@@ -3578,6 +3724,8 @@ class FakeAcpGatewayClient:
                 "cwd": cwd,
                 "fresh_session": fresh_session,
                 "config_overrides": config_overrides,
+                "search_mode": search_mode,
+                "route_prefix": route_prefix,
             }
         )
 
@@ -3588,8 +3736,14 @@ class FakeAcpGatewayClient:
                 yield 'data: {"message": "network error"}'
                 yield ""
                 return
+            bound_session_id = session_id
+            if not bound_session_id:
+                route_key = route_prefix or self.route_prefix
+                bound_session_id = self._sessions_by_route.setdefault(
+                    route_key, f"acp_sess_{len(self._sessions_by_route) + 1}"
+                )
             yield "event: session"
-            yield 'data: {"session_id": "acp_sess_1"}'
+            yield f'data: {{"session_id": "{bound_session_id}"}}'
             yield ""
             yield "event: delta"
             yield 'data: {"text": "ok"}'
@@ -3597,6 +3751,17 @@ class FakeAcpGatewayClient:
             yield "event: done"
             yield 'data: {"stop_reason": "end_turn"}'
             yield ""
+
+        return gen()
+
+
+class FakeAcpEmptyStreamGatewayClient(FakeAcpGatewayClient):
+    def stream_turn(self, **kwargs):
+        self.turn_calls.append(kwargs)
+
+        async def gen():
+            if False:
+                yield ""
 
         return gen()
 
@@ -3613,6 +3778,8 @@ class FakeAcpReasoningGatewayClient(FakeAcpGatewayClient):
         model: str | None = None,
         fresh_session: bool = False,
         config_overrides: dict | None = None,
+        search_mode: str | None = None,
+        route_prefix: str | None = None,
     ):
         self.turn_calls.append(
             {
@@ -3623,6 +3790,8 @@ class FakeAcpReasoningGatewayClient(FakeAcpGatewayClient):
                 "cwd": cwd,
                 "fresh_session": fresh_session,
                 "config_overrides": config_overrides,
+                "search_mode": search_mode,
+                "route_prefix": route_prefix,
             }
         )
 
@@ -3666,6 +3835,8 @@ class FakeAcpTitleGatewayClient(FakeAcpGatewayClient):
                 "session_id": kwargs.get("session_id"),
                 "cwd": kwargs.get("cwd"),
                 "config_overrides": kwargs.get("config_overrides"),
+                "search_mode": kwargs.get("search_mode"),
+                "route_prefix": kwargs.get("route_prefix"),
             }
         )
         self._turn += 1
@@ -3700,9 +3871,16 @@ class FakeAcpTitleListGatewayClient(FakeAcpGatewayClient):
     """
 
     async def list_sessions(
-        self, *, tenant_id: str | None = None, cwd: str | None = None, cursor: str | None = None
+        self,
+        *,
+        tenant_id: str | None = None,
+        cwd: str | None = None,
+        cursor: str | None = None,
+        route_prefix: str | None = None,
     ) -> dict:
-        self.list_calls.append({"tenant_id": tenant_id, "cwd": cwd, "cursor": cursor})
+        self.list_calls.append(
+            {"tenant_id": tenant_id, "cwd": cwd, "cursor": cursor, "route_prefix": route_prefix}
+        )
         return {
             "sessions": [{"session_id": "acp_sess_1", "title": "Codex Title", "cwd": cwd}],
             "next_cursor": "",

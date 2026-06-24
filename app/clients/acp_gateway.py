@@ -27,6 +27,11 @@ class AcpGatewayClient:
     def __init__(self, settings: Settings) -> None:
         self.base_url = settings.acp_gateway_base_url
         self.route_prefix = settings.acp_route_prefix.rstrip("/")
+        self.search_route_prefix = (
+            settings.acp_search_route_prefix.rstrip("/")
+            if settings.acp_search_route_prefix
+            else None
+        )
         self.auth_token = settings.acp_auth_token
         self.client_id = settings.acp_client_id
         self.default_model = settings.acp_default_model
@@ -59,8 +64,9 @@ class AcpGatewayClient:
         path.mkdir(parents=True, exist_ok=True)
         return str(path)
 
-    def _path(self, suffix: str) -> str:
-        return f"{self.route_prefix}{suffix}"
+    def _path(self, suffix: str, route_prefix: str | None = None) -> str:
+        prefix = self.route_prefix if route_prefix is None else route_prefix.rstrip("/")
+        return f"{prefix}{suffix}"
 
     def _headers(self, tenant_id: str | None = None) -> dict[str, str]:
         headers = {"X-Client-ID": self.client_id}
@@ -121,6 +127,8 @@ class AcpGatewayClient:
         model: str | None = None,
         fresh_session: bool = False,
         config_overrides: dict[str, str] | None = None,
+        search_mode: str | None = None,
+        route_prefix: str | None = None,
     ) -> AsyncIterator[str]:
         """Drive one turn. Yields raw SSE lines from POST {prefix}/turn.
 
@@ -139,7 +147,11 @@ class AcpGatewayClient:
             payload["fresh_session"] = True
         if config_overrides:
             payload["config_overrides"] = config_overrides
-        return self.stream("POST", self._path("/turn"), tenant_id=tenant_id, json=payload)
+        if search_mode:
+            payload["search_mode"] = search_mode
+        return self.stream(
+            "POST", self._path("/turn", route_prefix), tenant_id=tenant_id, json=payload
+        )
 
     async def resolve_permission(
         self,
@@ -148,6 +160,7 @@ class AcpGatewayClient:
         outcome: str,
         option_id: str | None = None,
         tenant_id: str | None = None,
+        route_prefix: str | None = None,
     ) -> Any:
         """Answer one pending interactive permission request via POST {prefix}/permission.
 
@@ -159,7 +172,7 @@ class AcpGatewayClient:
         if option_id:
             payload["option_id"] = option_id
         return await self.request(
-            "POST", self._path("/permission"), tenant_id=tenant_id, json=payload
+            "POST", self._path("/permission", route_prefix), tenant_id=tenant_id, json=payload
         )
 
     async def list_sessions(
@@ -168,6 +181,7 @@ class AcpGatewayClient:
         tenant_id: str | None = None,
         cwd: str | None = None,
         cursor: str | None = None,
+        route_prefix: str | None = None,
     ) -> Any:
         """List materialized ACP sessions via GET {prefix}/sessions.
 
@@ -181,7 +195,7 @@ class AcpGatewayClient:
         if cursor:
             params["cursor"] = cursor
         return await self.request(
-            "GET", self._path("/sessions"), tenant_id=tenant_id, params=params or None
+            "GET", self._path("/sessions", route_prefix), tenant_id=tenant_id, params=params or None
         )
 
     async def get_transcript(
@@ -190,6 +204,7 @@ class AcpGatewayClient:
         session_id: str,
         tenant_id: str | None = None,
         cwd: str | None = None,
+        route_prefix: str | None = None,
     ) -> Any:
         """Load a session's coalesced transcript via GET {prefix}/sessions/{id}/transcript.
 
@@ -199,7 +214,7 @@ class AcpGatewayClient:
         params: dict[str, str] = {}
         if cwd:
             params["cwd"] = cwd
-        path = self._path(f"/sessions/{quote(session_id, safe='')}/transcript")
+        path = self._path(f"/sessions/{quote(session_id, safe='')}/transcript", route_prefix)
         return await self.request("GET", path, tenant_id=tenant_id, params=params or None)
 
 

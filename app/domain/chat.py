@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 ChatSessionStatus = Literal["active", "archived"]
 
@@ -13,6 +13,13 @@ class ChatTurnRequest(BaseModel):
     # The public turn payload is intentionally narrow. Do not re-add model / retrieval options
     # without wiring them into the outgoing ACP payload, or callers will think they take effect.
     question: str
+    webSearchEnabled: bool | None = Field(
+        default=None,
+        description=(
+            "Routes ACP turns to the search prefix with search_mode=auto when true; "
+            "otherwise uses the default prefix with search_mode=off."
+        ),
+    )
 
 
 class RenameSessionRequest(BaseModel):
