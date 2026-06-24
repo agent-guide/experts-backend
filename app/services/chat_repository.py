@@ -92,6 +92,19 @@ class ChatRepository:
         )
         return rowcount(cursor) > 0
 
+    def set_acp_search_session_id(
+        self, session_id: str, acp_session_id: str | None, now: str
+    ) -> bool:
+        cursor = execute(
+            self.connection,
+            "update chat_sessions set acp_search_session_id = ?, updated_at = ? where id = ?",
+            (acp_session_id, now, session_id),
+        )
+        return rowcount(cursor) > 0
+
+
+        return rowcount(cursor) > 0
+
     def set_session_pin(self, session_id: str, is_pinned: bool, pinned_at: str | None, now: str) -> bool:
         cursor = execute(
             self.connection,

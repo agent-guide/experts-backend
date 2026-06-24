@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     # allowedRoots (shared filesystem).
     acp_gateway_base_url: str | None = None
     acp_route_prefix: str = ""
+    acp_search_route_prefix: str | None = None
     acp_auth_token: str | None = None
     acp_client_id: str = "amazon-experts-backend"
     acp_default_model: str | None = None

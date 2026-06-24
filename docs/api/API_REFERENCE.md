@@ -1914,6 +1914,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
 | question | yes | string | - |
+| webSearchEnabled | no | boolean \| null | Routes ACP turns to the search prefix with `search_mode=auto` when true; otherwise uses the default prefix with `search_mode=off`. |
 
 ### `CompleteUploadRequest`
 

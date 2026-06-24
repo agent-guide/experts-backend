@@ -6401,6 +6401,18 @@
           "question": {
             "type": "string",
             "title": "Question"
+          },
+          "webSearchEnabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Websearchenabled",
+            "description": "Routes ACP turns to the search prefix with search_mode=auto when true; otherwise uses the default prefix with search_mode=off."
           }
         },
         "type": "object",
