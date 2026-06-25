@@ -51,14 +51,11 @@ def test_openapi_loads() -> None:
     assert "/api/v1/expert-market/categories" in paths
     assert "/api/v1/expert-market/experts" in paths
     assert "/api/v1/expert-market/experts/{expert_id}" in paths
-    assert "/api/v1/expert-groups" in paths
-    assert "/api/v1/expert-groups/{group_id}" in paths
-    assert "/api/v1/expert-groups/{group_id}/experts" in paths
     assert "/api/v1/plans" in paths
     assert "/api/v1/plans/{plan_id}" in paths
     assert "/api/v1/plans/{plan_id}/prices" in paths
     assert "/api/v1/plans/{plan_id}/entitlements" in paths
-    assert "/api/v1/plans/{plan_id}/expert-groups" in paths
+    assert "/api/v1/plans/{plan_id}/experts" in paths
     assert "/api/v1/plan-market/plans" in paths
     assert "/api/v1/plan-market/current-subscription" in paths
     assert "/api/v1/rbac/tenant/users" in paths
@@ -111,9 +108,7 @@ def test_sqlite_migration_uses_infra_sql(tmp_path: Path) -> None:
     assert "plans" in tables
     assert "plan_prices" in tables
     assert "plan_entitlements" in tables
-    assert "expert_groups" in tables
-    assert "expert_group_members" in tables
-    assert "plan_expert_groups" in tables
+    assert "plan_experts" in tables
     assert "tenant_subscriptions" in tables
     assert "subscription_entitlement_snapshots" in tables
 
@@ -1713,7 +1708,6 @@ def test_expert_crud_relations_status_and_permissions(tmp_path: Path) -> None:
             json={
                 "name": "Listing Expert",
                 "categoryId": "expert_cat_ops",
-                "groupId": "expert_group_basic",
                 "abilityIntro": "Helps optimize listings.",
                 "tags": ["listing", "ops", "listing"],
                 "status": "draft",
@@ -1727,8 +1721,6 @@ def test_expert_crud_relations_status_and_permissions(tmp_path: Path) -> None:
         expert = created.json()
         expert_id = expert["id"]
         assert expert["categoryName"] == "Operations"
-        assert expert["groupId"] == "expert_group_basic"
-        assert expert["groupName"] == "基础专家组"
         assert expert["tags"] == ["listing", "ops"]
         assert expert["skillIds"] == ["skill_ops"]
         assert expert["knowledgeBaseIds"] == ["kb_ops"]
@@ -1750,7 +1742,6 @@ def test_expert_crud_relations_status_and_permissions(tmp_path: Path) -> None:
             json={
                 "name": "Growth Expert",
                 "categoryId": "expert_cat_growth",
-                "groupId": "expert_group_professional",
                 "abilityIntro": "Helps grow conversion.",
                 "tags": ["growth"],
                 "skillIds": ["skill_growth"],
@@ -1763,8 +1754,6 @@ def test_expert_crud_relations_status_and_permissions(tmp_path: Path) -> None:
         patched_body = patched.json()
         assert patched_body["name"] == "Growth Expert"
         assert patched_body["categoryName"] == "Growth"
-        assert patched_body["groupId"] == "expert_group_professional"
-        assert patched_body["groupName"] == "专业专家组"
         assert patched_body["skillIds"] == ["skill_growth"]
         assert patched_body["knowledgeBaseIds"] == ["kb_growth"]
         assert patched_body["guideQuestions"] == []
@@ -1789,18 +1778,6 @@ def test_expert_crud_relations_status_and_permissions(tmp_path: Path) -> None:
         after_soft_delete = client.get(f"/api/v1/experts/{expert_id}", headers=admin_headers)
         assert after_soft_delete.status_code == 200
         assert after_soft_delete.json()["knowledgeBaseIds"] == []
-        assert after_soft_delete.json()["groupId"] == "expert_group_professional"
-
-        with open_database_connection(settings) as connection:
-            group_links = connection.execute(
-                """
-                select group_id from expert_group_members
-                where expert_id = ?
-                order by group_id
-                """,
-                (expert_id,),
-            ).fetchall()
-        assert [row["group_id"] for row in group_links] == ["expert_group_professional"]
 
         missing_skill = client.post(
             "/api/v1/experts",
@@ -1813,18 +1790,6 @@ def test_expert_crud_relations_status_and_permissions(tmp_path: Path) -> None:
             },
         )
         assert missing_skill.status_code == 404
-
-        missing_group = client.post(
-            "/api/v1/experts",
-            headers=admin_headers,
-            json={
-                "name": "Broken Group Expert",
-                "categoryId": "expert_cat_ops",
-                "groupId": "missing_group",
-                "abilityIntro": "Broken.",
-            },
-        )
-        assert missing_group.status_code == 404
 
         too_many_kbs = client.post(
             "/api/v1/experts",
@@ -1844,7 +1809,6 @@ def test_expert_crud_relations_status_and_permissions(tmp_path: Path) -> None:
             json={"knowledgeBaseIds": ["kb_ops", "kb_growth"]},
         )
         assert too_many_kbs_patch.status_code == 422
-        assert missing_group.json()["code"] == "EXPERT_GROUP_NOT_FOUND"
 
         too_many_questions = client.post(
             "/api/v1/experts",
@@ -2292,55 +2256,6 @@ def test_plan_phase1_admin_market_and_subscription_snapshot(tmp_path: Path) -> N
         assert entitled.status_code == 200, entitled.text
         assert entitled.json()["entitlements"]["seatLimit"] == 3
 
-        group = client.post(
-            "/api/v1/expert-groups",
-            headers=admin_headers,
-            json={
-                "code": "team_group",
-                "name": "Team Group",
-                "description": "Team experts",
-                "sortOrder": 55,
-            },
-        )
-        assert group.status_code == 201, group.text
-        group_body = group.json()
-
-        with open_database_connection(settings) as connection:
-            connection.execute(
-                """
-                insert into expert_categories (id, name, description)
-                values ('expert_cat_plan', 'Plan Category', null)
-                """
-            )
-            connection.execute(
-                """
-                insert into experts (id, category_id, name, ability_intro, status)
-                values ('expert_plan', 'expert_cat_plan', 'Plan Expert', 'Plan helper.', 'draft')
-                """
-            )
-            connection.commit()
-
-        members = client.put(
-            f"/api/v1/expert-groups/{group_body['id']}/experts",
-            headers=admin_headers,
-            json={"expertIds": ["expert_plan"]},
-        )
-        assert members.status_code == 200, members.text
-        assert members.json()["expertIds"] == ["expert_plan"]
-
-        assigned = client.put(
-            f"/api/v1/plans/{plan['id']}/expert-groups",
-            headers=admin_headers,
-            json={"groupIds": [group_body["id"]]},
-        )
-        assert assigned.status_code == 200, assigned.text
-        assert assigned.json()["expertGroups"][0]["code"] == "team_group"
-
-        delete_used_group = client.delete(
-            f"/api/v1/expert-groups/{group_body['id']}", headers=admin_headers
-        )
-        assert delete_used_group.status_code == 409
-
         hidden = client.patch(
             f"/api/v1/plans/{plan['id']}",
             headers=admin_headers,
@@ -2349,7 +2264,7 @@ def test_plan_phase1_admin_market_and_subscription_snapshot(tmp_path: Path) -> N
         assert hidden.status_code == 200
         market = client.get("/api/v1/plan-market/plans", headers=operator_headers)
         assert market.status_code == 200
-        assert "team" not in [item["code"] for item in market.json()["items"]]
+        assert plan["code"] not in [item["code"] for item in market.json()["items"]]
 
         tenant_register = client.post(
             "/api/v1/users/register",
@@ -2365,7 +2280,7 @@ def test_plan_phase1_admin_market_and_subscription_snapshot(tmp_path: Path) -> N
         assert body["snapshot"]["planCode"] == "free"
         assert body["snapshot"]["planName"] == "免费版"
         assert body["snapshot"]["entitlementsSnapshot"]["monthlyQuestionLimit"] == 100
-        assert body["snapshot"]["entitlementsSnapshot"]["expertGroups"][0]["code"] == "basic"
+        assert body["snapshot"]["entitlementsSnapshot"]["expertIds"] == []
 
         client.put(
             f"/api/v1/plans/{free_plan['id']}/entitlements",

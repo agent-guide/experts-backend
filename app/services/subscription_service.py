@@ -72,10 +72,7 @@ class SubscriptionService:
             ),
             "modelTiers": entitlements.modelTiers if entitlements is not None else [],
             "features": entitlements.features if entitlements is not None else {},
-            "expertGroups": [
-                {"id": group.id, "code": group.code, "name": group.name}
-                for group in plan.expertGroups
-            ],
+            "expertIds": plan.expertIds,
         }
         snapshot_id = f"subscription_snapshot_{uuid4().hex}"
         self.repo.insert_snapshot(

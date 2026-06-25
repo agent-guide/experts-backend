@@ -43,8 +43,6 @@ class Expert(BaseModel):
     name: str
     categoryId: str
     categoryName: str
-    groupId: str | None = None
-    groupName: str | None = None
     abilityIntro: str
     tags: list[str] = Field(default_factory=list)
     status: ExpertStatus
@@ -59,7 +57,6 @@ class Expert(BaseModel):
 class CreateExpertRequest(BaseModel):
     name: str
     categoryId: str
-    groupId: str | None = None
     abilityIntro: str
     tags: list[str] = Field(default_factory=list)
     status: ExpertStatus = "draft"
@@ -72,7 +69,6 @@ class CreateExpertRequest(BaseModel):
 class UpdateExpertRequest(BaseModel):
     name: str | None = None
     categoryId: str | None = None
-    groupId: str | None = None
     abilityIntro: str | None = None
     tags: list[str] | None = None
     skillIds: list[str] | None = None

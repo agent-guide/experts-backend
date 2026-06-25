@@ -7,7 +7,6 @@ from uuid import uuid4
 from app.db import DatabaseConnection
 from app.domain.plans import Plan, PlanEntitlements, PlanPrice
 from app.services._sql import execute, fetch_all, fetch_one, json_param, rowcount
-from app.services.expert_group_repository import ExpertGroupRepository
 
 
 class PlanRepository:
@@ -15,7 +14,6 @@ class PlanRepository:
 
     def __init__(self, connection: DatabaseConnection) -> None:
         self.connection = connection
-        self.group_repo = ExpertGroupRepository(connection)
 
     def list(self, *, active_only: bool = False) -> list[Plan]:
         where = "where status = 'active'" if active_only else ""
@@ -250,17 +248,43 @@ class PlanRepository:
             ),
         )
 
-    def replace_expert_groups(self, plan_id: str, group_ids: list[str]) -> None:
-        execute(self.connection, "delete from plan_expert_groups where plan_id = ?", (plan_id,))
-        for group_id in group_ids:
+    def existing_expert_ids(self, expert_ids: list[str]) -> set[str]:
+        if not expert_ids:
+            return set()
+        placeholders = ", ".join(["?"] * len(expert_ids))
+        rows = fetch_all(
+            self.connection,
+            f"select id from experts where id in ({placeholders})",
+            expert_ids,
+        )
+        return {str(row["id"]) for row in rows}
+
+    def replace_experts(self, plan_id: str, expert_ids: list[str]) -> None:
+        execute(self.connection, "delete from plan_experts where plan_id = ?", (plan_id,))
+        for expert_id in expert_ids:
             execute(
                 self.connection,
-                """
-                insert into plan_expert_groups (id, plan_id, group_id)
-                values (?, ?, ?)
-                """,
-                (f"plan_expert_group_{uuid4().hex}", plan_id, group_id),
+                "insert into plan_experts (id, plan_id, expert_id) values (?, ?, ?)",
+                (f"plan_expert_{uuid4().hex}", plan_id, expert_id),
             )
+
+    def _expert_ids_by_plan(self, plan_ids: list[str]) -> dict[str, list[str]]:
+        if not plan_ids:
+            return {}
+        placeholders = ", ".join(["?"] * len(plan_ids))
+        rows = fetch_all(
+            self.connection,
+            f"""
+            select plan_id, expert_id from plan_experts
+            where plan_id in ({placeholders})
+            order by plan_id, created_at asc, expert_id asc
+            """,
+            plan_ids,
+        )
+        grouped: dict[str, list[str]] = {}
+        for row in rows:
+            grouped.setdefault(str(row["plan_id"]), []).append(str(row["expert_id"]))
+        return grouped
 
     def _map_plans(
         self, rows: list[dict[str, Any]], *, enabled_prices_only: bool = False
@@ -269,7 +293,7 @@ class PlanRepository:
         prices = self._prices_by_plan(plan_ids, enabled_only=enabled_prices_only)
         entitlements = self._entitlements_by_plan(plan_ids)
         subscription_counts = self._subscription_counts_by_plan(plan_ids)
-        groups = {plan_id: self.group_repo.list_for_plan(plan_id) for plan_id in plan_ids}
+        expert_ids_by_plan = self._expert_ids_by_plan(plan_ids)
         return [
             Plan(
                 id=str(row["id"]),
@@ -288,7 +312,7 @@ class PlanRepository:
                 subscriptionCount=subscription_counts.get(str(row["id"]), 0),
                 prices=prices.get(str(row["id"]), []),
                 entitlements=entitlements.get(str(row["id"])),
-                expertGroups=groups.get(str(row["id"]), []),
+                expertIds=expert_ids_by_plan.get(str(row["id"]), []),
                 createdAt=str(row["created_at"]),
                 updatedAt=str(row["updated_at"]),
             )

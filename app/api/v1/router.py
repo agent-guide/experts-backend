@@ -6,7 +6,6 @@ from app.api.v1.routers import (
     chat,
     documents,
     expert_categories,
-    expert_groups,
     expert_market,
     experts,
     knowledge_bases,
@@ -31,11 +30,6 @@ api_router.include_router(
     tags=["expert-categories"],
 )
 api_router.include_router(experts.router, prefix="/experts", tags=["experts"])
-api_router.include_router(
-    expert_groups.router,
-    prefix="/expert-groups",
-    tags=["expert-groups"],
-)
 api_router.include_router(
     expert_market.router,
     prefix="/expert-market",
