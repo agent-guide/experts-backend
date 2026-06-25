@@ -8,7 +8,7 @@ from app.domain.plans import (
     Plan,
     PlanListResponse,
     ReplacePlanEntitlementsRequest,
-    ReplacePlanExpertGroupsRequest,
+    ReplacePlanExpertsRequest,
     ReplacePlanPricesRequest,
     UpdatePlanRequest,
 )
@@ -73,14 +73,14 @@ async def replace_plan_entitlements(
     return PlanService(connection).replace_entitlements(plan_id, body)
 
 
-@router.put("/{plan_id}/expert-groups", response_model=Plan)
-async def replace_plan_expert_groups(
+@router.put("/{plan_id}/experts", response_model=Plan)
+async def replace_plan_experts(
     plan_id: str,
-    body: ReplacePlanExpertGroupsRequest,
+    body: ReplacePlanExpertsRequest,
     principal: Principal = Depends(require_platform_permission("plan:write")),
     connection: DatabaseConnection = Depends(get_database),
 ) -> Plan:
-    return PlanService(connection).replace_expert_groups(plan_id, body)
+    return PlanService(connection).replace_experts(plan_id, body)
 
 
 @router.delete("/{plan_id}", status_code=204)

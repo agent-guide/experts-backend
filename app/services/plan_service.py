@@ -8,12 +8,11 @@ from app.domain.plans import (
     CreatePlanRequest,
     Plan,
     ReplacePlanEntitlementsRequest,
-    ReplacePlanExpertGroupsRequest,
+    ReplacePlanExpertsRequest,
     ReplacePlanPricesRequest,
     UpdatePlanRequest,
 )
 from app.services._sql import is_unique_violation
-from app.services.expert_group_repository import ExpertGroupRepository
 from app.services.plan_repository import PlanRepository
 
 
@@ -21,7 +20,6 @@ class PlanService:
     def __init__(self, connection: DatabaseConnection) -> None:
         self.connection = connection
         self.repo = PlanRepository(connection)
-        self.group_repo = ExpertGroupRepository(connection)
 
     def list(self) -> list[Plan]:
         return self.repo.list()
@@ -170,16 +168,16 @@ class PlanService:
         self.connection.commit()
         return self.get(plan_id)
 
-    def replace_expert_groups(
-        self, plan_id: str, request: ReplacePlanExpertGroupsRequest
+    def replace_experts(
+        self, plan_id: str, request: ReplacePlanExpertsRequest
     ) -> Plan:
         self.get(plan_id)
-        group_ids = _unique_strings(request.groupIds)
-        existing = self.group_repo.existing_group_ids(group_ids)
-        missing = [group_id for group_id in group_ids if group_id not in existing]
+        expert_ids = _unique_strings(request.expertIds)
+        existing = self.repo.existing_expert_ids(expert_ids)
+        missing = [eid for eid in expert_ids if eid not in existing]
         if missing:
-            raise ApiError(404, "EXPERT_GROUP_NOT_FOUND", "Expert group not found", {"groupIds": missing})
-        self.repo.replace_expert_groups(plan_id, group_ids)
+            raise ApiError(404, "EXPERT_NOT_FOUND", "Expert not found", {"expertIds": missing})
+        self.repo.replace_experts(plan_id, expert_ids)
         self.connection.commit()
         return self.get(plan_id)
 

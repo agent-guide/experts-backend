@@ -54,39 +54,6 @@ class ReplacePlanEntitlementsRequest(BaseModel):
     features: dict[str, Any] = Field(default_factory=dict)
 
 
-class ExpertGroup(BaseModel):
-    id: str
-    code: str
-    name: str
-    description: str | None = None
-    sortOrder: int
-    expertIds: list[str] = Field(default_factory=list)
-    createdAt: str
-    updatedAt: str
-
-
-class CreateExpertGroupRequest(BaseModel):
-    code: str
-    name: str
-    description: str | None = None
-    sortOrder: int = Field(default=0, ge=0)
-
-
-class UpdateExpertGroupRequest(BaseModel):
-    code: str | None = None
-    name: str | None = None
-    description: str | None = None
-    sortOrder: int | None = Field(default=None, ge=0)
-
-
-class ReplaceExpertGroupMembersRequest(BaseModel):
-    expertIds: list[str] = Field(default_factory=list)
-
-
-class ExpertGroupListResponse(BaseModel):
-    items: list[ExpertGroup]
-
-
 class Plan(BaseModel):
     id: str
     code: str
@@ -104,7 +71,7 @@ class Plan(BaseModel):
     subscriptionCount: int = 0
     prices: list[PlanPrice] = Field(default_factory=list)
     entitlements: PlanEntitlements | None = None
-    expertGroups: list[ExpertGroup] = Field(default_factory=list)
+    expertIds: list[str] = Field(default_factory=list)
     createdAt: str
     updatedAt: str
 
@@ -139,8 +106,8 @@ class UpdatePlanRequest(BaseModel):
     sortOrder: int | None = Field(default=None, ge=0, le=9999)
 
 
-class ReplacePlanExpertGroupsRequest(BaseModel):
-    groupIds: list[str] = Field(default_factory=list)
+class ReplacePlanExpertsRequest(BaseModel):
+    expertIds: list[str] = Field(default_factory=list)
 
 
 class PlanListResponse(BaseModel):
