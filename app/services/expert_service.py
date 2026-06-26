@@ -152,6 +152,14 @@ class ExpertService:
             raise ApiError(404, "SKILL_NOT_FOUND", "Skill not found", {"skillIds": missing})
 
     def _require_knowledge_bases(self, knowledge_base_ids: list[str]) -> None:
+        if len(knowledge_base_ids) > 1:
+            raise ApiError(
+                400,
+                "KB_LIMIT_EXCEEDED",
+                "Each expert can only bind one knowledge base",
+                {"knowledgeBaseIds": knowledge_base_ids},
+            )
+
         existing = self.repo.existing_knowledge_base_ids(knowledge_base_ids)
         missing = [kb_id for kb_id in knowledge_base_ids if kb_id not in existing]
         if missing:

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import uuid4
 
 from app.clients.acp_gateway import AcpGatewayClient
-from app.clients.ngent import NgentClient
 from app.core.errors import ApiError
 from app.db import DatabaseConnection
 from app.domain.auth import Principal
@@ -17,37 +18,29 @@ from app.domain.chat import (
     CreateSessionRequest,
     ResolvePermissionRequest,
 )
-from app.services.chat_repository import ChatRepository, _json_list
+from app.services.chat_repository import ChatRepository
 
 
 class ChatService:
-    """Local DB is the system of record; the compute engine is pluggable.
+    """Local DB is the system of record; ACP only drives compute.
 
     Sessions/turns are mirrored into chat_sessions/chat_turns so reads are tenant-scoped and
-    survive the engine. Two backends are supported, selected by `backend`:
-
-    - "ngent": thread/turn are server-side resources. The thread id is assigned by ngent on
-      create; the turn id arrives in the `turn_started` stream event.
-    - "acp": the agent-gateway ACP data plane exposes only POST {prefix}/turn and
-      POST {prefix}/permission. The thread id is generated locally at create time (no upstream
-      call); a turn has no server id, so one is generated locally. The agent-assigned ACP
-      session id arrives via the first turn's `session` event and is echoed back on later turns
-      to resume the same instance. ACP events are translated to the same public SSE contract
-      ngent exposes (turn_started -> message_delta -> turn_completed / error / permission_required)
-      so callers do not change.
+    survive the engine. The agent-gateway ACP data plane exposes only POST {prefix}/turn and
+    POST {prefix}/permission. The thread id is generated locally at create time (no upstream
+    call); a turn has no server id, so one is generated locally. The agent-assigned ACP session
+    id arrives via the first turn's `session` event and is echoed back on later turns to resume
+    the same instance. ACP events are translated to the public SSE contract
+    (turn_started -> reasoning_delta -> message_delta -> turn_completed / error /
+    permission_required) so callers do not change.
     """
 
     def __init__(
         self,
         connection: DatabaseConnection,
         *,
-        backend: str = "ngent",
-        ngent: NgentClient | None = None,
         acp: AcpGatewayClient | None = None,
     ) -> None:
         self.connection = connection
-        self.backend = backend
-        self.ngent = ngent
         self.acp = acp
         self.repo = ChatRepository(connection)
 
@@ -56,48 +49,25 @@ class ChatService:
             raise ApiError(503, "ACP_UNCONFIGURED", "acp gateway client is not configured")
         return self.acp
 
-    def _require_ngent(self) -> NgentClient:
-        if self.ngent is None:
-            raise ApiError(503, "NGENT_UNCONFIGURED", "ngent client is not configured")
-        return self.ngent
-
     # --- Sessions -------------------------------------------------------------
 
     async def create_session(self, principal: Principal, request: CreateSessionRequest) -> ChatSession:
-        agent_options = {"knowledgeBaseIds": request.knowledgeBaseIds}
         now = _now_iso()
-        if self.backend == "acp":
-            # The ACP data plane has no thread-create endpoint: the agent materializes a session
-            # lazily on the first turn. Generate the caller-owned thread id locally.
-            thread_id = f"thread_{uuid4().hex}"
-        else:
-            cwd = self._require_ngent().prepare_cwd(str(principal.active_tenant_id))
-            data = await self.ngent.request(
-                "POST",
-                "/v1/threads",
-                tenant_id=principal.active_tenant_id,
-                json={
-                    "agent": self.ngent.default_agent,
-                    "cwd": cwd,
-                    "title": request.title,
-                    "agentOptions": agent_options,
-                },
-            )
-            thread_id = data["threadId"]
+        # The ACP data plane has no thread-create endpoint: the agent materializes a session
+        # lazily on the first turn. Generate the caller-owned thread id locally.
+        thread_id = f"thread_{uuid4().hex}"
         self.repo.create_session(
             session_id=thread_id,
             tenant_id=str(principal.active_tenant_id),
             user_id=principal.user_id,
             title=request.title,
-            knowledge_base_ids=request.knowledgeBaseIds,
-            agent_options=agent_options,
+            agent_options={},
             now=now,
         )
         self.connection.commit()
         return ChatSession(
             id=thread_id,
             title=request.title,
-            knowledgeBaseIds=request.knowledgeBaseIds,
             status="active",
             isPinned=False,
             createdAt=now,
@@ -117,18 +87,6 @@ class ChatService:
 
     async def rename_session(self, principal: Principal, session_id: str, title: str) -> ChatSession:
         self._require_session(principal, session_id)
-        # The ACP data plane has no thread-rename endpoint; title is a local-only concept there.
-        if self.backend != "acp":
-            try:
-                await self.ngent.request(
-                    "PATCH",
-                    f"/v1/threads/{session_id}",
-                    tenant_id=principal.active_tenant_id,
-                    json={"title": title},
-                )
-            except ApiError:
-                # Local store is authoritative; keep the rename even if ngent is unavailable.
-                pass
         self.repo.update_session_title(session_id, title, _now_iso())
         self.connection.commit()
         return self.get_session(principal, session_id)
@@ -151,36 +109,24 @@ class ChatService:
 
     async def delete_session(self, principal: Principal, session_id: str) -> None:
         self._require_session(principal, session_id)
-
-        # The ACP data plane has no thread-delete endpoint (sessions are evicted via the admin
-        # plane); the local store is authoritative, so drop our record either way.
-        if self.backend != "acp":
-            try:
-                await self.ngent.request(
-                    "DELETE", f"/v1/threads/{session_id}", tenant_id=principal.active_tenant_id
-                )
-            except ApiError:
-                # Local store is authoritative; drop our record even if ngent already lost it.
-                pass
         self.repo.delete_session(session_id, _now_iso())
         self.connection.commit()
 
-    def list_messages(self, principal: Principal, session_id: str) -> list[dict]:
+    async def list_messages(self, principal: Principal, session_id: str) -> list[dict]:
         self._require_session(principal, session_id)
         return [turn.model_dump() for turn in self.repo.list_turns(session_id)]
 
     async def get_transcript(self, principal: Principal, session_id: str) -> dict:
         """Replay a session's conversation history.
 
-        For the ACP backend the agent-side transcript (coalesced user/assistant/reasoning
-        messages) is loaded from the gateway's route-scoped sessions API when a session has been
-        materialized; otherwise it falls back to the durable local turn records. ngent has no
-        session-transcript endpoint, so it always uses the local records. The shape is uniform:
+        The agent-side transcript (coalesced user/assistant/reasoning messages) is loaded from
+        the gateway's route-scoped sessions API when a session has been materialized; otherwise
+        it falls back to the durable local turn records. The shape is uniform:
         {sessionId, messages: [{role, text}], source: "agent" | "local"}.
         """
         row = self._require_session(principal, session_id)
         acp_session_id = str(row["acp_session_id"]) if row.get("acp_session_id") else None
-        if self.backend == "acp" and acp_session_id and self.acp is not None:
+        if acp_session_id and self.acp is not None:
             acp = self._require_acp()
             tenant_id = str(principal.active_tenant_id)
             cwd = acp.prepare_cwd(tenant_id)
@@ -195,6 +141,8 @@ class ChatService:
         messages: list[dict] = []
         for turn in self.repo.list_turns(session_id):
             messages.append({"role": "user", "text": turn.requestText})
+            if turn.reasoningText:
+                messages.append({"role": "reasoning", "text": turn.reasoningText})
             if turn.responseText:
                 messages.append({"role": "assistant", "text": turn.responseText})
         return messages
@@ -204,111 +152,8 @@ class ChatService:
     async def stream_turn(
         self, principal: Principal, session_id: str, request: ChatTurnRequest
     ) -> AsyncIterator[str]:
-        if self.backend == "acp":
-            async for line in self._stream_turn_acp(principal, session_id, request):
-                yield line
-            return
-        async for line in self._stream_turn_ngent(principal, session_id, request):
+        async for line in self._stream_turn_acp(principal, session_id, request):
             yield line
-
-    async def _stream_turn_ngent(
-        self, principal: Principal, session_id: str, request: ChatTurnRequest
-    ) -> AsyncIterator[str]:
-        row = self._require_session(principal, session_id)
-        tenant_id = principal.active_tenant_id
-        payload = {
-            "input": request.question,
-            "stream": True,
-        }
-
-        # SSE parse state, accumulated while tee-ing the stream to the caller.
-        current_event: str | None = None
-        data_line = ""
-        turn_id: str | None = None
-        parts: list[str] = []
-        stop_reason: str | None = None
-        error_message: str | None = None
-        # Auto session title: the agent's generated title rides the turn stream as a
-        # `session_info_update` event. Persist it only while the local title is still empty so a
-        # user's manual rename is never clobbered.
-        local_title = str(row.get("title") or "").strip()
-        pending_title: str | None = None
-
-        def dispatch() -> None:
-            nonlocal turn_id, stop_reason, error_message, pending_title
-            if not current_event:
-                return
-            try:
-                data = json.loads(data_line) if data_line else {}
-            except json.JSONDecodeError:
-                data = {}
-            if current_event == "turn_started":
-                tid = data.get("turnId")
-                if tid and turn_id is None:
-                    turn_id = str(tid)
-                    # ngent's turn API takes only the prompt, so model / knowledge-base /
-                    # retrieval options are not part of a turn request and are stored as
-                    # defaults -- persisting caller-supplied values would record options that
-                    # never reached the engine.
-                    self.repo.create_turn(
-                        turn_id=turn_id,
-                        session_id=session_id,
-                        tenant_id=str(tenant_id),
-                        user_id=principal.user_id,
-                        request_text=request.question,
-                        model=None,
-                        knowledge_base_ids=[],
-                        query_rewrite=False,
-                        multi_hop_config=None,
-                        now=_now_iso(),
-                    )
-                    self.connection.commit()
-            elif current_event == "message_delta":
-                delta = data.get("delta")
-                if delta:
-                    parts.append(str(delta))
-            elif current_event == "error":
-                error_message = str(data.get("message", "")) or "error"
-            elif current_event == "turn_completed":
-                reason = data.get("stopReason")
-                stop_reason = str(reason) if reason is not None else None
-            elif current_event == "session_info_update":
-                title = str(data.get("title") or "").strip()
-                if title:
-                    pending_title = title
-
-        async for line in self.ngent.stream(
-            "POST", f"/v1/threads/{session_id}/turns", tenant_id=tenant_id, json=payload
-        ):
-            if line.startswith("event:"):
-                current_event = line[len("event:"):].strip()
-            elif line.startswith("data:"):
-                data_line = line[len("data:"):].strip()
-            elif line == "":
-                dispatch()
-                current_event = None
-                data_line = ""
-            yield f"{line}\n"
-            # Flush a captured title as its own frame, emitted after the blank line that
-            # terminates the upstream frame so SSE framing stays valid.
-            if pending_title is not None:
-                if not local_title:
-                    self.repo.update_session_title(session_id, pending_title, _now_iso())
-                    self.connection.commit()
-                    local_title = pending_title
-                    yield _sse("session_title_updated", {"title": pending_title})
-                pending_title = None
-
-        # Tail flush in case the stream ends without a trailing blank line.
-        dispatch()
-        if pending_title is not None and not local_title:
-            self.repo.update_session_title(session_id, pending_title, _now_iso())
-            self.connection.commit()
-            local_title = pending_title
-            yield _sse("session_title_updated", {"title": pending_title})
-
-        if turn_id is not None:
-            self._finalize(turn_id, parts, stop_reason, error_message)
 
     async def _stream_turn_acp(
         self, principal: Principal, session_id: str, request: ChatTurnRequest
@@ -317,7 +162,6 @@ class ChatService:
         acp = self._require_acp()
         tenant_id = principal.active_tenant_id
         acp_session_id = str(row["acp_session_id"]) if row.get("acp_session_id") else None
-        knowledge_base_ids = _json_list(row.get("knowledge_base_ids"))
         cwd = acp.prepare_cwd(str(tenant_id))
 
         # The ACP data plane has no server turn id; generate one up front and persist immediately
@@ -330,7 +174,6 @@ class ChatService:
             user_id=principal.user_id,
             request_text=request.question,
             model=acp.default_model,
-            knowledge_base_ids=knowledge_base_ids,
             query_rewrite=False,
             multi_hop_config=None,
             now=_now_iso(),
@@ -338,24 +181,162 @@ class ChatService:
         self.connection.commit()
         yield _sse("turn_started", {"turnId": turn_id})
 
-        parts: list[str] = []
-        stop_reason: str | None = None
-        error_message: str | None = None
-        bound_session_id = acp_session_id
+        try:
+            result = _AcpTurnResult(bound_session_id=acp_session_id)
+            attempt_events: list[str] | None = [] if acp_session_id else None
+
+            drive = self._drive_acp_turn(
+                acp=acp,
+                principal=principal,
+                session_id=session_id,
+                request=request,
+                initial_acp_session_id=acp_session_id,
+                cwd=cwd,
+                turn_id=turn_id,
+                result=result,
+            )
+            # A resume attempt is buffered only until it shows a sign of life. Once any
+            # output, reasoning, session rebind, permission prompt, or completion arrives,
+            # the resume has "taken": flush what was held and stream the rest live so
+            # follow-up turns are not stalled until the whole turn completes. A fresh
+            # session (attempt_events is None) streams live from the first event.
+            committed = attempt_events is None
+            async for event in drive:
+                if committed:
+                    yield event
+                    continue
+                attempt_events.append(event)
+                if (
+                    result.saw_delta
+                    or result.reasoning_parts
+                    or result.saw_done
+                    or result.bound_session_id != acp_session_id
+                    or event.startswith("event: permission_required")
+                ):
+                    committed = True
+                    for buffered in attempt_events:
+                        yield buffered
+                    attempt_events = None
+        except ApiError as exc:
+            self._finalize(turn_id, [], None, exc.message)
+            yield _sse("error", {"code": exc.code, "message": exc.message, "details": exc.details})
+            return
+
+        # A buffered resume that produced nothing and errored means the upstream session
+        # is gone. Drop the dead binding and retry once with a fresh session, streaming the
+        # retry live since nothing was emitted to the caller yet.
+        if (
+            result.error_message is not None
+            and acp_session_id is not None
+            and not committed
+            and result.bound_session_id == acp_session_id
+        ):
+            self.repo.set_acp_session_id(session_id, None, _now_iso())
+            self.connection.commit()
+            result = _AcpTurnResult()
+            attempt_events = None
+            async for event in self._drive_acp_turn(
+                acp=acp,
+                principal=principal,
+                session_id=session_id,
+                request=request,
+                initial_acp_session_id=None,
+                cwd=cwd,
+                turn_id=turn_id,
+                result=result,
+                fresh_session=True,
+            ):
+                yield event
+
+        if attempt_events is not None:
+            for event in attempt_events:
+                yield event
+
+        answer = _normalize_answer_markdown("".join(result.parts))
+        self._finalize(
+            turn_id,
+            [answer],
+            result.stop_reason,
+            result.error_message,
+            reasoning_parts=result.reasoning_parts,
+        )
+        current_row = self.repo.get_session_row(
+            str(principal.active_tenant_id), principal.user_id, session_id
+        )
+        local_title = str((current_row or {}).get("title") or "").strip()
+        if result.error_message is None and not local_title and result.bound_session_id:
+            title = await self._fetch_acp_title(str(tenant_id), result.bound_session_id, cwd)
+            if title:
+                self.repo.update_session_title(session_id, title, _now_iso())
+                self.connection.commit()
+                yield _sse("session_title_updated", {"title": title})
+        if result.error_message is None:
+            yield _sse("turn_completed", {"stopReason": result.stop_reason})
+
+    async def _drive_acp_turn(
+        self,
+        *,
+        acp: AcpGatewayClient,
+        principal: Principal,
+        session_id: str,
+        request: ChatTurnRequest,
+        initial_acp_session_id: str | None,
+        cwd: str,
+        turn_id: str,
+        result: _AcpTurnResult,
+        fresh_session: bool = False,
+    ) -> AsyncIterator[str]:
+        reasoning_buffer = _SmoothTextBuffer(max_chars=48, punctuation=True)
+        answer_buffer = _SmoothTextBuffer(max_chars=80, punctuation=True)
         current_event: str | None = None
         data_line = ""
+        result.bound_session_id = initial_acp_session_id
         # Auto session title: the gateway replays the agent's title as a `session_info` event at
         # turn start. Persist it only while the local title is still empty so a user's manual
         # rename is never clobbered.
-        local_title = str(row.get("title") or "").strip()
+        row = self.repo.get_session_row(
+            str(principal.active_tenant_id), principal.user_id, session_id
+        )
+        local_title = str((row or {}).get("title") or "").strip()
+
+        def emit_reasoning(text: str) -> list[str]:
+            result.reasoning_parts.append(text)
+            chunk = reasoning_buffer.push(text)
+            if chunk:
+                return [_sse("reasoning_delta", _reasoning_delta_payload(chunk, turn_id))]
+            return []
+
+        def emit_answer(text: str) -> list[str]:
+            result.parts.append(text)
+            result.saw_delta = True
+            events: list[str] = []
+            reasoning_tail = reasoning_buffer.flush()
+            if reasoning_tail:
+                events.append(_sse("reasoning_delta", _reasoning_delta_payload(reasoning_tail, turn_id)))
+            chunk = answer_buffer.push(text)
+            if chunk:
+                events.append(_sse("message_delta", {"delta": _normalize_answer_markdown_delta(chunk, at_line_start=answer_buffer.chunk_at_line_start)}))
+            return events
+
+        def flush_reasoning_tail() -> list[str]:
+            reasoning_tail = reasoning_buffer.flush()
+            if reasoning_tail:
+                return [_sse("reasoning_delta", _reasoning_delta_payload(reasoning_tail, turn_id))]
+            return []
+
+        def flush_answer_tail() -> list[str]:
+            answer_tail = answer_buffer.flush()
+            if answer_tail:
+                return [_sse("message_delta", {"delta": _normalize_answer_markdown_delta(answer_tail, at_line_start=answer_buffer.chunk_at_line_start)})]
+            return []
 
         async for line in acp.stream_turn(
             thread_id=session_id,
             input=request.question,
-            tenant_id=tenant_id,
-            session_id=acp_session_id,
+            tenant_id=principal.active_tenant_id,
+            session_id=initial_acp_session_id,
             cwd=cwd,
-            config_overrides=_acp_config_overrides(knowledge_base_ids),
+            fresh_session=fresh_session,
         ):
             if line.startswith("event:"):
                 current_event = line[len("event:"):].strip()
@@ -369,29 +350,38 @@ class ChatService:
                         data = {}
                     if current_event == "session":
                         sid = str(data.get("session_id") or "").strip()
-                        if sid and sid != bound_session_id:
+                        if sid and sid != result.bound_session_id:
                             # Persist the agent-assigned id so follow-up turns resume this instance.
-                            bound_session_id = sid
+                            result.bound_session_id = sid
                             self.repo.set_acp_session_id(session_id, sid, _now_iso())
                             self.connection.commit()
                     elif current_event == "delta":
                         text = data.get("text")
                         if text:
-                            parts.append(str(text))
-                            yield _sse("message_delta", {"delta": str(text)})
+                            for event in emit_answer(str(text)):
+                                yield event
+                    elif current_event in _ACP_REASONING_EVENTS:
+                        reasoning_text = _acp_reasoning_text(current_event, data)
+                        if reasoning_text:
+                            for event in emit_reasoning(reasoning_text):
+                                yield event
                     elif current_event == "permission":
-                        # Translate to ngent's permission_required shape; the request id replaces
-                        # ngent's permissionId and the ACP options ride along under `data`.
+                        # Translate ACP permission prompts to the public permission_required shape.
                         payload: dict = {"permissionId": data.get("request_id")}
                         if data.get("data") is not None:
                             payload["data"] = data["data"]
                         yield _sse("permission_required", payload)
                     elif current_event == "error":
-                        error_message = str(data.get("message") or "") or "error"
-                        yield _sse("error", {"message": error_message})
+                        result.error_message = str(data.get("message") or "") or "error"
+                        yield _sse("error", {"message": result.error_message})
                     elif current_event == "done":
+                        result.saw_done = True
                         reason = data.get("stop_reason")
-                        stop_reason = str(reason) if reason is not None else None
+                        result.stop_reason = str(reason) if reason is not None else None
+                        for event in flush_reasoning_tail():
+                            yield event
+                        for event in flush_answer_tail():
+                            yield event
                     elif current_event == "session_info":
                         # Agents that push session_info_update (e.g. opencode) surface the title
                         # live here; the gateway wraps the raw ACP update under `data`, so it is
@@ -406,21 +396,10 @@ class ChatService:
                 current_event = None
                 data_line = ""
 
-        self._finalize(turn_id, parts, stop_reason, error_message)
-        # codex-acp never emits session_info_update, so the live event above never fires for it;
-        # its title is only exposed via the route-scoped session list (codex auto-derives it from
-        # the first user message). Pull it once the turn has bound an acp_session_id, filling only
-        # an empty local title so a manual rename is never clobbered. Best-effort: an unhealthy
-        # gateway must never fail the turn.
-        if error_message is None and not local_title and bound_session_id:
-            title = await self._fetch_acp_title(str(tenant_id), bound_session_id, cwd)
-            if title:
-                self.repo.update_session_title(session_id, title, _now_iso())
-                self.connection.commit()
-                local_title = title
-                yield _sse("session_title_updated", {"title": title})
-        if error_message is None:
-            yield _sse("turn_completed", {"stopReason": stop_reason})
+        for event in flush_reasoning_tail():
+            yield event
+        for event in flush_answer_tail():
+            yield event
 
     async def _fetch_acp_title(
         self, tenant_id: str, acp_session_id: str, cwd: str
@@ -452,6 +431,8 @@ class ChatService:
         parts: list[str],
         stop_reason: str | None,
         error_message: str | None,
+        *,
+        reasoning_parts: list[str] | None = None,
     ) -> None:
         if error_message is not None:
             status = "failed"
@@ -463,6 +444,7 @@ class ChatService:
             turn_id=turn_id,
             status=status,
             response_text="".join(parts),
+            reasoning_text="".join(reasoning_parts or []),
             stop_reason=stop_reason,
             error_message=error_message,
             completed_at=_now_iso(),
@@ -471,37 +453,19 @@ class ChatService:
 
     async def cancel_turn(self, principal: Principal, turn_id: str) -> dict:
         self._require_turn(principal, turn_id)
-        if self.backend == "acp":
-            # The ACP data plane has no turn-cancel endpoint; cancellation is by client
-            # disconnect. Best-effort: mark a still-running turn cancelled in the local record.
-            self.repo.cancel_running_turn(turn_id, _now_iso())
-            self.connection.commit()
-            return {"turnId": turn_id, "status": "cancelled"}
-        data = await self.ngent.request(
-            "POST", f"/v1/turns/{turn_id}/cancel", tenant_id=principal.active_tenant_id
-        )
-        return {"turnId": turn_id, "status": (data or {}).get("status", "cancelling")}
+        # The ACP data plane has no turn-cancel endpoint; cancellation is by client
+        # disconnect. Best-effort: mark a still-running turn cancelled in the local record.
+        self.repo.cancel_running_turn(turn_id, _now_iso())
+        self.connection.commit()
+        return {"turnId": turn_id, "status": "cancelled"}
 
     async def stream_turn_events(
         self, principal: Principal, turn_id: str, after: int | None
     ) -> AsyncIterator[str]:
         self._require_turn(principal, turn_id)
-        if self.backend == "acp":
-            # The ACP data plane has no event-replay endpoint; replay the stored turn from the
-            # local record (no live mid-turn resume -- `after` is ignored).
-            return self._replay_turn_acp(turn_id)
-        tenant_id = principal.active_tenant_id
-        path = f"/v1/turns/{turn_id}/events"
-        if after is not None:
-            path += f"?after={after}"
-
-        ngent = self._require_ngent()
-
-        async def events() -> AsyncIterator[str]:
-            async for line in ngent.stream("GET", path, tenant_id=tenant_id):
-                yield f"{line}\n"
-
-        return events()
+        # The ACP data plane has no event-replay endpoint; replay the stored turn from the
+        # local record (no live mid-turn resume -- `after` is ignored).
+        return self._replay_turn_acp(turn_id)
 
     def _replay_turn_acp(self, turn_id: str) -> AsyncIterator[str]:
         turn = self.repo.get_turn(turn_id)
@@ -510,6 +474,8 @@ class ChatService:
             if turn is None:
                 return
             yield _sse("turn_started", {"turnId": turn.id})
+            if turn.reasoningText:
+                yield _sse("reasoning_delta", _reasoning_delta_payload(turn.reasoningText, turn.id))
             if turn.responseText:
                 yield _sse("message_delta", {"delta": turn.responseText})
             if turn.status == "failed":
@@ -522,26 +488,13 @@ class ChatService:
     async def resolve_permission(
         self, principal: Principal, permission_id: str, body: ResolvePermissionRequest
     ) -> dict:
-        if self.backend == "acp":
-            # ACP requires a concrete outcome discriminator; the request id travels in the body.
-            outcome = body.outcome or ("selected" if body.optionId else "cancelled")
-            data = await self._require_acp().resolve_permission(
-                request_id=permission_id,
-                outcome=outcome,
-                option_id=body.optionId,
-                tenant_id=principal.active_tenant_id,
-            )
-            return data or {"permissionId": permission_id, "status": "resolved"}
-        payload = {
-            k: v
-            for k, v in {"outcome": body.outcome, "optionId": body.optionId}.items()
-            if v is not None
-        }
-        data = await self.ngent.request(
-            "POST",
-            f"/v1/permissions/{permission_id}",
+        # ACP requires a concrete outcome discriminator; the request id travels in the body.
+        outcome = body.outcome or ("selected" if body.optionId else "cancelled")
+        data = await self._require_acp().resolve_permission(
+            request_id=permission_id,
+            outcome=outcome,
+            option_id=body.optionId,
             tenant_id=principal.active_tenant_id,
-            json=payload,
         )
         return data or {"permissionId": permission_id, "status": "resolved"}
 
@@ -576,9 +529,174 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
-def _acp_config_overrides(knowledge_base_ids: list[str]) -> dict[str, str] | None:
-    if not knowledge_base_ids:
+def _reasoning_delta_payload(delta: str, turn_id: str | None) -> dict:
+    payload = {
+        "delta": delta,
+        "channel": "reasoning",
+        "mode": "append",
+        "reasoningId": f"{turn_id or 'pending'}:reasoning",
+    }
+    if turn_id:
+        payload["turnId"] = turn_id
+    return payload
+
+
+def _normalize_answer_markdown(text: str) -> str:
+    """Apply deterministic Markdown cleanup to final assistant answers."""
+    text = text.replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not text:
+        return ""
+
+    normalized_lines: list[str] = []
+    blank_seen = False
+    for raw_line in text.split("\n"):
+        line = _normalize_markdown_line(raw_line.rstrip())
+        if not line.strip():
+            if blank_seen:
+                continue
+            blank_seen = True
+            normalized_lines.append("")
+            continue
+        blank_seen = False
+        normalized_lines.append(line)
+    return "\n".join(normalized_lines).strip()
+
+
+def _normalize_answer_markdown_delta(text: str, *, at_line_start: bool = True) -> str:
+    """Normalize Markdown markers without changing streaming whitespace.
+
+    The line-start markers (headings, list bullets) are anchored at the start of a line, so
+    they may only be applied to the first line of a streamed chunk when that chunk actually
+    begins at a line boundary. Otherwise a mid-line fragment like "#5" would be mangled into
+    "# 5". Lines after an embedded newline are always genuine line starts.
+    """
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    lines = text.split("\n")
+    normalized = [
+        line if index == 0 and not at_line_start else _normalize_markdown_line(line)
+        for index, line in enumerate(lines)
+    ]
+    return "\n".join(normalized)
+
+
+def _normalize_markdown_line(line: str) -> str:
+    line = re.sub(r"^(#{1,6})(\S)", r"\1 \2", line)
+    line = re.sub(r"^(\s*)[\u2022\u25cf]\s+", r"\1- ", line)
+    line = re.sub(r"^(\s*)[-*+]\s+", r"\1- ", line)
+    line = re.sub(r"^(\s*)(\d+)[)\uff09\u3001]\s*", r"\1\2. ", line)
+    return line
+
+
+class _SmoothTextBuffer:
+    def __init__(self, *, max_chars: int, punctuation: bool = False) -> None:
+        self.max_chars = max_chars
+        self.punctuation = punctuation
+        self._text = ""
+        # Whether the chunk most recently returned by push()/flush() began at a line start.
+        # The very first chunk does; afterwards a chunk is a line start only when the previous
+        # one ended on a newline.
+        self.chunk_at_line_start = True
+        self._next_at_line_start = True
+
+    def push(self, delta: str) -> str | None:
+        self._text += delta
+        split_at = self._split_index()
+        if split_at is None:
+            return None
+        chunk = self._text[:split_at]
+        self._text = self._text[split_at:]
+        self._mark(chunk)
+        return chunk
+
+    def flush(self) -> str:
+        chunk = self._text
+        self._text = ""
+        self._mark(chunk)
+        return chunk
+
+    def _mark(self, chunk: str) -> None:
+        self.chunk_at_line_start = self._next_at_line_start
+        if chunk:
+            self._next_at_line_start = chunk.endswith("\n")
+
+    def _split_index(self) -> int | None:
+        if not self._text:
+            return None
+        newline = self._text.rfind("\n")
+        if newline >= 0:
+            return newline + 1
+        if self.punctuation:
+            for index in range(len(self._text) - 1, -1, -1):
+                if _is_soft_flush_char(self._text[index]) and index + 1 >= 12:
+                    return index + 1
+        if len(self._text) >= self.max_chars:
+            return len(self._text)
         return None
-    # config_overrides is a string->string map on the wire, so the selection is JSON-encoded.
-    # TODO(acp): confirm the exact key/encoding the ACP agent expects for knowledge-base selection.
-    return {"knowledge_base_ids": json.dumps(knowledge_base_ids)}
+
+
+def _is_soft_flush_char(char: str) -> bool:
+    return char in {
+        " ",
+        ".",
+        "!",
+        "?",
+        ";",
+        ":",
+        "\u3002",
+        "\uff01",
+        "\uff1f",
+        "\uff1b",
+        "\uff1a",
+        "\uff0c",
+        "\u3001",
+    }
+
+
+_ACP_REASONING_EVENTS = frozenset({"reasoning", "tool_call", "usage"})
+
+
+def _acp_reasoning_text(event: str, data: dict) -> str | None:
+    """Map ACP process events to the public reasoning channel."""
+    text = data.get("text")
+    if text is not None and str(text):
+        return str(text)
+    if event == "tool_call":
+        payload = data.get("data")
+        if not isinstance(payload, dict):
+            if payload is not None:
+                return f"[tool] {json.dumps(payload, ensure_ascii=False)}\n"
+            return None
+        name = str(payload.get("name") or payload.get("tool") or "tool")
+        detail = payload.get("input") or payload.get("arguments")
+        if detail is not None:
+            if isinstance(detail, (dict, list)):
+                detail_text = json.dumps(detail, ensure_ascii=False)
+            else:
+                detail_text = str(detail)
+            return f"[tool] {name}: {detail_text}\n"
+        return f"[tool] {name}\n"
+    if event == "usage":
+        return None
+    nested = data.get("data")
+    if nested is None:
+        return None
+    if isinstance(nested, str):
+        return nested
+    return json.dumps(nested, ensure_ascii=False) + "\n"
+
+
+@dataclass
+class _AcpTurnResult:
+    parts: list[str] | None = None
+    reasoning_parts: list[str] | None = None
+    stop_reason: str | None = None
+    error_message: str | None = None
+    bound_session_id: str | None = None
+    saw_delta: bool = False
+    saw_done: bool = False
+
+    def __post_init__(self) -> None:
+        if self.parts is None:
+            self.parts = []
+        if self.reasoning_parts is None:
+            self.reasoning_parts = []

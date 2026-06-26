@@ -8,11 +8,9 @@ from fastapi.testclient import TestClient
 
 from app.api.deps import (
     get_acp_gateway_client,
-    get_ngent_client,
     get_skill_storage,
 )
 from app.clients.acp_gateway import AcpGatewayClient
-from app.clients.ngent import NgentClient
 from app.core.config import Settings
 from app.core.security import hash_opaque_token, hash_password
 from app.db import migrate_database, open_database_connection
@@ -1067,7 +1065,6 @@ def test_managed_users_include_subscription_usage_filters_and_detail(tmp_path: P
                   tenant_id,
                   user_id,
                   title,
-                  knowledge_base_ids,
                   agent_options,
                   status
                 )
@@ -1076,7 +1073,6 @@ def test_managed_users_include_subscription_usage_filters_and_detail(tmp_path: P
                   'tenant_default',
                   'tenant_user',
                   'Usage Session',
-                  '[]',
                   '{}',
                   'active'
                 )
@@ -1406,7 +1402,6 @@ def test_tenant_management_subscription_usage_filters_and_personal_guards(
                   tenant_id,
                   user_id,
                   title,
-                  knowledge_base_ids,
                   agent_options,
                   status
                 )
@@ -1415,7 +1410,6 @@ def test_tenant_management_subscription_usage_filters_and_personal_guards(
                   'tenant_default',
                   'tenant_user',
                   'Usage Session',
-                  '[]',
                   '{}',
                   'active'
                 )
@@ -1827,6 +1821,25 @@ def test_expert_crud_relations_status_and_permissions(tmp_path: Path) -> None:
             },
         )
         assert missing_group.status_code == 404
+
+        too_many_kbs = client.post(
+            "/api/v1/experts",
+            headers=admin_headers,
+            json={
+                "name": "Multi KB Expert",
+                "categoryId": "expert_cat_ops",
+                "abilityIntro": "Broken.",
+                "knowledgeBaseIds": ["kb_ops", "kb_growth"],
+            },
+        )
+        assert too_many_kbs.status_code == 422
+
+        too_many_kbs_patch = client.patch(
+            f"/api/v1/experts/{expert_id}",
+            headers=admin_headers,
+            json={"knowledgeBaseIds": ["kb_ops", "kb_growth"]},
+        )
+        assert too_many_kbs_patch.status_code == 422
         assert missing_group.json()["code"] == "EXPERT_GROUP_NOT_FOUND"
 
         too_many_questions = client.post(
@@ -2776,82 +2789,12 @@ def test_skills_frontmatter_inline_lists_and_dashes(tmp_path: Path) -> None:
         assert body["allowedTools"] == ["Bash(some-tool --flag)"]
 
 
-def test_chat_turn_uses_ngent_input_protocol(tmp_path: Path) -> None:
-    database_path = tmp_path / "chat_ngent.sqlite3"
-    settings = Settings(
-        database_url=f"sqlite:///{database_path}",
-        default_tenant_id="tenant_default",
-        jwt_secret="test-secret-with-at-least-32-bytes",
-        ngent_base_url="http://ngent.test",
-        ngent_default_cwd=str(tmp_path / "ngent-workspace"),
-    )
-    fake_ngent = FakeNgentClient()
-    test_app = create_app(settings)
-    test_app.dependency_overrides[get_ngent_client] = lambda: fake_ngent
-
-    with TestClient(test_app) as client:
-        _seed_tenant(settings)
-        _seed_tenant_user(
-            settings,
-            "tenant_user",
-            "tenant@example.com",
-            "Tenant User",
-            "tenant-secret",
-            "member",
-        )
-        login = client.post(
-            "/api/v1/auth/login",
-            json={
-                "email": "tenant@example.com",
-                "password": "tenant-secret",
-                "tenantId": "tenant_default",
-            },
-        )
-        assert login.status_code == 200
-        headers = {
-            "Authorization": f"Bearer {login.json()['accessToken']}",
-            "x-tenant-id": "tenant_default",
-        }
-
-        created = client.post(
-            "/api/v1/chat/sessions",
-            headers=headers,
-            json={"title": "Protocol Test"},
-        )
-        assert created.status_code == 201
-        session_id = created.json()["id"]
-
-        turn = client.post(
-            f"/api/v1/chat/sessions/{session_id}/turns",
-            headers=headers,
-            json={"question": "hello"},
-        )
-
-        assert turn.status_code == 200
-        assert "event: turn_completed" in turn.text
-        assert fake_ngent.stream_calls == [
-            {
-                "method": "POST",
-                "path": f"/v1/threads/{session_id}/turns",
-                "tenant_id": "tenant_default",
-                "json": {"input": "hello", "stream": True},
-            }
-        ]
-        assert "prompt" not in fake_ngent.stream_calls[0]["json"]
-        assert "agentOptions" not in fake_ngent.stream_calls[0]["json"]
-
-        messages = client.get(f"/api/v1/chat/sessions/{session_id}/messages", headers=headers)
-        assert messages.status_code == 200
-        assert messages.json()["items"][0]["responseText"] == "ok"
-
-
 def test_chat_acp_backend_creates_locally_and_translates_turn(tmp_path: Path) -> None:
     database_path = tmp_path / "chat_acp.sqlite3"
     settings = Settings(
         database_url=f"sqlite:///{database_path}",
         default_tenant_id="tenant_default",
         jwt_secret="test-secret-with-at-least-32-bytes",
-        chat_backend="acp",
         acp_gateway_base_url="http://gateway.test",
         acp_route_prefix="/acp",
         acp_default_cwd=str(tmp_path / "acp-workspace"),
@@ -2887,7 +2830,7 @@ def test_chat_acp_backend_creates_locally_and_translates_turn(tmp_path: Path) ->
         created = client.post(
             "/api/v1/chat/sessions",
             headers=headers,
-            json={"title": "ACP Test", "knowledgeBaseIds": ["kb_1"]},
+            json={"title": "ACP Test"},
         )
         assert created.status_code == 201
         session_id = created.json()["id"]
@@ -2900,7 +2843,7 @@ def test_chat_acp_backend_creates_locally_and_translates_turn(tmp_path: Path) ->
             json={"question": "hello"},
         )
         assert turn.status_code == 200
-        # ACP session/delta/done events are translated to the public ngent-shaped contract.
+        # ACP session/delta/done events are translated to the public public contract.
         assert "event: turn_started" in turn.text
         assert "event: message_delta" in turn.text
         assert "event: turn_completed" in turn.text
@@ -2910,8 +2853,8 @@ def test_chat_acp_backend_creates_locally_and_translates_turn(tmp_path: Path) ->
         assert first_call["thread_id"] == session_id
         assert first_call["session_id"] is None  # first turn has no id to resume
         assert first_call["cwd"] == fake_acp.default_cwd
-        # knowledge base selection rides along JSON-encoded in config_overrides.
-        assert first_call["config_overrides"] == {"knowledge_base_ids": '["kb_1"]'}
+        assert first_call["input"] == "hello"
+        assert first_call.get("config_overrides") is None
 
         messages = client.get(f"/api/v1/chat/sessions/{session_id}/messages", headers=headers)
         assert messages.status_code == 200
@@ -2926,13 +2869,76 @@ def test_chat_acp_backend_creates_locally_and_translates_turn(tmp_path: Path) ->
         assert fake_acp.turn_calls[1]["session_id"] == "acp_sess_1"
 
 
+def test_chat_acp_backend_translates_reasoning_and_tool_call(tmp_path: Path) -> None:
+    database_path = tmp_path / "chat_acp_reasoning.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+        acp_gateway_base_url="http://gateway.test",
+        acp_route_prefix="/acp",
+        acp_default_cwd=str(tmp_path / "acp-workspace"),
+    )
+    fake_acp = FakeAcpReasoningGatewayClient()
+    test_app = create_app(settings)
+    test_app.dependency_overrides[get_acp_gateway_client] = lambda: fake_acp
+
+    with TestClient(test_app) as client:
+        _seed_tenant(settings)
+        _seed_tenant_user(
+            settings,
+            "tenant_user",
+            "tenant@example.com",
+            "Tenant User",
+            "tenant-secret",
+            "member",
+        )
+        login = client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "tenant@example.com",
+                "password": "tenant-secret",
+                "tenantId": "tenant_default",
+            },
+        )
+        assert login.status_code == 200
+        headers = {
+            "Authorization": f"Bearer {login.json()['accessToken']}",
+            "x-tenant-id": "tenant_default",
+        }
+
+        session_id = client.post(
+            "/api/v1/chat/sessions",
+            headers=headers,
+            json={"title": "ACP Reasoning"},
+        ).json()["id"]
+
+        turn = client.post(
+            f"/api/v1/chat/sessions/{session_id}/turns",
+            headers=headers,
+            json={"question": "hello"},
+        )
+
+        assert turn.status_code == 200
+        assert "event: reasoning_delta" in turn.text
+        assert "thinking" in turn.text
+        assert "[tool] search" in turn.text
+        assert turn.text.index("event: reasoning_delta") < turn.text.index("event: message_delta")
+
+        messages = client.get(f"/api/v1/chat/sessions/{session_id}/messages", headers=headers)
+        assert messages.status_code == 200
+        item = messages.json()["items"][0]
+        assert "thinking" in item["reasoningText"]
+        assert "[tool] search" in item["reasoningText"]
+        assert item["responseText"] == "final answer"
+
+
 def test_chat_acp_transcript_replays_from_route_api(tmp_path: Path) -> None:
     database_path = tmp_path / "chat_acp_transcript.sqlite3"
     settings = Settings(
         database_url=f"sqlite:///{database_path}",
         default_tenant_id="tenant_default",
         jwt_secret="test-secret-with-at-least-32-bytes",
-        chat_backend="acp",
         acp_gateway_base_url="http://gateway.test",
         acp_default_cwd=str(tmp_path / "acp-workspace"),
     )
@@ -3007,54 +3013,6 @@ def _login_tenant_member(client: TestClient, settings: Settings) -> dict[str, st
     }
 
 
-def test_chat_ngent_auto_title_fills_only_when_empty(tmp_path: Path) -> None:
-    database_path = tmp_path / "chat_ngent_title.sqlite3"
-    settings = Settings(
-        database_url=f"sqlite:///{database_path}",
-        default_tenant_id="tenant_default",
-        jwt_secret="test-secret-with-at-least-32-bytes",
-        ngent_base_url="http://ngent.test",
-        ngent_default_cwd=str(tmp_path / "ngent-workspace"),
-    )
-    fake_ngent = FakeNgentTitleClient()
-    test_app = create_app(settings)
-    test_app.dependency_overrides[get_ngent_client] = lambda: fake_ngent
-
-    with TestClient(test_app) as client:
-        headers = _login_tenant_member(client, settings)
-
-        # Create without a title so the agent's generated title can fill it.
-        created = client.post("/api/v1/chat/sessions", headers=headers, json={})
-        assert created.status_code == 201
-        session_id = created.json()["id"]
-
-        # First turn fills the empty title and re-emits a unified session_title_updated frame.
-        turn1 = client.post(
-            f"/api/v1/chat/sessions/{session_id}/turns",
-            headers=headers,
-            json={"question": "hello"},
-        )
-        assert "event: session_title_updated" in turn1.text
-        assert "Auto 1" in turn1.text
-        assert (
-            client.get(f"/api/v1/chat/sessions/{session_id}", headers=headers).json()["title"]
-            == "Auto 1"
-        )
-
-        # Second turn: the title is already set (the same guard a manual rename would hit), so a
-        # new agent title must NOT clobber it and no frame is emitted.
-        turn2 = client.post(
-            f"/api/v1/chat/sessions/{session_id}/turns",
-            headers=headers,
-            json={"question": "again"},
-        )
-        assert "event: session_title_updated" not in turn2.text
-        assert (
-            client.get(f"/api/v1/chat/sessions/{session_id}", headers=headers).json()["title"]
-            == "Auto 1"
-        )
-
-
 def test_chat_acp_auto_title_via_session_info_event(tmp_path: Path) -> None:
     # The live `session_info` SSE path, for agents like opencode that DO emit session_info_update.
     # The session list returns no title for this fake, so the title can only come from the stream event.
@@ -3063,7 +3021,6 @@ def test_chat_acp_auto_title_via_session_info_event(tmp_path: Path) -> None:
         database_url=f"sqlite:///{database_path}",
         default_tenant_id="tenant_default",
         jwt_secret="test-secret-with-at-least-32-bytes",
-        chat_backend="acp",
         acp_gateway_base_url="http://gateway.test",
         acp_route_prefix="/acp",
         acp_default_cwd=str(tmp_path / "acp-workspace"),
@@ -3116,7 +3073,6 @@ def test_chat_acp_auto_title_from_route_session_list(tmp_path: Path) -> None:
         database_url=f"sqlite:///{database_path}",
         default_tenant_id="tenant_default",
         jwt_secret="test-secret-with-at-least-32-bytes",
-        chat_backend="acp",
         acp_gateway_base_url="http://gateway.test",
         acp_route_prefix="/acp",
         acp_default_cwd=str(tmp_path / "acp-workspace"),
@@ -3165,12 +3121,13 @@ def test_chat_sessions_can_be_listed_by_archive_status(tmp_path: Path) -> None:
         database_url=f"sqlite:///{database_path}",
         default_tenant_id="tenant_default",
         jwt_secret="test-secret-with-at-least-32-bytes",
-        ngent_base_url="http://ngent.test",
-        ngent_default_cwd=str(tmp_path / "ngent-workspace"),
+        acp_gateway_base_url="http://gateway.test",
+        acp_route_prefix="/acp",
+        acp_default_cwd=str(tmp_path / "acp-workspace"),
     )
-    fake_ngent = FakeNgentClient()
+    fake_acp = FakeAcpGatewayClient()
     test_app = create_app(settings)
-    test_app.dependency_overrides[get_ngent_client] = lambda: fake_ngent
+    test_app.dependency_overrides[get_acp_gateway_client] = lambda: fake_acp
 
     with TestClient(test_app) as client:
         _seed_tenant(settings)
@@ -3244,12 +3201,13 @@ def test_chat_session_delete_is_soft_delete(tmp_path: Path) -> None:
         database_url=f"sqlite:///{database_path}",
         default_tenant_id="tenant_default",
         jwt_secret="test-secret-with-at-least-32-bytes",
-        ngent_base_url="http://ngent.test",
-        ngent_default_cwd=str(tmp_path / "ngent-workspace"),
+        acp_gateway_base_url="http://gateway.test",
+        acp_route_prefix="/acp",
+        acp_default_cwd=str(tmp_path / "acp-workspace"),
     )
-    fake_ngent = FakeNgentClient()
+    fake_acp = FakeAcpGatewayClient()
     test_app = create_app(settings)
-    test_app.dependency_overrides[get_ngent_client] = lambda: fake_ngent
+    test_app.dependency_overrides[get_acp_gateway_client] = lambda: fake_acp
 
     with TestClient(test_app) as client:
         _seed_tenant(settings)
@@ -3318,21 +3276,76 @@ def test_chat_session_delete_is_soft_delete(tmp_path: Path) -> None:
     assert turns["count"] == 1
 
 
-def test_ngent_preserves_remote_posix_cwd() -> None:
-    client = NgentClient(Settings(ngent_default_cwd="/usr/local/ngent-workspace"))
+def test_chat_acp_backend_retries_when_resume_session_is_stale(tmp_path: Path) -> None:
+    database_path = tmp_path / "chat_acp_stale_session.sqlite3"
+    settings = Settings(
+        database_url=f"sqlite:///{database_path}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+        acp_gateway_base_url="http://gateway.test",
+        acp_route_prefix="/acp",
+        acp_default_cwd=str(tmp_path / "acp-workspace"),
+    )
+    fake_acp = FakeAcpGatewayClient()
+    test_app = create_app(settings)
+    test_app.dependency_overrides[get_acp_gateway_client] = lambda: fake_acp
 
-    assert client.prepare_cwd("tenant_default") == "/usr/local/ngent-workspace"
-
-    tenant_client = NgentClient(
-        Settings(
-            ngent_default_cwd="/unused",
-            ngent_cwd_base="/usr/local/ngent-workspace/tenants",
+    with TestClient(test_app) as client:
+        _seed_tenant(settings)
+        _seed_tenant_user(
+            settings,
+            "tenant_user",
+            "tenant@example.com",
+            "Tenant User",
+            "tenant-secret",
+            "member",
         )
-    )
-    assert (
-        tenant_client.prepare_cwd("tenant_default")
-        == "/usr/local/ngent-workspace/tenants/tenant_default"
-    )
+        login = client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "tenant@example.com",
+                "password": "tenant-secret",
+                "tenantId": "tenant_default",
+            },
+        )
+        headers = {
+            "Authorization": f"Bearer {login.json()['accessToken']}",
+            "x-tenant-id": "tenant_default",
+        }
+        created = client.post(
+            "/api/v1/chat/sessions",
+            headers=headers,
+            json={"title": "ACP stale session"},
+        )
+        session_id = created.json()["id"]
+        first_turn = client.post(
+            f"/api/v1/chat/sessions/{session_id}/turns",
+            headers=headers,
+            json={"question": "hello"},
+        )
+        assert first_turn.status_code == 200
+
+        fake_acp.fail_next_resume = True
+        resumed_turn = client.post(
+            f"/api/v1/chat/sessions/{session_id}/turns",
+            headers=headers,
+            json={"question": "after restart"},
+        )
+
+        assert resumed_turn.status_code == 200
+        assert "network error" not in resumed_turn.text
+        assert "event: message_delta" in resumed_turn.text
+        assert "event: turn_completed" in resumed_turn.text
+        assert fake_acp.turn_calls[1]["session_id"] == "acp_sess_1"
+        assert fake_acp.turn_calls[2]["session_id"] is None
+        assert fake_acp.turn_calls[2]["fresh_session"] is True
+
+        messages = client.get(f"/api/v1/chat/sessions/{session_id}/messages", headers=headers)
+        assert messages.status_code == 200
+        items = messages.json()["items"]
+        assert items[-1]["status"] == "completed"
+        assert items[-1]["responseText"] == "ok"
+        assert items[-1]["errorMessage"] is None
 
 
 def test_acp_gateway_preserves_remote_posix_cwd() -> None:
@@ -3391,7 +3404,7 @@ def test_acp_stream_turn_builds_turn_request_payload() -> None:
             input="hello",
             tenant_id="tenant_default",
             session_id="",  # falsy -> omitted, lets the agent assign one on the first turn
-            config_overrides={"knowledge_base_ids": "kb_1"},
+            config_overrides={"thought_level": "medium"},
         )
         async for _ in agen:
             pass
@@ -3407,7 +3420,7 @@ def test_acp_stream_turn_builds_turn_request_payload() -> None:
         "thread_id": "thread_1",
         "input": "hello",
         "model": "claude-opus",
-        "config_overrides": {"knowledge_base_ids": "kb_1"},
+        "config_overrides": {"thought_level": "medium"},
     }
 
 
@@ -3512,59 +3525,6 @@ def _seed_platform_user(
         connection.commit()
 
 
-class FakeNgentClient:
-    def __init__(self) -> None:
-        self.default_agent = "codex"
-        self.default_cwd = "/tmp/ngent"
-        self.request_calls: list[dict] = []
-        self.stream_calls: list[dict] = []
-
-    def prepare_cwd(self, tenant_id: str | None = None) -> str:
-        return self.default_cwd
-
-    async def request(
-        self, method: str, path: str, *, tenant_id: str | None = None, **kwargs
-    ) -> dict:
-        self.request_calls.append(
-            {
-                "method": method,
-                "path": path,
-                "tenant_id": tenant_id,
-                "json": kwargs.get("json"),
-            }
-        )
-        if method == "DELETE" and path.startswith("/v1/threads/"):
-            assert tenant_id == "tenant_default"
-            return {}
-        assert method == "POST"
-        assert path == "/v1/threads"
-        assert tenant_id == "tenant_default"
-        assert kwargs["json"]["agent"] == self.default_agent
-        assert kwargs["json"]["cwd"] == self.default_cwd
-        return {"threadId": "thread_1"}
-
-    async def stream(
-        self, method: str, path: str, *, tenant_id: str | None = None, **kwargs
-    ):
-        self.stream_calls.append(
-            {
-                "method": method,
-                "path": path,
-                "tenant_id": tenant_id,
-                "json": kwargs["json"],
-            }
-        )
-        yield "event: turn_started"
-        yield 'data: {"turnId": "turn_1"}'
-        yield ""
-        yield "event: message_delta"
-        yield 'data: {"delta": "ok"}'
-        yield ""
-        yield "event: turn_completed"
-        yield 'data: {"stopReason": "end_turn"}'
-        yield ""
-
-
 class FakeAcpGatewayClient:
     def __init__(self) -> None:
         self.default_model = "claude-opus"
@@ -3572,6 +3532,7 @@ class FakeAcpGatewayClient:
         self.turn_calls: list[dict] = []
         self.transcript_calls: list[dict] = []
         self.list_calls: list[dict] = []
+        self.fail_next_resume = False
 
     def prepare_cwd(self, tenant_id: str | None = None) -> str:
         return self.default_cwd
@@ -3615,11 +3576,18 @@ class FakeAcpGatewayClient:
                 "tenant_id": tenant_id,
                 "session_id": session_id,
                 "cwd": cwd,
+                "fresh_session": fresh_session,
                 "config_overrides": config_overrides,
             }
         )
 
         async def gen():
+            if self.fail_next_resume and session_id:
+                self.fail_next_resume = False
+                yield "event: error"
+                yield 'data: {"message": "network error"}'
+                yield ""
+                return
             yield "event: session"
             yield 'data: {"session_id": "acp_sess_1"}'
             yield ""
@@ -3633,37 +3601,49 @@ class FakeAcpGatewayClient:
         return gen()
 
 
-class FakeNgentTitleClient(FakeNgentClient):
-    """ngent fake whose turn stream carries a per-turn auto-generated session title.
-
-    The title rides the stream as a `session_info_update` event (title at the top level),
-    distinct each turn so a test can prove the second one does not clobber the first.
-    """
-
-    def __init__(self) -> None:
-        super().__init__()
-        self._turn = 0
-
-    async def stream(
-        self, method: str, path: str, *, tenant_id: str | None = None, **kwargs
+class FakeAcpReasoningGatewayClient(FakeAcpGatewayClient):
+    def stream_turn(
+        self,
+        *,
+        thread_id: str,
+        input: str,
+        tenant_id: str | None = None,
+        session_id: str | None = None,
+        cwd: str | None = None,
+        model: str | None = None,
+        fresh_session: bool = False,
+        config_overrides: dict | None = None,
     ):
-        self.stream_calls.append(
-            {"method": method, "path": path, "tenant_id": tenant_id, "json": kwargs["json"]}
+        self.turn_calls.append(
+            {
+                "thread_id": thread_id,
+                "input": input,
+                "tenant_id": tenant_id,
+                "session_id": session_id,
+                "cwd": cwd,
+                "fresh_session": fresh_session,
+                "config_overrides": config_overrides,
+            }
         )
-        self._turn += 1
-        title = f"Auto {self._turn}"
-        yield "event: turn_started"
-        yield f'data: {{"turnId": "turn_{self._turn}"}}'
-        yield ""
-        yield "event: session_info_update"
-        yield f'data: {{"title": "{title}"}}'
-        yield ""
-        yield "event: message_delta"
-        yield 'data: {"delta": "ok"}'
-        yield ""
-        yield "event: turn_completed"
-        yield 'data: {"stopReason": "end_turn"}'
-        yield ""
+
+        async def gen():
+            yield "event: session"
+            yield 'data: {"session_id": "acp_sess_1"}'
+            yield ""
+            yield "event: reasoning"
+            yield 'data: {"text": "thinking"}'
+            yield ""
+            yield "event: tool_call"
+            yield 'data: {"data": {"name": "search", "input": {"q": "hello"}}}'
+            yield ""
+            yield "event: delta"
+            yield 'data: {"text": "final answer"}'
+            yield ""
+            yield "event: done"
+            yield 'data: {"stop_reason": "end_turn"}'
+            yield ""
+
+        return gen()
 
 
 class FakeAcpTitleGatewayClient(FakeAcpGatewayClient):
@@ -3947,7 +3927,12 @@ def test_document_batch_upload_flow(tmp_path: Path) -> None:
         results = url_resp.json()["items"]
         assert len(results) == 2
         assert [r["status"] for r in results] == ["created", "created"]
+        assert all(r["method"] == "PUT" for r in results)
+        assert all(r["uploadUrl"] for r in results)
+        assert all(r["uploadSessionId"] for r in results)
         uploads = [r["upload"] for r in results]
+        assert results[0]["uploadUrl"] == uploads[0]["uploadUrl"]
+        assert results[0]["uploadSessionId"] == uploads[0]["uploadSessionId"]
 
         store.put(uploads[0]["objectKey"], 1024)
         store.put(uploads[1]["objectKey"], 12)
@@ -4184,6 +4169,26 @@ def test_document_reads_do_not_require_object_store(tmp_path: Path) -> None:
                 headers=headers,
                 json={"fileName": "c.txt", "fileSizeBytes": 10},
             )
+
+
+def test_upload_url_returns_503_when_object_store_unavailable(tmp_path: Path) -> None:
+    settings = _kb_test_settings(tmp_path)
+    app = create_app(settings)
+    with TestClient(app) as client:
+        headers = _login(client, settings, "expert_user", "expert@example.com", "expert")
+        kb_id = client.post(
+            "/api/v1/knowledge-bases", headers=headers, json={"name": "KB"}
+        ).json()["id"]
+
+        response = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/upload-url",
+            headers=headers,
+            json={"fileName": "a.txt", "fileSizeBytes": 32},
+        )
+        assert response.status_code == 503, response.text
+        body = response.json()
+        assert body["code"] == "OBJECT_STORE_UNAVAILABLE"
+        assert "Object storage is unavailable" in body["message"]
 
 
 def test_storage_gc_endpoint_reclaims_all_three_classes(tmp_path: Path) -> None:
@@ -4723,3 +4728,35 @@ def test_build_endpoint_is_stub(tmp_path: Path) -> None:
         )
         assert missing.status_code == 404
         assert missing.json()["code"] == "KB_NOT_FOUND"
+
+
+# Streaming Markdown normalization ----------------------------------------------------
+
+from app.services.chat_service import (  # noqa: E402
+    _normalize_answer_markdown_delta,
+    _SmoothTextBuffer,
+)
+
+
+def test_markdown_delta_skips_line_start_markers_on_midline_fragments() -> None:
+    # A chunk that does not begin at a line start must not be reinterpreted as a heading
+    # or list marker (e.g. "#5" must stay "#5", not become "# 5").
+    assert _normalize_answer_markdown_delta("#5 wins", at_line_start=False) == "#5 wins"
+    assert _normalize_answer_markdown_delta("#5 wins", at_line_start=True) == "# 5 wins"
+    # Lines after an embedded newline are always genuine line starts.
+    assert _normalize_answer_markdown_delta("tail #hi", at_line_start=False) == "tail #hi"
+    assert _normalize_answer_markdown_delta("a\n#hi", at_line_start=False) == "a\n# hi"
+
+
+def test_smooth_text_buffer_tracks_line_start() -> None:
+    buf = _SmoothTextBuffer(max_chars=8, punctuation=False)
+    # First chunk begins at a line start.
+    assert buf.push("abcdefgh") == "abcdefgh"
+    assert buf.chunk_at_line_start is True
+    # The previous chunk had no trailing newline, so the next one is mid-line.
+    assert buf.push("ijklmnop") == "ijklmnop"
+    assert buf.chunk_at_line_start is False
+    # A chunk that ends on a newline makes the following chunk a line start again.
+    assert buf.push("qr\nstuvwx") == "qr\n"
+    assert buf.flush() == "stuvwx"
+    assert buf.chunk_at_line_start is True

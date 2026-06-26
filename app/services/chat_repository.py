@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from app.db import DatabaseConnection
@@ -21,7 +20,6 @@ class ChatRepository:
         tenant_id: str,
         user_id: str,
         title: str | None,
-        knowledge_base_ids: list[str],
         agent_options: dict[str, Any],
         now: str,
     ) -> None:
@@ -29,17 +27,16 @@ class ChatRepository:
             self.connection,
             """
             insert into chat_sessions (
-                id, tenant_id, user_id, title, knowledge_base_ids, agent_options,
+                id, tenant_id, user_id, title, agent_options,
                 status, is_pinned, created_at, updated_at
             )
-            values (?, ?, ?, ?, ?, ?, 'active', false, ?, ?)
+            values (?, ?, ?, ?, ?, 'active', false, ?, ?)
             """,
             (
                 session_id,
                 tenant_id,
                 user_id,
                 title,
-                json_param(self.connection, knowledge_base_ids),
                 json_param(self.connection, agent_options),
                 now,
                 now,
@@ -87,7 +84,7 @@ class ChatRepository:
         )
         return rowcount(cursor) > 0
 
-    def set_acp_session_id(self, session_id: str, acp_session_id: str, now: str) -> bool:
+    def set_acp_session_id(self, session_id: str, acp_session_id: str | None, now: str) -> bool:
         cursor = execute(
             self.connection,
             "update chat_sessions set acp_session_id = ?, updated_at = ? where id = ?",
@@ -142,7 +139,6 @@ class ChatRepository:
         user_id: str,
         request_text: str,
         model: str | None,
-        knowledge_base_ids: list[str],
         query_rewrite: bool,
         multi_hop_config: dict[str, Any] | None,
         now: str,
@@ -152,10 +148,10 @@ class ChatRepository:
             """
             insert into chat_turns (
                 id, session_id, tenant_id, user_id, request_text, model,
-                knowledge_base_ids, query_rewrite, multi_hop_config, status,
+                query_rewrite, multi_hop_config, status,
                 is_internal, created_at
             )
-            values (?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', false, ?)
+            values (?, ?, ?, ?, ?, ?, ?, ?, 'running', false, ?)
             """,
             (
                 turn_id,
@@ -164,7 +160,6 @@ class ChatRepository:
                 user_id,
                 request_text,
                 model,
-                json_param(self.connection, knowledge_base_ids),
                 query_rewrite,
                 json_param(self.connection, multi_hop_config) if multi_hop_config is not None else None,
                 now,
@@ -177,6 +172,7 @@ class ChatRepository:
         turn_id: str,
         status: str,
         response_text: str,
+        reasoning_text: str,
         stop_reason: str | None,
         error_message: str | None,
         completed_at: str,
@@ -185,10 +181,10 @@ class ChatRepository:
             self.connection,
             """
             update chat_turns
-            set status = ?, response_text = ?, stop_reason = ?, error_message = ?, completed_at = ?
+            set status = ?, response_text = ?, reasoning_text = ?, stop_reason = ?, error_message = ?, completed_at = ?
             where id = ?
             """,
-            (status, response_text, stop_reason, error_message, completed_at, turn_id),
+            (status, response_text, reasoning_text, stop_reason, error_message, completed_at, turn_id),
         )
         return rowcount(cursor) > 0
 
@@ -226,26 +222,10 @@ class ChatRepository:
         return [_map_turn(row) for row in rows]
 
 
-def _json_list(value: Any) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return [str(item) for item in value]
-    if isinstance(value, str):
-        try:
-            parsed = json.loads(value)
-        except json.JSONDecodeError:
-            return []
-        if isinstance(parsed, list):
-            return [str(item) for item in parsed]
-    return []
-
-
 def _map_session(row: dict[str, Any]) -> ChatSession:
     return ChatSession(
         id=str(row["id"]),
         title=str(row["title"]) if row.get("title") is not None else None,
-        knowledgeBaseIds=_json_list(row.get("knowledge_base_ids")),
         status=str(row.get("status", "active")),
         isPinned=bool(row.get("is_pinned")),
         createdAt=str(row["created_at"]),
@@ -258,6 +238,7 @@ def _map_turn(row: dict[str, Any]) -> ChatTurn:
         id=str(row["id"]),
         sessionId=str(row["session_id"]),
         requestText=str(row["request_text"]),
+        reasoningText=str(row["reasoning_text"]) if row.get("reasoning_text") is not None else None,
         responseText=str(row["response_text"]) if row.get("response_text") is not None else None,
         model=str(row["model"]) if row.get("model") is not None else None,
         status=str(row["status"]),

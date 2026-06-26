@@ -1,19 +1,17 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 ChatSessionStatus = Literal["active", "archived"]
 
 
 class CreateSessionRequest(BaseModel):
     title: str | None = None
-    knowledgeBaseIds: list[str] = Field(default_factory=list)
 
 
 class ChatTurnRequest(BaseModel):
-    # ngent's turn API takes only the prompt text; model / knowledge-base / retrieval
-    # options are not forwarded (see ChatService.stream_turn). Do not re-add fields here
-    # without wiring them into the outgoing payload, or callers will think they take effect.
+    # The public turn payload is intentionally narrow. Do not re-add model / retrieval options
+    # without wiring them into the outgoing ACP payload, or callers will think they take effect.
     question: str
 
 
@@ -30,7 +28,7 @@ class ArchiveSessionRequest(BaseModel):
 
 
 class ResolvePermissionRequest(BaseModel):
-    # Mirrors ngent POST /v1/permissions/{permissionId}: one of outcome/optionId is required.
+    # One of outcome/optionId is required.
     outcome: str | None = None
     optionId: str | None = None
 
@@ -38,7 +36,6 @@ class ResolvePermissionRequest(BaseModel):
 class ChatSession(BaseModel):
     id: str
     title: str | None = None
-    knowledgeBaseIds: list[str] = Field(default_factory=list)
     status: ChatSessionStatus = "active"
     isPinned: bool = False
     createdAt: str
@@ -49,6 +46,7 @@ class ChatTurn(BaseModel):
     id: str
     sessionId: str
     requestText: str
+    reasoningText: str | None = None
     responseText: str | None = None
     model: str | None = None
     status: str

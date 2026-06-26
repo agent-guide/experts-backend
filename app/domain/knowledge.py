@@ -108,6 +108,13 @@ class UploadUrlsRequest(BaseModel):
 class UploadUrlResult(BaseModel):
     fileName: str
     status: Literal["created", "failed"]
+    uploadSessionId: str | None = None
+    documentId: str | None = None
+    method: Literal["PUT"] | None = None
+    uploadUrl: str | None = None
+    headers: dict[str, str] | None = None
+    objectKey: str | None = None
+    expiresAt: str | None = None
     upload: UploadUrlResponse | None = None
     error: BatchItemError | None = None
 

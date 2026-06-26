@@ -10,7 +10,7 @@ web/API consumers, but delegate specialized work to external systems:
 
 - PageIndex: knowledge base, document management, upload/object storage, document
   indexing and retrieval.
-- ngent + Codex/ACP adapter: chat sessions, turns, streaming and agent runtime.
+- agent-gateway ACP data plane: chat sessions, turns, streaming and agent runtime.
 - Codex skills: skill discovery, installation and file management.
 - Expert Next API: tenant/auth/RBAC, compatibility routing, orchestration,
   audit/metrics, and API-level governance.
@@ -23,9 +23,11 @@ web/API consumers, but delegate specialized work to external systems:
 - PageIndex can be used through open-source code, cookbooks/examples, API and MCP
   resources according to its README. The exact integration mode should be decided
   before production wiring.
-- ngent local reference: `/Users/simpcl/github/middleware/ngent`
-  - HTTP contract: `docs/API.md`
-  - ACP/Codex integration notes: `docs/ACP_GATEWAY_INTEGRATION.md`
+- agent-gateway ACP route contract:
+  - `POST {prefix}/turn`
+  - `POST {prefix}/permission`
+  - `GET {prefix}/sessions`
+  - `GET {prefix}/sessions/{id}/transcript`
 
 ## 3. High-Level Architecture
 
@@ -43,11 +45,10 @@ FastAPI Expert Next API
         |      +-- uploads / object storage
         |      +-- document index/search
         |
-        +-- NgentClient
+        +-- AcpGatewayClient
         |      +-- codex ACP runtime
-        |      +-- chat sessions as ngent threads
-        |      +-- chat turns as ngent turns
-        |      +-- SSE event passthrough/adaptation
+        |      +-- local chat sessions as ACP thread ids
+        |      +-- local chat turns with translated ACP SSE events
         |
         +-- CodexSkillsClient
                +-- ~/.codex/skills or configured skills dir
@@ -136,7 +137,7 @@ Design:
 
 ### 4.4 Chat APIs
 
-Compatibility API owned by Expert Next API; execution delegated to ngent.
+Compatibility API owned by Expert Next API; execution delegated to the ACP data plane.
 
 Current API shell:
 
@@ -154,23 +155,22 @@ Current API shell:
 
 Mapping:
 
-- Chat session -> ngent thread.
-- Chat turn -> ngent turn.
+- Chat session -> locally generated ACP thread id.
+- Chat turn -> locally generated turn id plus a durable assembled turn record.
 - Turn creation streams SSE in one shot (no separate create/subscribe step); the
-  `GET /turns/{id}/events` endpoint is for reconnect/replay only.
-- SSE turn events -> ngent turn event stream, adapted to existing event names
-  when necessary.
-- `llmModel`, `queryRewrite`, `multiHop`, and `knowledgeBaseIds` are passed as
-  `agentOptions` until a stricter ngent contract is finalized.
-- Tenant-scoped ngent calls include `X-Tenant-Id` so ngent can enforce resource
-  isolation for thread and turn ids.
+  `GET /turns/{id}/events` endpoint replays the stored turn record.
+- ACP SSE events are translated to the existing public event names.
+- Chat does not accept or forward knowledge-base scope; knowledge-base management remains
+  owned by the KB/document APIs.
+- Tenant-scoped ACP calls include `X-Tenant-Id`; local ownership remains the primary
+  authorization boundary.
 
 Open decisions:
 
 - Whether PageIndex retrieval is injected into Codex prompt by Expert Next API,
-  by ngent tools, by MCP, or by Codex skills.
+  by ACP tools, by MCP, or by Codex skills.
 - Whether session pinning remains local metadata.
-- How to map ngent permission requests to existing web UI flows.
+- How to expand ACP permission requests for richer web UI flows.
 
 ### 4.5 Skill APIs
 
@@ -208,7 +208,7 @@ Current API shell:
 
 Design:
 
-- LLM model discovery should eventually proxy ngent `/v1/agents/{agentId}/models`.
+- LLM model discovery should eventually use ACP/gateway route metadata when available.
 - Embedding model should become PageIndex-managed or return PageIndex retrieval
   mode metadata.
 - Metrics should expose local adapter metrics and upstream health.
@@ -223,7 +223,7 @@ next_api/
       v1/routers/             # Old API-compatible route groups
     clients/
       pageindex.py            # PageIndex SDK/API adapter
-      ngent.py                # ngent HTTP/SSE adapter
+      acp_gateway.py          # agent-gateway ACP data-plane adapter
       codex_skills.py         # Codex skills filesystem adapter
     core/
       config.py               # pydantic-settings configuration
@@ -243,7 +243,7 @@ next_api/
 
 - Create FastAPI project and route modules.
 - Preserve old route paths and coarse response shapes.
-- Add adapters for PageIndex, ngent and Codex skills.
+- Add adapters for PageIndex, ACP and Codex skills.
 - Make OpenAPI load and fail clearly when upstreams are not configured.
 
 Status: scaffolded.
@@ -263,9 +263,9 @@ Status: scaffolded.
 - Add local ID mapping only if PageIndex IDs cannot be exposed directly.
 - Remove all legacy ingestion/vector-store assumptions.
 
-### Phase 4: ngent/Codex Chat Integration
+### Phase 4: ACP/Codex Chat Integration
 
-- Align old session/task API to ngent thread/turn APIs.
+- Align old session/task API to ACP turn/session APIs.
 - Normalize SSE events to the existing web client contract.
 - Add cancellation, event replay, active-turn conflict behavior and permission
   workflow.
@@ -281,15 +281,15 @@ Status: scaffolded.
 
 - Add rate limiting.
 - Add upstream health checks.
-- Add metrics for auth, PageIndex, ngent, skills and request latency.
+- Add metrics for auth, PageIndex, ACP, skills and request latency.
 - Add structured logging and trace IDs.
 
 ## 7. Risks and Design Notes
 
 - PageIndex's public project emphasizes document tree/search capability, not the
   exact legacy knowledge-base/upload REST contract. Expect an adapter wrapper.
-- ngent threads are not a perfect match for legacy chat sessions; pinning,
-  ownership and tenant scoping may need local metadata.
+- ACP sessions are not a perfect match for legacy chat sessions; pinning, ownership
+  and tenant scoping need local metadata.
 - Codex skills are filesystem assets; multi-tenant skill isolation must be
   designed before production.
 - The current scaffold uses in-memory auth only. It is suitable for API shape

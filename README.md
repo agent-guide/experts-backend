@@ -6,7 +6,7 @@ The new service keeps the existing API shape where useful, but delegates major
 capabilities to external systems:
 
 - Knowledge bases, documents, uploads and object storage: PageIndex adapter.
-- Chat/session execution: ngent + Codex/ACP adapter.
+- Chat/session execution: agent-gateway ACP data plane.
 - Skill management: DB metadata plus local or MinIO-backed skill file storage.
 - Multi-tenant auth and common APIs: implemented in this service.
 
@@ -23,9 +23,10 @@ python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 15000
 
 OpenAPI docs are then served at `http://127.0.0.1:15000/docs`.
 
-All configuration is read from environment variables prefixed with `EXPERT_NEXT_`,
-which can also be placed in a `.env` or `.env.local` file at the project root
-(see `app/core/config.py`). Copy `.env.example` to `.env` to get started.
+All runtime configuration is read from environment variables prefixed with `EXPERT_NEXT_`,
+or from the project root `.env` file (see `app/core/config.py`). Copy `.env.example` to
+`.env` to get started. Files such as `.env.local` and `.env.remote` are configuration
+copies only and are not loaded automatically.
 
 ## Configuration
 
@@ -116,7 +117,7 @@ Skill endpoints (file storage backend is configured above):
 ## Current Status
 
 This is a framework scaffold. It exposes the API modules and dependency
-boundaries. PageIndex and ngent integrations are intentionally thin adapters for
+boundaries. PageIndex and ACP integrations are intentionally thin adapters for
 future hardening.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

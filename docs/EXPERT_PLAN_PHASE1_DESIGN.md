@@ -495,7 +495,7 @@ ruff check app/ tests/
 - `usage_periods`
 - `usage_events`
 - 在 `ChatService.stream_turn` 中增加问答次数限制。
-- 等 ngent 暴露 Token usage 后增加 Token 统计。
+- 等上游计算后端暴露 Token usage 后增加 Token 统计。
 
 第四阶段增加商业闭环：
 

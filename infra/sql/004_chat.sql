@@ -1,15 +1,13 @@
--- Chat sessions: a durable local copy of the upstream thread plus the ownership/product fields
--- the compute engine does not track (tenant, user, pin). The engine (ngent or the agent-gateway
--- ACP backend) is treated as compute, not the source of truth -- session metadata is mirrored
--- here for reliable, tenant-scoped reads. The id equals the upstream threadId (ngent) or a
--- caller-generated thread id (ACP). acp_session_id holds the agent-assigned ACP session id
--- (surfaced by the first turn via a `session` event) so follow-up turns resume the same instance.
+-- Chat sessions: a durable local copy of the caller-owned ACP thread plus the
+-- ownership/product fields the compute engine does not track (tenant, user, pin).
+-- The agent-gateway ACP data plane is treated as compute, not the source of truth.
+-- The id is generated locally. acp_session_id holds the agent-assigned ACP session id
+-- surfaced by the first turn via a `session` event, so follow-up turns resume the same instance.
 create table if not exists chat_sessions (
   id text primary key,
   tenant_id text not null references tenants(id) on delete cascade,
   user_id text not null references users(id) on delete cascade,
   title text,
-  knowledge_base_ids jsonb not null default '[]'::jsonb,
   agent_options jsonb not null default '{}'::jsonb,
   acp_session_id text,
   summary text,
@@ -31,6 +29,5 @@ alter table chat_sessions add column if not exists summary text;
 alter table chat_sessions add column if not exists acp_session_id text;
 alter table chat_sessions add column if not exists deleted_at timestamptz;
 
--- chat_messages was removed: turn-level conversation records now live in chat_turns (005), and
--- ngent owns the fine-grained event stream.
+-- chat_messages was removed: turn-level conversation records now live in chat_turns (005).
 drop table if exists chat_messages;
