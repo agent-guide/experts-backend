@@ -8,7 +8,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### POST `/api/v1/auth/login`
 
-- Summary: User login
+- Summary: Login
 
 #### Input Parameters
 
@@ -42,7 +42,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### POST `/api/v1/auth/refresh`
 
-- Summary: Refresh access token
+- Summary: Refresh
 
 #### Input Parameters
 
@@ -61,7 +61,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### POST `/api/v1/knowledge-bases/{knowledge_base_id}/build`
 
-- Summary: Trigger a knowledge base build
+- Summary: Trigger Build
 
 #### Input Parameters
 
@@ -80,7 +80,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### GET `/api/v1/knowledge-bases/{knowledge_base_id}/builds`
 
-- Summary: List knowledge base builds
+- Summary: List Builds
 
 #### Input Parameters
 
@@ -98,7 +98,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### GET `/api/v1/knowledge-bases/{knowledge_base_id}/builds/{build_id}`
 
-- Summary: Get knowledge base build details
+- Summary: Get Build
 
 #### Input Parameters
 
@@ -117,7 +117,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### POST `/api/v1/knowledge-bases/{knowledge_base_id}/builds/{build_id}/cancel`
 
-- Summary: Cancel a knowledge base build
+- Summary: Cancel Build
 
 #### Input Parameters
 
@@ -138,7 +138,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### POST `/api/v1/chat/permissions/{permission_id}`
 
-- Summary: Resolve a chat permission request
+- Summary: Resolve Permission
 
 #### Input Parameters
 
@@ -158,12 +158,13 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### GET `/api/v1/chat/sessions`
 
-- Summary: List chat sessions
+- Summary: List Sessions
 
 #### Input Parameters
 
 | Location | Name | Required | Type | Description |
 | --- | --- | --- | --- | --- |
+| query | status | no | string | - |
 | header | x-tenant-id | no | string \| null | - |
 | header | Authorization | no | string \| null | - |
 
@@ -176,7 +177,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### POST `/api/v1/chat/sessions`
 
-- Summary: Create a chat session
+- Summary: Create Session
 
 #### Input Parameters
 
@@ -195,7 +196,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### DELETE `/api/v1/chat/sessions/{session_id}`
 
-- Summary: Delete a chat session
+- Summary: Delete Session
 
 #### Input Parameters
 
@@ -214,7 +215,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### GET `/api/v1/chat/sessions/{session_id}`
 
-- Summary: Get chat session details
+- Summary: Get Session
 
 #### Input Parameters
 
@@ -231,9 +232,29 @@ This document is generated from the FastAPI OpenAPI schema.
 | 200 | application/json | object |
 | 422 | application/json | HTTPValidationError |
 
+### PATCH `/api/v1/chat/sessions/{session_id}/archive`
+
+- Summary: Archive Session
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| path | session_id | yes | string | - |
+| header | x-tenant-id | no | string \| null | - |
+| header | Authorization | no | string \| null | - |
+| body | application/json | yes | ArchiveSessionRequest | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | object |
+| 422 | application/json | HTTPValidationError |
+
 ### GET `/api/v1/chat/sessions/{session_id}/messages`
 
-- Summary: List chat messages
+- Summary: List Messages
 
 #### Input Parameters
 
@@ -252,7 +273,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### PATCH `/api/v1/chat/sessions/{session_id}/pin`
 
-- Summary: Pin or unpin a chat session
+- Summary: Pin Session
 
 #### Input Parameters
 
@@ -272,7 +293,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### PATCH `/api/v1/chat/sessions/{session_id}/title`
 
-- Summary: Rename a chat session
+- Summary: Rename Session
 
 #### Input Parameters
 
@@ -290,9 +311,28 @@ This document is generated from the FastAPI OpenAPI schema.
 | 200 | application/json | object |
 | 422 | application/json | HTTPValidationError |
 
+### GET `/api/v1/chat/sessions/{session_id}/transcript`
+
+- Summary: Get Transcript
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| path | session_id | yes | string | - |
+| header | x-tenant-id | no | string \| null | - |
+| header | Authorization | no | string \| null | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | object |
+| 422 | application/json | HTTPValidationError |
+
 ### POST `/api/v1/chat/sessions/{session_id}/turns`
 
-- Summary: Create and stream a chat turn
+- Summary: Create Turn
 
 #### Input Parameters
 
@@ -312,7 +352,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### POST `/api/v1/chat/turns/{turn_id}/cancel`
 
-- Summary: Cancel a chat turn
+- Summary: Cancel Turn
 
 #### Input Parameters
 
@@ -331,7 +371,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### GET `/api/v1/chat/turns/{turn_id}/events`
 
-- Summary: Stream chat turn events
+- Summary: Turn Events
 
 #### Input Parameters
 
@@ -353,7 +393,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### GET `/api/v1/knowledge-bases/{knowledge_base_id}/docs`
 
-- Summary: List knowledge base documents
+- Summary: List Documents
 
 #### Input Parameters
 
@@ -371,7 +411,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### POST `/api/v1/knowledge-bases/{knowledge_base_id}/docs/complete-upload`
 
-- Summary: Complete a document upload
+- Summary: Complete Upload
 
 #### Input Parameters
 
@@ -390,7 +430,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### POST `/api/v1/knowledge-bases/{knowledge_base_id}/docs/complete-uploads`
 
-- Summary: Complete document uploads
+- Summary: Complete Uploads
 
 #### Input Parameters
 
@@ -409,7 +449,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### POST `/api/v1/knowledge-bases/{knowledge_base_id}/docs/upload-url`
 
-- Summary: Create a document upload URL
+- Summary: Create Upload Url
 
 #### Input Parameters
 
@@ -428,7 +468,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### POST `/api/v1/knowledge-bases/{knowledge_base_id}/docs/upload-urls`
 
-- Summary: Create document upload URLs
+- Summary: Create Upload Urls
 
 #### Input Parameters
 
@@ -447,7 +487,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### DELETE `/api/v1/knowledge-bases/{knowledge_base_id}/docs/{document_id}`
 
-- Summary: Delete a document
+- Summary: Delete Document
 
 #### Input Parameters
 
@@ -466,7 +506,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### GET `/api/v1/knowledge-bases/{knowledge_base_id}/docs/{document_id}`
 
-- Summary: Get document details
+- Summary: Get Document
 
 #### Input Parameters
 
@@ -485,7 +525,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### PATCH `/api/v1/knowledge-bases/{knowledge_base_id}/docs/{document_id}`
 
-- Summary: Update document metadata
+- Summary: Update Document
 
 #### Input Parameters
 
@@ -505,7 +545,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### GET `/api/v1/knowledge-bases/{knowledge_base_id}/docs/{document_id}/download-url`
 
-- Summary: Get a document download URL
+- Summary: Get Download Url
 
 #### Input Parameters
 
@@ -526,7 +566,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### GET `/api/v1/expert-categories`
 
-- Summary: List expert categories
+- Summary: List Expert Categories
 
 #### Input Parameters
 
@@ -543,7 +583,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### POST `/api/v1/expert-categories`
 
-- Summary: Create an expert category
+- Summary: Create Expert Category
 
 #### Input Parameters
 
@@ -561,7 +601,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### DELETE `/api/v1/expert-categories/{category_id}`
 
-- Summary: Delete an expert category
+- Summary: Delete Expert Category
 
 #### Input Parameters
 
@@ -579,7 +619,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### GET `/api/v1/expert-categories/{category_id}`
 
-- Summary: Get expert category details
+- Summary: Get Expert Category
 
 #### Input Parameters
 
@@ -597,7 +637,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### PATCH `/api/v1/expert-categories/{category_id}`
 
-- Summary: Update an expert category
+- Summary: Update Expert Category
 
 #### Input Parameters
 
@@ -614,122 +654,11 @@ This document is generated from the FastAPI OpenAPI schema.
 | 200 | application/json | ExpertCategory |
 | 422 | application/json | HTTPValidationError |
 
-## expert-groups
-
-### GET `/api/v1/expert-groups`
-
-- Summary: List expert groups
-
-#### Input Parameters
-
-| Location | Name | Required | Type | Description |
-| --- | --- | --- | --- | --- |
-| header | Authorization | no | string \| null | - |
-
-#### Response
-
-| Status | Content Type | Schema |
-| --- | --- | --- |
-| 200 | application/json | ExpertGroupListResponse |
-| 422 | application/json | HTTPValidationError |
-
-### POST `/api/v1/expert-groups`
-
-- Summary: Create an expert group
-
-#### Input Parameters
-
-| Location | Name | Required | Type | Description |
-| --- | --- | --- | --- | --- |
-| header | Authorization | no | string \| null | - |
-| body | application/json | yes | CreateExpertGroupRequest | - |
-
-#### Response
-
-| Status | Content Type | Schema |
-| --- | --- | --- |
-| 201 | application/json | ExpertGroup |
-| 422 | application/json | HTTPValidationError |
-
-### DELETE `/api/v1/expert-groups/{group_id}`
-
-- Summary: Delete an expert group
-
-#### Input Parameters
-
-| Location | Name | Required | Type | Description |
-| --- | --- | --- | --- | --- |
-| path | group_id | yes | string | - |
-| header | Authorization | no | string \| null | - |
-
-#### Response
-
-| Status | Content Type | Schema |
-| --- | --- | --- |
-| 204 | - | Successful Response |
-| 422 | application/json | HTTPValidationError |
-
-### GET `/api/v1/expert-groups/{group_id}`
-
-- Summary: Get expert group details
-
-#### Input Parameters
-
-| Location | Name | Required | Type | Description |
-| --- | --- | --- | --- | --- |
-| path | group_id | yes | string | - |
-| header | Authorization | no | string \| null | - |
-
-#### Response
-
-| Status | Content Type | Schema |
-| --- | --- | --- |
-| 200 | application/json | ExpertGroup |
-| 422 | application/json | HTTPValidationError |
-
-### PATCH `/api/v1/expert-groups/{group_id}`
-
-- Summary: Update an expert group
-
-#### Input Parameters
-
-| Location | Name | Required | Type | Description |
-| --- | --- | --- | --- | --- |
-| path | group_id | yes | string | - |
-| header | Authorization | no | string \| null | - |
-| body | application/json | yes | UpdateExpertGroupRequest | - |
-
-#### Response
-
-| Status | Content Type | Schema |
-| --- | --- | --- |
-| 200 | application/json | ExpertGroup |
-| 422 | application/json | HTTPValidationError |
-
-### PUT `/api/v1/expert-groups/{group_id}/experts`
-
-- Summary: Replace expert group members
-
-#### Input Parameters
-
-| Location | Name | Required | Type | Description |
-| --- | --- | --- | --- | --- |
-| path | group_id | yes | string | - |
-| header | Authorization | no | string \| null | - |
-| body | application/json | yes | ReplaceExpertGroupMembersRequest | - |
-
-#### Response
-
-| Status | Content Type | Schema |
-| --- | --- | --- |
-| 200 | application/json | ExpertGroup |
-| 422 | application/json | HTTPValidationError |
-
 ## expert-market
 
 ### GET `/api/v1/expert-market/categories`
 
-- Summary: List public expert categories
+- Summary: List Market Categories
 
 #### Input Parameters
 
@@ -746,7 +675,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### GET `/api/v1/expert-market/experts`
 
-- Summary: List public experts
+- Summary: List Market Experts
 
 #### Input Parameters
 
@@ -764,7 +693,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### GET `/api/v1/expert-market/experts/{expert_id}`
 
-- Summary: Get public expert details
+- Summary: Get Market Expert
 
 #### Input Parameters
 
@@ -784,7 +713,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### GET `/api/v1/experts`
 
-- Summary: List experts
+- Summary: List Experts
 
 #### Input Parameters
 
@@ -804,7 +733,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### POST `/api/v1/experts`
 
-- Summary: Create an expert
+- Summary: Create Expert
 
 #### Input Parameters
 
@@ -822,7 +751,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### GET `/api/v1/experts/stats/summary`
 
-- Summary: Get expert statistics
+- Summary: Get Expert Stats
 
 #### Input Parameters
 
@@ -839,7 +768,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### DELETE `/api/v1/experts/{expert_id}`
 
-- Summary: Delete an expert
+- Summary: Delete Expert
 
 #### Input Parameters
 
@@ -857,7 +786,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### GET `/api/v1/experts/{expert_id}`
 
-- Summary: Get expert details
+- Summary: Get Expert
 
 #### Input Parameters
 
@@ -875,7 +804,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### PATCH `/api/v1/experts/{expert_id}`
 
-- Summary: Update an expert
+- Summary: Update Expert
 
 #### Input Parameters
 
@@ -894,7 +823,7 @@ This document is generated from the FastAPI OpenAPI schema.
 
 ### PATCH `/api/v1/experts/{expert_id}/status`
 
-- Summary: Update expert status
+- Summary: Update Expert Status
 
 #### Input Parameters
 
@@ -931,7 +860,7 @@ No input parameters.
 
 ### GET `/api/v1/knowledge-bases`
 
-- Summary: List knowledge bases
+- Summary: List Knowledge Bases
 
 #### Input Parameters
 
@@ -948,7 +877,7 @@ No input parameters.
 
 ### POST `/api/v1/knowledge-bases`
 
-- Summary: Create a knowledge base
+- Summary: Create Knowledge Base
 
 #### Input Parameters
 
@@ -966,7 +895,7 @@ No input parameters.
 
 ### DELETE `/api/v1/knowledge-bases/{knowledge_base_id}`
 
-- Summary: Delete a knowledge base
+- Summary: Delete Knowledge Base
 
 #### Input Parameters
 
@@ -984,7 +913,7 @@ No input parameters.
 
 ### GET `/api/v1/knowledge-bases/{knowledge_base_id}`
 
-- Summary: Get knowledge base details
+- Summary: Get Knowledge Base
 
 #### Input Parameters
 
@@ -1002,7 +931,7 @@ No input parameters.
 
 ### PATCH `/api/v1/knowledge-bases/{knowledge_base_id}`
 
-- Summary: Update a knowledge base
+- Summary: Update Knowledge Base
 
 #### Input Parameters
 
@@ -1019,11 +948,112 @@ No input parameters.
 | 200 | application/json | KnowledgeBase |
 | 422 | application/json | HTTPValidationError |
 
+## library
+
+### GET `/api/v1/library/files`
+
+- Summary: List Files
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| query | keyword | no | string \| null | - |
+| query | type | no | string | - |
+| query | page | no | integer | - |
+| query | pageSize | no | integer | - |
+| query | sort | no | string | - |
+| header | x-tenant-id | no | string \| null | - |
+| header | Authorization | no | string \| null | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | LibraryFileListResponse |
+| 422 | application/json | HTTPValidationError |
+
+### POST `/api/v1/library/files`
+
+- Summary: Upload File
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| header | x-tenant-id | no | string \| null | - |
+| header | Authorization | no | string \| null | - |
+| body | multipart/form-data | yes | Body_upload_file_api_v1_library_files_post | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 201 | application/json | LibraryFile |
+| 422 | application/json | HTTPValidationError |
+
+### DELETE `/api/v1/library/files/{file_id}`
+
+- Summary: Delete File
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| path | file_id | yes | string | - |
+| header | x-tenant-id | no | string \| null | - |
+| header | Authorization | no | string \| null | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | LibraryDeletedResponse |
+| 422 | application/json | HTTPValidationError |
+
+### GET `/api/v1/library/files/{file_id}/download`
+
+- Summary: Download File
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| path | file_id | yes | string | - |
+| header | x-tenant-id | no | string \| null | - |
+| header | Authorization | no | string \| null | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | LibraryDownloadResponse |
+| 422 | application/json | HTTPValidationError |
+
+### GET `/api/v1/library/files/{file_id}/preview`
+
+- Summary: Preview File
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| path | file_id | yes | string | - |
+| header | x-tenant-id | no | string \| null | - |
+| header | Authorization | no | string \| null | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | LibraryPreviewResponse |
+| 422 | application/json | HTTPValidationError |
+
 ## models
 
 ### GET `/api/v1/models/embedding`
 
-- Summary: Get embedding model info
+- Summary: Get Embedding Model
 
 #### Input Parameters
 
@@ -1041,7 +1071,7 @@ No input parameters.
 
 ### GET `/api/v1/models/llm`
 
-- Summary: List LLM models
+- Summary: List Llm Models
 
 #### Input Parameters
 
@@ -1061,7 +1091,7 @@ No input parameters.
 
 ### GET `/api/v1/ops/metrics`
 
-- Summary: Get system metrics
+- Summary: Metrics
 
 #### Input Parameters
 
@@ -1078,7 +1108,7 @@ No input parameters.
 
 ### POST `/api/v1/ops/storage/gc`
 
-- Summary: Run object storage GC
+- Summary: Run Storage Gc
 - Description: Run the object-storage garbage collection passes and report what each reclaimed.
 
 The reclamation methods on DocumentService are otherwise only reachable from code; this is the
@@ -1103,7 +1133,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### GET `/api/v1/plan-market/current-subscription`
 
-- Summary: Get current subscription
+- Summary: Get Current Subscription
 
 #### Input Parameters
 
@@ -1120,7 +1150,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### GET `/api/v1/plan-market/plans`
 
-- Summary: List market plans
+- Summary: List Market Plans
 
 #### Input Parameters
 
@@ -1139,7 +1169,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### GET `/api/v1/plans`
 
-- Summary: List plans
+- Summary: List Plans
 
 #### Input Parameters
 
@@ -1156,7 +1186,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### POST `/api/v1/plans`
 
-- Summary: Create a plan
+- Summary: Create Plan
 
 #### Input Parameters
 
@@ -1174,7 +1204,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### DELETE `/api/v1/plans/{plan_id}`
 
-- Summary: Delete a plan
+- Summary: Delete Plan
 
 #### Input Parameters
 
@@ -1192,7 +1222,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### GET `/api/v1/plans/{plan_id}`
 
-- Summary: Get plan details
+- Summary: Get Plan
 
 #### Input Parameters
 
@@ -1210,7 +1240,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### PATCH `/api/v1/plans/{plan_id}`
 
-- Summary: Update a plan
+- Summary: Update Plan
 
 #### Input Parameters
 
@@ -1229,7 +1259,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### PUT `/api/v1/plans/{plan_id}/entitlements`
 
-- Summary: Replace plan entitlements
+- Summary: Replace Plan Entitlements
 
 #### Input Parameters
 
@@ -1246,9 +1276,9 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | 200 | application/json | Plan |
 | 422 | application/json | HTTPValidationError |
 
-### PUT `/api/v1/plans/{plan_id}/expert-groups`
+### PUT `/api/v1/plans/{plan_id}/experts`
 
-- Summary: Replace plan expert groups
+- Summary: Replace Plan Experts
 
 #### Input Parameters
 
@@ -1256,7 +1286,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | --- | --- | --- | --- | --- |
 | path | plan_id | yes | string | - |
 | header | Authorization | no | string \| null | - |
-| body | application/json | yes | ReplacePlanExpertGroupsRequest | - |
+| body | application/json | yes | ReplacePlanExpertsRequest | - |
 
 #### Response
 
@@ -1267,7 +1297,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### PUT `/api/v1/plans/{plan_id}/prices`
 
-- Summary: Replace plan prices
+- Summary: Replace Plan Prices
 
 #### Input Parameters
 
@@ -1288,7 +1318,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### GET `/api/v1/rbac/platform/roles`
 
-- Summary: List platform roles
+- Summary: List Platform Roles
 
 #### Input Parameters
 
@@ -1305,7 +1335,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### POST `/api/v1/rbac/platform/users/{user_id}/roles`
 
-- Summary: Grant platform role
+- Summary: Grant Platform Role
 
 #### Input Parameters
 
@@ -1324,7 +1354,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### DELETE `/api/v1/rbac/platform/users/{user_id}/roles/{role}`
 
-- Summary: Revoke platform role
+- Summary: Revoke Platform Role
 
 #### Input Parameters
 
@@ -1343,7 +1373,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### GET `/api/v1/rbac/tenant/users`
 
-- Summary: List current tenant users
+- Summary: List Tenant Users
 
 #### Input Parameters
 
@@ -1361,7 +1391,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### DELETE `/api/v1/rbac/tenant/users/{user_id}`
 
-- Summary: Remove current tenant member
+- Summary: Revoke Tenant Member
 
 #### Input Parameters
 
@@ -1380,7 +1410,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### POST `/api/v1/rbac/tenant/users/{user_id}/roles`
 
-- Summary: Grant or update tenant role
+- Summary: Grant Tenant Role
 
 #### Input Parameters
 
@@ -1402,7 +1432,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### GET `/api/v1/skills`
 
-- Summary: List skills
+- Summary: List Skills
 
 #### Input Parameters
 
@@ -1423,7 +1453,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### POST `/api/v1/skills`
 
-- Summary: Upload a skill
+- Summary: Upload Skill
 
 #### Input Parameters
 
@@ -1441,7 +1471,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### DELETE `/api/v1/skills/{slug}`
 
-- Summary: Delete a skill
+- Summary: Delete Skill
 
 #### Input Parameters
 
@@ -1460,7 +1490,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### GET `/api/v1/skills/{slug}`
 
-- Summary: Get skill details
+- Summary: Get Skill
 
 #### Input Parameters
 
@@ -1478,7 +1508,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### PUT `/api/v1/skills/{slug}`
 
-- Summary: Update a skill
+- Summary: Update Skill
 
 #### Input Parameters
 
@@ -1497,7 +1527,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### GET `/api/v1/skills/{slug}/file`
 
-- Summary: Get a skill file
+- Summary: Get Skill File
 
 #### Input Parameters
 
@@ -1514,11 +1544,49 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | 200 | application/json | - |
 | 422 | application/json | HTTPValidationError |
 
+## storage
+
+### GET `/api/v1/storage/objects/{token}`
+
+- Summary: Get Object
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| path | token | yes | string | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | - |
+| 422 | application/json | HTTPValidationError |
+
+### PUT `/api/v1/storage/objects/{token}`
+
+- Summary: Put Object
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| path | token | yes | string | - |
+| header | content-type | no | string \| null | - |
+| header | content-length | no | integer \| null | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 204 | - | Successful Response |
+| 422 | application/json | HTTPValidationError |
+
 ## tenants
 
 ### GET `/api/v1/tenants`
 
-- Summary: List tenants
+- Summary: List Tenants
 
 #### Input Parameters
 
@@ -1542,7 +1610,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### POST `/api/v1/tenants`
 
-- Summary: Create a tenant
+- Summary: Create Tenant
 
 #### Input Parameters
 
@@ -1560,7 +1628,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### GET `/api/v1/tenants/{tenant_id}`
 
-- Summary: Get tenant details
+- Summary: Get Tenant
 
 #### Input Parameters
 
@@ -1578,7 +1646,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### PATCH `/api/v1/tenants/{tenant_id}`
 
-- Summary: Update tenant
+- Summary: Update Tenant
 
 #### Input Parameters
 
@@ -1597,7 +1665,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### GET `/api/v1/tenants/{tenant_id}/members`
 
-- Summary: List tenant members
+- Summary: List Tenant Members
 
 #### Input Parameters
 
@@ -1615,7 +1683,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### POST `/api/v1/tenants/{tenant_id}/members`
 
-- Summary: Add a tenant member
+- Summary: Add Tenant Member
 
 #### Input Parameters
 
@@ -1634,7 +1702,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### DELETE `/api/v1/tenants/{tenant_id}/members/{user_id}`
 
-- Summary: Remove a tenant member
+- Summary: Remove Tenant Member
 
 #### Input Parameters
 
@@ -1653,7 +1721,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### PATCH `/api/v1/tenants/{tenant_id}/members/{user_id}`
 
-- Summary: Update tenant member role
+- Summary: Update Tenant Member
 
 #### Input Parameters
 
@@ -1673,7 +1741,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### PATCH `/api/v1/tenants/{tenant_id}/status`
 
-- Summary: Update tenant status
+- Summary: Update Tenant Status
 
 #### Input Parameters
 
@@ -1713,7 +1781,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### GET `/api/v1/users`
 
-- Summary: List regular users
+- Summary: List Users
 
 #### Input Parameters
 
@@ -1736,7 +1804,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### GET `/api/v1/users/platform`
 
-- Summary: List platform users
+- Summary: List Platform Users
 
 #### Input Parameters
 
@@ -1753,7 +1821,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### POST `/api/v1/users/platform`
 
-- Summary: Create a platform user
+- Summary: Create Platform User
 
 #### Input Parameters
 
@@ -1771,7 +1839,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### POST `/api/v1/users/platform/activate`
 
-- Summary: Activate a platform user
+- Summary: Activate Platform User
 
 #### Input Parameters
 
@@ -1788,7 +1856,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### POST `/api/v1/users/register`
 
-- Summary: Register a regular user
+- Summary: Register
 
 #### Input Parameters
 
@@ -1805,7 +1873,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### GET `/api/v1/users/{user_id}`
 
-- Summary: Get user details
+- Summary: Get User
 
 #### Input Parameters
 
@@ -1823,7 +1891,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### PATCH `/api/v1/users/{user_id}`
 
-- Summary: Update user profile
+- Summary: Update User
 
 #### Input Parameters
 
@@ -1842,7 +1910,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### PATCH `/api/v1/users/{user_id}/status`
 
-- Summary: Update user status
+- Summary: Update User Status
 
 #### Input Parameters
 
@@ -1861,7 +1929,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 
 ### GET `/api/v1/users/{user_id}/tenants`
 
-- Summary: List the user's tenants
+- Summary: List User Tenants
 
 #### Input Parameters
 
@@ -1886,6 +1954,12 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | userId | yes | string | - |
 | role | no | TenantRole | - |
 
+### `ArchiveSessionRequest`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| archived | no | boolean | - |
+
 ### `BatchItemError`
 
 | Field | Required | Type | Description |
@@ -1893,6 +1967,12 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | code | yes | string | - |
 | message | yes | string | - |
 | details | no | object | - |
+
+### `Body_upload_file_api_v1_library_files_post`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| file | yes | string | - |
 
 ### `Body_upload_skill_api_v1_skills_post`
 
@@ -1914,7 +1994,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
 | question | yes | string | - |
-| webSearchEnabled | no | boolean \| null | Routes ACP turns to the search prefix with `search_mode=auto` when true; otherwise uses the default prefix with `search_mode=off`. |
+| webSearchEnabled | no | boolean \| null | Routes ACP turns to the search prefix with search_mode=auto when true; otherwise uses the default prefix with search_mode=off. |
 
 ### `CompleteUploadRequest`
 
@@ -1952,22 +2032,12 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | name | yes | string | - |
 | description | no | string \| null | - |
 
-### `CreateExpertGroupRequest`
-
-| Field | Required | Type | Description |
-| --- | --- | --- | --- |
-| code | yes | string | - |
-| name | yes | string | - |
-| description | no | string \| null | - |
-| sortOrder | no | integer | - |
-
 ### `CreateExpertRequest`
 
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
 | name | yes | string | - |
 | categoryId | yes | string | - |
-| groupId | no | string \| null | - |
 | abilityIntro | yes | string | - |
 | tags | no | array[string] | - |
 | status | no | string | - |
@@ -2082,8 +2152,6 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | name | yes | string | - |
 | categoryId | yes | string | - |
 | categoryName | yes | string | - |
-| groupId | no | string \| null | - |
-| groupName | no | string \| null | - |
 | abilityIntro | yes | string | - |
 | tags | no | array[string] | - |
 | status | yes | string | - |
@@ -2109,25 +2177,6 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
 | items | yes | array[ExpertCategory] | - |
-
-### `ExpertGroup`
-
-| Field | Required | Type | Description |
-| --- | --- | --- | --- |
-| id | yes | string | - |
-| code | yes | string | - |
-| name | yes | string | - |
-| description | no | string \| null | - |
-| sortOrder | yes | integer | - |
-| expertIds | no | array[string] | - |
-| createdAt | yes | string | - |
-| updatedAt | yes | string | - |
-
-### `ExpertGroupListResponse`
-
-| Field | Required | Type | Description |
-| --- | --- | --- | --- |
-| items | yes | array[ExpertGroup] | - |
 
 ### `ExpertListResponse`
 
@@ -2215,6 +2264,54 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | --- | --- | --- | --- |
 | items | yes | array[KnowledgeBase] | - |
 
+### `LibraryDeletedResponse`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| id | yes | string | - |
+| status | no | string | - |
+
+### `LibraryDownloadResponse`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| method | no | string | - |
+| downloadUrl | yes | string | - |
+| expiresAt | yes | string | - |
+
+### `LibraryFile`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| id | yes | string | - |
+| name | yes | string | - |
+| mimeType | no | string \| null | - |
+| type | yes | string | - |
+| sizeBytes | yes | integer | - |
+| sizeLabel | yes | string | - |
+| updatedAt | yes | string | - |
+| createdAt | yes | string | - |
+| previewSupported | yes | boolean | - |
+
+### `LibraryFileListResponse`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| items | yes | array[LibraryFile] | - |
+| total | yes | integer | - |
+| page | yes | integer | - |
+| pageSize | yes | integer | - |
+
+### `LibraryPreviewResponse`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| previewType | yes | string | - |
+| url | no | string \| null | - |
+| content | no | string \| null | - |
+| mimeType | no | string \| null | - |
+| expiresAt | no | string \| null | - |
+
 ### `ListManagedUsersResponse`
 
 | Field | Required | Type | Description |
@@ -2282,7 +2379,7 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | subscriptionCount | no | integer | - |
 | prices | no | array[PlanPrice] | - |
 | entitlements | no | PlanEntitlements \| null | - |
-| expertGroups | no | array[ExpertGroup] | - |
+| expertIds | no | array[string] | - |
 | createdAt | yes | string | - |
 | updatedAt | yes | string | - |
 
@@ -2362,12 +2459,6 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | --- | --- | --- | --- |
 | title | yes | string | - |
 
-### `ReplaceExpertGroupMembersRequest`
-
-| Field | Required | Type | Description |
-| --- | --- | --- | --- |
-| expertIds | no | array[string] | - |
-
 ### `ReplacePlanEntitlementsRequest`
 
 | Field | Required | Type | Description |
@@ -2379,11 +2470,11 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | modelTiers | no | array[string] | - |
 | features | no | object | - |
 
-### `ReplacePlanExpertGroupsRequest`
+### `ReplacePlanExpertsRequest`
 
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
-| groupIds | no | array[string] | - |
+| expertIds | no | array[string] | - |
 
 ### `ReplacePlanPriceRequest`
 
@@ -2602,22 +2693,12 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | name | no | string \| null | - |
 | description | no | string \| null | - |
 
-### `UpdateExpertGroupRequest`
-
-| Field | Required | Type | Description |
-| --- | --- | --- | --- |
-| code | no | string \| null | - |
-| name | no | string \| null | - |
-| description | no | string \| null | - |
-| sortOrder | no | integer \| null | - |
-
 ### `UpdateExpertRequest`
 
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
 | name | no | string \| null | - |
 | categoryId | no | string \| null | - |
-| groupId | no | string \| null | - |
 | abilityIntro | no | string \| null | - |
 | tags | no | array[string] \| null | - |
 | skillIds | no | array[string] \| null | - |
@@ -2726,6 +2807,13 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | --- | --- | --- | --- |
 | fileName | yes | string | - |
 | status | yes | string | - |
+| uploadSessionId | no | string \| null | - |
+| documentId | no | string \| null | - |
+| method | no | string \| null | - |
+| uploadUrl | no | string \| null | - |
+| headers | no | object \| null | - |
+| objectKey | no | string \| null | - |
+| expiresAt | no | string \| null | - |
 | upload | no | UploadUrlResponse \| null | - |
 | error | no | BatchItemError \| null | - |
 
@@ -2873,3 +2961,5 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | loc | yes | array[string \| integer] | - |
 | msg | yes | string | - |
 | type | yes | string | - |
+| input | no | {"title": "Input"} | - |
+| ctx | no | object | - |

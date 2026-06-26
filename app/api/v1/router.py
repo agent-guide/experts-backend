@@ -16,6 +16,7 @@ from app.api.v1.routers import (
     plans,
     rbac,
     skills,
+    storage,
     tenants,
     users,
 )
@@ -60,3 +61,4 @@ api_router.include_router(
     tags=["builds"],
 )
 api_router.include_router(skills.router, prefix="/skills", tags=["skills"])
+api_router.include_router(storage.router, prefix="/storage", tags=["storage"])

@@ -113,9 +113,11 @@ Design:
 
 ### 4.3 Document and Upload APIs
 
-Documents are nested under a knowledge base and uploaded directly to MinIO via presigned URLs;
-FastAPI never streams document bodies. There are **no** top-level `/documents` or `/uploads`
-routes, and no jobs/chunks/reindex/multipart endpoints. Canonical contract:
+Documents are nested under a knowledge base and uploaded through the configured object storage
+backend. In `minio` mode the client uploads directly to MinIO/S3 via presigned URLs; in `local`
+mode the client uploads to a signed backend storage route that streams to disk. There are **no**
+top-level `/documents` or `/uploads` routes, and no jobs/chunks/reindex/multipart endpoints.
+Canonical contract:
 `docs/KNOWLEDGE_BASE_STORAGE_AND_BUILD_SPEC.md`.
 
 Current API shell (all nested under `/api/v1/knowledge-bases/{id}/docs`):
@@ -174,8 +176,8 @@ Open decisions:
 
 ### 4.5 Skill APIs
 
-Owned by Expert Next API, backed by the `skills` database table and local or
-MinIO skill file storage. Skills are platform-managed assets, not tenant/user
+Owned by Expert Next API, backed by the `skills` database table and the shared
+object storage backend. Skills are platform-managed assets, not tenant/user
 installation records.
 
 Current APIs:
@@ -194,8 +196,10 @@ Design:
   slug, stores files, and records metadata.
 - Database metadata includes slug, name, description, version, allowed tools,
   file paths, tags and storage URI.
-- Storage backend is selected by `EXPERT_NEXT_SKILL_STORAGE_BACKEND`, currently
-  `local` or `minio`.
+- Storage backend is selected by `EXPERT_NEXT_OBJECT_STORAGE_BACKEND`, which
+  defaults to local storage for development and should be set to `minio` for
+  production. The same setting is used by documents and library files. Skill
+  objects always use the `skills/{slug}/...` object-key prefix.
 
 ### 4.6 Models and Ops APIs
 

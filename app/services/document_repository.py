@@ -176,18 +176,6 @@ class DocumentRepository:
         )
         return _map_document(row)
 
-    def get_storage_key(self, knowledge_base_id: str, document_id: str) -> str | None:
-        row = fetch_one(
-            self.connection,
-            """
-            select storage_key from documents
-            where id = ? and knowledge_base_id = ? and deleted_at is null
-            limit 1
-            """,
-            (document_id, knowledge_base_id),
-        )
-        return str(row["storage_key"]) if row else None
-
     def list_documents(self, knowledge_base_id: str) -> list[Document]:
         rows = fetch_all(
             self.connection,

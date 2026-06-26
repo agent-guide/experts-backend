@@ -80,6 +80,8 @@ class DocumentService:
         self._authorized_kb(principal, knowledge_base_id, "doc")
         if request.fileSizeBytes <= 0:
             raise ApiError(400, "DOC_INVALID_SIZE", "fileSizeBytes must be positive")
+        if request.fileSizeBytes > self.settings.object_storage_max_upload_bytes:
+            raise ApiError(413, "OBJECT_TOO_LARGE", "Object upload is too large")
 
         safe_name = _safe_file_name(request.fileName)
         file_type = _resolve_file_type(safe_name, request.mimeType)
@@ -108,6 +110,7 @@ class DocumentService:
             object_key,
             expires=timedelta(seconds=self.settings.presigned_url_ttl_seconds),
             content_type=request.mimeType,
+            content_length=request.fileSizeBytes,
         )
         self.connection.commit()
 
@@ -299,11 +302,18 @@ class DocumentService:
         self, principal: Principal, knowledge_base_id: str, document_id: str
     ) -> DownloadUrlResponse:
         self._authorized_kb(principal, knowledge_base_id, "read")
-        storage_key = self.docs.get_storage_key(knowledge_base_id, document_id)
-        if not storage_key:
+        document = self.docs.get_document(knowledge_base_id, document_id)
+        if not document:
             raise ApiError(404, "DOC_NOT_FOUND", "Document not found")
         ttl = timedelta(seconds=self.settings.presigned_url_ttl_seconds)
-        url = self.store.presigned_get_url(storage_key, expires=ttl)
+        response_headers = (
+            {"response-content-type": document.mimeType} if document.mimeType else None
+        )
+        url = self.store.presigned_get_url(
+            document.storageKey,
+            expires=ttl,
+            response_headers=response_headers,
+        )
         return DownloadUrlResponse(
             downloadUrl=url,
             expiresAt=_iso(_now() + ttl),

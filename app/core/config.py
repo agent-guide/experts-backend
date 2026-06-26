@@ -50,11 +50,13 @@ class Settings(BaseSettings):
     codex_home: str = Field(default_factory=lambda: str(Path.home() / ".codex"))
     codex_skills_dir: str | None = None
 
-    skill_storage_backend: str = "local"
-    skill_storage_local_dir: str = Field(
-        default_factory=lambda: str(Path.cwd() / ".data" / "skills")
+    object_storage_backend: str = "local"
+    object_storage_local_dir: str = Field(
+        default_factory=lambda: str(Path.cwd() / ".data" / "objects")
     )
-    skill_storage_prefix: str = "skills"
+    object_storage_public_base_url: str | None = None
+    object_storage_max_upload_bytes: int = 100 * 1024 * 1024
+
     minio_endpoint: str | None = None
     minio_access_key: str | None = None
     minio_secret_key: str | None = None

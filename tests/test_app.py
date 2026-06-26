@@ -2404,8 +2404,8 @@ def test_skills_upload_list_get_file_update_and_delete(tmp_path: Path) -> None:
         database_url=f"sqlite:///{database_path}",
         default_tenant_id="tenant_default",
         jwt_secret="test-secret-with-at-least-32-bytes",
-        skill_storage_backend="local",
-        skill_storage_local_dir=str(tmp_path / "skill-storage"),
+        object_storage_backend="local",
+        object_storage_local_dir=str(tmp_path / "objects"),
     )
     test_app = create_app(settings)
 
@@ -2471,7 +2471,7 @@ def test_skills_upload_list_get_file_update_and_delete(tmp_path: Path) -> None:
 
         missing_response = client.get("/api/v1/skills/amazon-review-analyzer", headers=headers)
         assert missing_response.status_code == 404
-        assert not (tmp_path / "skill-storage" / "skills" / "amazon-review-analyzer").exists()
+        assert not (tmp_path / "objects" / "skills" / "amazon-review-analyzer").exists()
 
 
 def _skill_test_settings(tmp_path: Path) -> Settings:
@@ -2479,8 +2479,8 @@ def _skill_test_settings(tmp_path: Path) -> Settings:
         database_url=f"sqlite:///{tmp_path / 'skills.sqlite3'}",
         default_tenant_id="tenant_default",
         jwt_secret="test-secret-with-at-least-32-bytes",
-        skill_storage_backend="local",
-        skill_storage_local_dir=str(tmp_path / "skill-storage"),
+        object_storage_backend="local",
+        object_storage_local_dir=str(tmp_path / "objects"),
     )
 
 
@@ -3848,7 +3848,7 @@ class FakeObjectStore(ObjectStore):
     def bucket(self) -> str:
         return self._bucket
 
-    def presigned_put_url(self, object_key, *, expires, content_type=None) -> str:
+    def presigned_put_url(self, object_key, *, expires, content_type=None, content_length=None) -> str:
         return f"https://minio.test/{self._bucket}/{object_key}?put"
 
     def presigned_get_url(self, object_key, *, expires, response_headers=None) -> str:
@@ -3988,7 +3988,8 @@ def test_document_upload_flow(tmp_path: Path) -> None:
             f"/api/v1/knowledge-bases/{kb_id}/docs/{doc['id']}/download-url", headers=headers
         )
         assert dl.status_code == 200
-        assert dl.json()["downloadUrl"].endswith("?get")
+        assert "?get" in dl.json()["downloadUrl"]
+        assert "response-content-type=application/pdf" in dl.json()["downloadUrl"]
 
         deleted = client.delete(
             f"/api/v1/knowledge-bases/{kb_id}/docs/{doc['id']}", headers=headers
@@ -4264,8 +4265,129 @@ def test_document_reads_do_not_require_object_store(tmp_path: Path) -> None:
             )
 
 
+def test_document_local_object_store_upload_and_download(tmp_path: Path) -> None:
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'kb.sqlite3'}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+        object_storage_backend="local",
+        object_storage_local_dir=str(tmp_path / "objects"),
+    )
+    app = create_app(settings)
+
+    with TestClient(app) as client:
+        headers = _login(client, settings, "expert_user", "expert@example.com", "expert")
+        kb_id = client.post(
+            "/api/v1/knowledge-bases", headers=headers, json={"name": "KB"}
+        ).json()["id"]
+
+        upload = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/upload-url",
+            headers=headers,
+            json={"fileName": "local.txt", "mimeType": "text/plain", "fileSizeBytes": 11},
+        )
+        assert upload.status_code == 200, upload.text
+        upload_body = upload.json()
+        assert upload_body["uploadUrl"].startswith("/api/v1/storage/objects/")
+        assert str(tmp_path) not in upload_body["uploadUrl"]
+
+        put = client.put(
+            upload_body["uploadUrl"],
+            content=b"hello local",
+            headers=upload_body["headers"],
+        )
+        assert put.status_code == 204, put.text
+
+        completed = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/complete-upload",
+            headers=headers,
+            json={"uploadSessionId": upload_body["uploadSessionId"]},
+        )
+        assert completed.status_code == 201, completed.text
+        document_id = completed.json()["id"]
+
+        download = client.get(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/{document_id}/download-url",
+            headers=headers,
+        )
+        assert download.status_code == 200, download.text
+        download_url = download.json()["downloadUrl"]
+        assert download_url.startswith("/api/v1/storage/objects/")
+        assert str(tmp_path) not in download_url
+
+        content = client.get(download_url)
+        assert content.status_code == 200
+        assert content.headers["content-type"].startswith("text/plain")
+        assert content.content == b"hello local"
+
+
+def test_document_local_object_store_rejects_bad_uploads(tmp_path: Path) -> None:
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'kb.sqlite3'}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+        object_storage_backend="local",
+        object_storage_local_dir=str(tmp_path / "objects"),
+    )
+    app = create_app(settings)
+
+    with TestClient(app) as client:
+        headers = _login(client, settings, "expert_user", "expert@example.com", "expert")
+        kb_id = client.post(
+            "/api/v1/knowledge-bases", headers=headers, json={"name": "KB"}
+        ).json()["id"]
+
+        upload = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/upload-url",
+            headers=headers,
+            json={"fileName": "small.txt", "mimeType": "text/plain", "fileSizeBytes": 5},
+        ).json()
+
+        wrong_type = client.put(
+            upload["uploadUrl"],
+            content=b"small",
+            headers={"Content-Type": "application/json"},
+        )
+        assert wrong_type.status_code == 400
+        assert wrong_type.json()["code"] == "OBJECT_CONTENT_TYPE_MISMATCH"
+
+        too_large = client.put(
+            upload["uploadUrl"],
+            content=b"too large",
+            headers=upload["headers"],
+        )
+        assert too_large.status_code == 413
+        assert too_large.json()["code"] == "OBJECT_TOO_LARGE"
+
+
+def test_document_upload_url_rejects_files_over_configured_limit(tmp_path: Path) -> None:
+    settings = _kb_test_settings(tmp_path)
+    settings.object_storage_max_upload_bytes = 8
+    store = FakeObjectStore()
+
+    with TestClient(_kb_app(settings, store)) as client:
+        headers = _login(client, settings, "expert_user", "expert@example.com", "expert")
+        kb_id = client.post(
+            "/api/v1/knowledge-bases", headers=headers, json={"name": "KB"}
+        ).json()["id"]
+
+        response = client.post(
+            f"/api/v1/knowledge-bases/{kb_id}/docs/upload-url",
+            headers=headers,
+            json={"fileName": "a.txt", "fileSizeBytes": 9},
+        )
+        assert response.status_code == 413, response.text
+        assert response.json()["code"] == "OBJECT_TOO_LARGE"
+
+        with open_database_connection(settings) as connection:
+            row = connection.execute("select count(*) as count from upload_sessions").fetchone()
+        assert row is not None
+        assert row["count"] == 0
+
+
 def test_upload_url_returns_503_when_object_store_unavailable(tmp_path: Path) -> None:
     settings = _kb_test_settings(tmp_path)
+    settings.object_storage_backend = "minio"
     app = create_app(settings)
     with TestClient(app) as client:
         headers = _login(client, settings, "expert_user", "expert@example.com", "expert")
@@ -4555,6 +4677,44 @@ def test_library_upload_list_preview_download_and_delete(tmp_path: Path) -> None
         assert object_key not in store.removed
 
 
+def test_library_local_object_store_download_url_is_backend_controlled(tmp_path: Path) -> None:
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'library.sqlite3'}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+        object_storage_backend="local",
+        object_storage_local_dir=str(tmp_path / "objects"),
+    )
+    app = create_app(settings)
+
+    with TestClient(app) as client:
+        _seed_tenant(settings)
+        headers = _library_headers(
+            client,
+            settings,
+            user_id="tenant_user",
+            email="tenant@example.com",
+        )
+
+        uploaded = client.post(
+            "/api/v1/library/files",
+            headers=headers,
+            files={"file": ("notes.md", b"# Local", "text/markdown")},
+        )
+        assert uploaded.status_code == 201, uploaded.text
+        file_id = uploaded.json()["id"]
+
+        download = client.get(f"/api/v1/library/files/{file_id}/download", headers=headers)
+        assert download.status_code == 200
+        download_url = download.json()["downloadUrl"]
+        assert download_url.startswith("/api/v1/storage/objects/")
+        assert str(tmp_path) not in download_url
+
+        content = client.get(download_url)
+        assert content.status_code == 200
+        assert content.content == b"# Local"
+
+
 def test_library_files_are_isolated_by_current_user(tmp_path: Path) -> None:
     settings = _library_test_settings(tmp_path)
     store = FakeObjectStore()
@@ -4671,6 +4831,14 @@ def test_library_pdf_preview_returns_inline_pdf_url(tmp_path: Path) -> None:
         assert "response-content-type=application/pdf" in body["url"]
         assert "response-content-disposition=inline" in body["url"]
         assert "attachment" not in body["url"].lower()
+
+
+def test_library_content_disposition_escapes_filename() -> None:
+    from app.services.library_service import _inline_content_disposition
+
+    header = _inline_content_disposition('a".pdf')
+    assert header == 'inline; filename="a_.pdf"; filename*=UTF-8\'\'a%22.pdf'
+    assert 'filename="a".pdf"' not in header
 
 
 def test_library_preview_supported_is_derived_from_file_type_not_db_flag(tmp_path: Path) -> None:
