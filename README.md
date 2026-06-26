@@ -60,29 +60,36 @@ relies on `if not exists` idempotency. The SQL files are written in PostgreSQL
 syntax; for SQLite, `app/db.py` rewrites Postgres-only constructs (`jsonb`,
 `timestamptz`, `now()`, ...) into SQLite-compatible forms on the fly.
 
-### Choosing skill file storage: filesystem vs MinIO
+### Choosing object storage: local filesystem vs MinIO
 
-The backend is selected by `EXPERT_NEXT_SKILL_STORAGE_BACKEND` (default `local`).
+Documents, library files and skill packages use the same object storage backend.
+The backend is selected by `EXPERT_NEXT_OBJECT_STORAGE_BACKEND` (default `local`).
 
 - Local filesystem (default):
 
   ```text
-  EXPERT_NEXT_SKILL_STORAGE_BACKEND=local
-  EXPERT_NEXT_SKILL_STORAGE_LOCAL_DIR=./.data/skills
-  EXPERT_NEXT_SKILL_STORAGE_PREFIX=skills
+  EXPERT_NEXT_OBJECT_STORAGE_BACKEND=local
+  EXPERT_NEXT_OBJECT_STORAGE_LOCAL_DIR=./.data/objects
+  EXPERT_NEXT_OBJECT_STORAGE_MAX_UPLOAD_BYTES=104857600
   ```
 
-- MinIO object storage — set the backend to `minio` and provide the connection
-  settings:
+- MinIO object storage — recommended for production. Set the backend to `minio`
+  and provide the connection settings:
 
   ```text
-  EXPERT_NEXT_SKILL_STORAGE_BACKEND=minio
+  EXPERT_NEXT_OBJECT_STORAGE_BACKEND=minio
   EXPERT_NEXT_MINIO_ENDPOINT=127.0.0.1:9000
   EXPERT_NEXT_MINIO_ACCESS_KEY=minioadmin
   EXPERT_NEXT_MINIO_SECRET_KEY=minioadmin
-  EXPERT_NEXT_MINIO_BUCKET=expert-skills
+  EXPERT_NEXT_MINIO_BUCKET=expert-files
   EXPERT_NEXT_MINIO_SECURE=false
   ```
+
+Skills always use the `skills/{slug}/...` object-key prefix inside the shared
+object storage backend. The old `EXPERT_NEXT_SKILL_STORAGE_*` settings are no
+longer read. Existing deployments that stored skill objects in a separate bucket
+such as `expert-skills` should manually copy the old `skills/...` objects into
+the configured shared bucket before switching production to `minio`.
 
 ## Auth
 

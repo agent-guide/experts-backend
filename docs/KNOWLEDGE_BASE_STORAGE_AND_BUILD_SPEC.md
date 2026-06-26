@@ -12,16 +12,19 @@
 ## 1. Overview
 
 Knowledge bases, documents, and uploads are managed by this service's own PostgreSQL
-database, with original document bytes stored in MinIO/S3. The API service is a pure
-**control plane**: it authorizes requests, mints object keys, signs short-lived presigned
-URLs, verifies uploaded objects, and persists metadata. **It never streams document bodies.**
-Clients upload and download directly against MinIO using presigned URLs.
+database, with original document bytes stored in the configured object storage backend
+(`local` by default, `minio` for production). The API service authorizes requests,
+mints object keys, signs short-lived upload/download URLs, verifies uploaded objects,
+and persists metadata. In `minio` mode, clients upload and download directly against
+MinIO/S3 using presigned URLs. In `local` mode, clients use signed backend storage
+routes; uploads are streamed to disk with size enforcement.
 
 Key properties of the shipped design:
 
 - The local database is the single source of truth for knowledge base / document /
   upload-session metadata. There is no PageIndex pass-through.
-- Documents are uploaded by the client **directly to MinIO**, not proxied through the API.
+- Documents are uploaded through the configured object storage backend. MinIO mode
+  uses direct presigned object-store URLs; local mode uses signed backend storage URLs.
 - Knowledge bases, documents, and upload sessions carry **no `tenant_id`** — they are
   platform-owned resources. Tenants only consume knowledge bases indirectly via chat.
 - Access is decided **entirely by platform permission bits on the route**. There is no
@@ -34,7 +37,7 @@ Key properties of the shipped design:
 
 | Phase | Area | Status |
 | --- | --- | --- |
-| 1 | DB schema, KB CRUD, docs CRUD, MinIO direct upload, soft delete, GC | **Implemented** |
+| 1 | DB schema, KB CRUD, docs CRUD, object storage upload, soft delete, GC | **Implemented** |
 | 2 | Build endpoints as `501` placeholders | **Implemented** |
 | 3 | `knowledge_base_builds` table, build worker, provider abstraction | Deferred (§11) |
 | 4 | Chat/search retrieval integration | Deferred (§11) |
@@ -72,8 +75,9 @@ The API service responsibilities:
 - Verify upload completion via HEAD (object existence + size).
 - Persist metadata and manage upload-session state.
 
-MinIO/S3 is the **storage plane** for original bytes. Clients receive only object-scoped,
-short-TTL credentials.
+The configured object store is the **storage plane** for original bytes. Clients receive
+only object-scoped, short-TTL upload/download URLs. MinIO is recommended for production;
+local storage is the default development backend.
 
 ### 2.1 Layering
 
@@ -301,7 +305,7 @@ but otherwise unused.
 
 ---
 
-## 5. MinIO Direct-Upload Flow
+## 5. Object Storage Upload Flow
 
 ### 5.1 Request upload URL
 
@@ -321,7 +325,8 @@ Request (`UploadUrlRequest`):
 Server steps (`DocumentService.create_upload_url`):
 
 1. Authorize: load the KB; `authorize_kb_access(principal, kb, "doc")` rejects archived KBs.
-2. Validate `fileSizeBytes > 0` (`400 DOC_INVALID_SIZE`).
+2. Validate `fileSizeBytes > 0` (`400 DOC_INVALID_SIZE`) and
+   `fileSizeBytes <= EXPERT_NEXT_OBJECT_STORAGE_MAX_UPLOAD_BYTES` (`413 OBJECT_TOO_LARGE`).
 3. Sanitize the file name (strip path separators + control chars; reject `.`/`..`/empty —
    `400 DOC_INVALID_FILE_NAME`).
 4. Resolve `file_type` from the **file extension** against a whitelist; unknown →
@@ -339,7 +344,7 @@ Response (`UploadUrlResponse`):
   "uploadSessionId": "upl_...",
   "documentId": "doc_...",
   "method": "PUT",
-  "uploadUrl": "https://minio.example.com/expert-docs/...",
+  "uploadUrl": "https://minio.example.com/expert-files/...",
   "headers": { "Content-Type": "application/pdf" },
   "objectKey": "knowledge-bases/kb_123/documents/doc_123/guide.pdf",
   "expiresAt": "2026-06-03T10:10:00Z"
@@ -348,10 +353,16 @@ Response (`UploadUrlResponse`):
 
 `headers` is populated only when `mimeType` is provided.
 
-### 5.2 Client uploads to MinIO
+In `local` mode, `uploadUrl` is a backend route such as
+`/api/v1/storage/objects/<token>` instead of a filesystem path.
+
+### 5.2 Client uploads the object
 
 The client issues `PUT {uploadUrl}` with the raw file body and the matching `Content-Type`
-header. The API neither receives nor proxies the bytes.
+header. In `minio` mode this request goes directly to MinIO/S3. In `local` mode this
+request goes to the backend's signed storage route, which streams the body to disk and
+rejects bodies larger than the upload session's declared `fileSizeBytes` or
+`EXPERT_NEXT_OBJECT_STORAGE_MAX_UPLOAD_BYTES`.
 
 ### 5.3 Complete upload
 
@@ -510,10 +521,12 @@ later pass.
 
 - The bucket grants no anonymous write access.
 - Presigned URLs are short-lived: `presigned_url_ttl_seconds` defaults to **900s** (15 min),
-  used for both PUT and GET.
+  used for both PUT and GET. Local `/api/v1/storage/objects/{token}` routes are public
+  presigned-URL endpoints and rely on this token TTL plus the `object-store` JWT audience.
 - Object keys are server-generated only (§6).
 - `complete-upload` HEADs the object to confirm existence **and** exact declared size.
-- File type (extension whitelist) and positive size are validated **before** signing the URL.
+- File type (extension whitelist), positive size and the configured maximum upload size are
+  validated **before** signing the URL.
 - Deletion uses the DB `storage_key`, never a client-supplied key.
 - Downloads are served via short-lived presigned GET URLs, not API proxying.
 - ETag ≠ content hash: the single-PUT ETag is the object MD5, so the client's declared sha256

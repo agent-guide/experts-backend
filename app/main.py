@@ -30,6 +30,7 @@ OPENAPI_TAGS = [
     {"name": "docs", "description": "Knowledge base document upload, view, update and delete."},
     {"name": "builds", "description": "Knowledge base build placeholder endpoints."},
     {"name": "skills", "description": "Platform skill upload, view, update and delete."},
+    {"name": "storage", "description": "Signed local object upload and download URLs."},
 ]
 
 OPENAPI_OPERATION_SUMMARIES = {
@@ -134,6 +135,8 @@ OPENAPI_OPERATION_SUMMARIES = {
     ("PUT", "/api/v1/skills/{slug}"): "Update a skill",
     ("DELETE", "/api/v1/skills/{slug}"): "Delete a skill",
     ("GET", "/api/v1/skills/{slug}/file"): "Get a skill file",
+    ("PUT", "/api/v1/storage/objects/{token}"): "Upload a local object",
+    ("GET", "/api/v1/storage/objects/{token}"): "Download a local object",
 }
 
 

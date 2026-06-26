@@ -137,7 +137,9 @@ create index if not exists idx_library_upload_sessions_file
 
 ## 4. Object Storage
 
-Use a single configured MinIO bucket and backend-generated object keys.
+Use the configured object storage backend (`minio` or `local`) and backend-generated object keys.
+MinIO/S3 returns presigned object-store URLs. Local storage returns short-lived backend-controlled
+`/api/v1/storage/objects/{token}` URLs and never exposes filesystem paths.
 
 Object key format:
 

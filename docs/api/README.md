@@ -72,7 +72,7 @@ token claims; they are derived server-side from the current role mapping.
 - [Tenants](./tenants.md)
 - [RBAC](./rbac.md)
 - [Knowledge Bases](./knowledge-bases.md) (platform-owned; minimal shape, single `status`)
-- [Documents](./documents.md) (nested under a knowledge base; MinIO direct upload)
+- [Documents](./documents.md) (nested under a knowledge base; shared object storage upload)
 - [Experts](./experts.md) (platform-owned expert categories, experts and expert groups)
 - [Plans](./plans.md) (plan configuration, plan market and current subscription snapshot)
 - [Build](./builds.md) (Phase 2 placeholder)
@@ -80,7 +80,7 @@ token claims; they are derived server-side from the current role mapping.
 - [Skills](./skills.md)
 - [Models and Ops](./models-ops.md)
 
-Knowledge base storage, MinIO direct upload, and build decoupling are described
+Knowledge base storage, object storage upload, and build decoupling are described
 in [Knowledge Base Storage and Build Design](../KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md).
 
 ## Response Format

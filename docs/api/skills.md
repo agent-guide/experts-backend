@@ -7,7 +7,9 @@ Base path:
 ```
 
 Skills are platform-managed assets. Metadata is stored in the `skills` database
-table. Files are stored in the configured local or MinIO skill storage backend.
+table. Files are stored in the same local or MinIO object storage backend used
+by documents and library files. Local storage is the default development
+backend; production should explicitly set `EXPERT_NEXT_OBJECT_STORAGE_BACKEND=minio`.
 
 Skills are **platform-global** (not tenant-scoped) and are referenced by their stable
 `slug`. Write operations (`POST`, `PUT`, `DELETE`) require the `skill:write` platform
@@ -92,8 +94,14 @@ Response `201`:
 ```
 
 `storageUri` is an internal storage pointer whose shape depends on the backend
-(`/skills/<slug>` for local, `minio://<bucket>/skills/<slug>` for MinIO). Use the
-`GET /{slug}/file` endpoint to read files rather than parsing this value.
+(`/skills/<slug>` for local, `minio://<bucket>/skills/<slug>` for MinIO). The `skills`
+object-key prefix is fixed by the API. Use the `GET /{slug}/file` endpoint to read files rather
+than parsing this value.
+
+The old `EXPERT_NEXT_SKILL_STORAGE_*` settings are no longer used. If a previous
+deployment stored skill objects in a dedicated bucket such as `expert-skills`,
+copy the existing `skills/...` objects into the configured shared object storage
+bucket before enabling `EXPERT_NEXT_OBJECT_STORAGE_BACKEND=minio`.
 
 Upload is atomic: the metadata row and the stored files are committed together. If the
 slug already exists the request fails with `409` and nothing is written; if storage or

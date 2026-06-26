@@ -4,6 +4,7 @@ import re
 import zipfile
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
+from urllib.parse import quote
 from uuid import uuid4
 from xml.etree import ElementTree
 
@@ -290,19 +291,27 @@ def _preview_response_headers(record: LibraryFileRecord) -> dict[str, str] | Non
     if record.mimeType == _PDF_MIME or record.extension == "pdf":
         return {
             "response-content-type": _PDF_MIME,
-            "response-content-disposition": f'inline; filename="{record.safeName}"',
+            "response-content-disposition": _inline_content_disposition(record.safeName),
         }
     if record.mimeType and record.fileType == "image":
         return {
             "response-content-type": record.mimeType,
-            "response-content-disposition": f'inline; filename="{record.safeName}"',
+            "response-content-disposition": _inline_content_disposition(record.safeName),
         }
     if record.mimeType:
         return {
             "response-content-type": record.mimeType,
-            "response-content-disposition": f'inline; filename="{record.safeName}"',
+            "response-content-disposition": _inline_content_disposition(record.safeName),
         }
     return None
+
+
+def _inline_content_disposition(file_name: str) -> str:
+    fallback = re.sub(r'["\\]', "_", file_name)
+    fallback = "".join(char if 0x20 <= ord(char) < 0x7F else "_" for char in fallback)
+    fallback = fallback or "download"
+    encoded = quote(file_name, safe="")
+    return f"inline; filename=\"{fallback}\"; filename*=UTF-8''{encoded}"
 
 
 def _size_label(size: int) -> str:
