@@ -71,7 +71,7 @@ tags:
 Only `name` and `description` are required. `version`, `allowed-tools`, and `tags` are
 optional. List values accept either block form (`- item`) or inline form (`[a, b]`).
 `allowed-tools` is **opaque passthrough metadata** here — its format is enforced by the
-ngent agent runtime that consumes the skill, not by this API.
+agent runtime that consumes the skill, not by this API.
 
 Response `201`:
 

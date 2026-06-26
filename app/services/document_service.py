@@ -131,7 +131,18 @@ class DocumentService:
             try:
                 upload = self.create_upload_url(principal, knowledge_base_id, file_request)
                 results.append(
-                    UploadUrlResult(fileName=file_request.fileName, status="created", upload=upload)
+                    UploadUrlResult(
+                        fileName=file_request.fileName,
+                        status="created",
+                        uploadSessionId=upload.uploadSessionId,
+                        documentId=upload.documentId,
+                        method=upload.method,
+                        uploadUrl=upload.uploadUrl,
+                        headers=upload.headers,
+                        objectKey=upload.objectKey,
+                        expiresAt=upload.expiresAt,
+                        upload=upload,
+                    )
                 )
             except ApiError as exc:
                 results.append(

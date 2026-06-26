@@ -6877,13 +6877,6 @@
               }
             ],
             "title": "Title"
-          },
-          "knowledgeBaseIds": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Knowledgebaseids"
           }
         },
         "type": "object",

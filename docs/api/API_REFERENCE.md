@@ -2025,7 +2025,6 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
 | title | no | string \| null | - |
-| knowledgeBaseIds | no | array[string] | - |
 
 ### `CreateTenantRequest`
 

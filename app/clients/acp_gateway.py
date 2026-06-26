@@ -12,8 +12,7 @@ from app.core.errors import ApiError
 class AcpGatewayClient:
     """Client for the agent-gateway ACP data plane.
 
-    Unlike ngent (thread/turn resources with server-assigned ids), the ACP data
-    plane exposes routed endpoints under a configured path prefix:
+    The ACP data plane exposes routed endpoints under a configured path prefix:
       - POST {prefix}/turn       -> SSE stream (events: session, delta, permission, done, error)
       - POST {prefix}/permission -> answers one in-flight interactive permission request
       - GET  {prefix}/sessions   -> list materialized ACP sessions (history replay)

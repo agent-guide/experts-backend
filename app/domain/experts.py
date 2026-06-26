@@ -49,7 +49,7 @@ class Expert(BaseModel):
     tags: list[str] = Field(default_factory=list)
     status: ExpertStatus
     skillIds: list[str] = Field(default_factory=list)
-    knowledgeBaseIds: list[str] = Field(default_factory=list)
+    knowledgeBaseIds: list[str] = Field(default_factory=list, max_length=1)
     guideQuestions: list[str] = Field(default_factory=list, max_length=3)
     summonButtonText: str | None = None
     createdAt: str
@@ -64,7 +64,7 @@ class CreateExpertRequest(BaseModel):
     tags: list[str] = Field(default_factory=list)
     status: ExpertStatus = "draft"
     skillIds: list[str] = Field(default_factory=list)
-    knowledgeBaseIds: list[str] = Field(default_factory=list)
+    knowledgeBaseIds: list[str] = Field(default_factory=list, max_length=1)
     guideQuestions: list[str] = Field(default_factory=list, max_length=3)
     summonButtonText: str | None = None
 
@@ -76,7 +76,7 @@ class UpdateExpertRequest(BaseModel):
     abilityIntro: str | None = None
     tags: list[str] | None = None
     skillIds: list[str] | None = None
-    knowledgeBaseIds: list[str] | None = None
+    knowledgeBaseIds: list[str] | None = Field(default=None, max_length=1)
     guideQuestions: list[str] | None = Field(default=None, max_length=3)
     summonButtonText: str | None = None
 

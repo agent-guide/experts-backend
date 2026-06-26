@@ -20,7 +20,7 @@ async def metrics(_: Principal = Depends(require_platform_permission("system:ops
     return {
         "counters": {},
         "gauges": {},
-        "derived": {"external": {"pageIndexConfigured": False, "ngentConfigured": False}},
+        "derived": {"external": {"pageIndexConfigured": False, "acpConfigured": False}},
     }
 
 

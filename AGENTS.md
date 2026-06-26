@@ -118,11 +118,12 @@ PageIndex / ngent / Codex are upstream/optional integrations, not the source of 
     `service|cwd|thread_id|session_id|model`, so cwd/model must stay stable per thread).
   - A turn has no server id, so `ChatService` generates one locally and emits `turn_started`
     before any text. ACP events are **translated to the same public contract** ngent exposes
-    (`delta`→`message_delta`, `done`→`turn_completed`, `permission`→`permission_required`,
-    `error`→`error`), so the frontend is unchanged. `rename`/`delete` are local-only; `cancel`
-    best-effort marks the local turn cancelled; turn-event replay reads the stored turn.
-- **Knowledge-base selection for ACP is a TODO**: it is JSON-encoded into `config_overrides`
-  under `knowledge_base_ids` (`_acp_config_overrides`) pending confirmation of the agent contract.
+    (`reasoning`/`tool_call`→`reasoning_delta`, `delta`→`message_delta`, `done`→`turn_completed`,
+    `permission`→`permission_required`, `error`→`error`), so the frontend is unchanged.
+    `rename`/`delete` are local-only; `cancel` best-effort marks the local turn cancelled;
+    turn-event replay reads the stored turn.
+- Chat does not accept or forward knowledge-base scope to ACP. Knowledge-base management stays
+  in the KB/document/expert APIs; ACP retrieval wiring belongs outside the public chat payload.
 - **Permission resolution is in-memory on the gateway**: the answer (`POST {prefix}/permission`,
   request id in the body) must reach the same gateway replica holding the pending request — keep
   the ACP gateway single-replica or session-affine.

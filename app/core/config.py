@@ -32,26 +32,12 @@ class Settings(BaseSettings):
     pageindex_base_url: str | None = None
     pageindex_api_key: str | None = None
 
-    ngent_base_url: str | None = None
-    ngent_auth_token: str | None = None
-    ngent_client_id: str = "amazon-experts-backend"
-    ngent_default_agent: str = "codex"
-    ngent_default_cwd: str = Field(default_factory=lambda: str(Path.cwd()))
-    # Base directory for per-tenant ngent working dirs. When set, each session's cwd is
-    # <ngent_cwd_base>/<tenant_id> (created on demand); when empty, ngent_default_cwd is shared.
-    # Must resolve under ngent's allowedRoots; backend and ngent must share the filesystem.
-    ngent_cwd_base: str | None = None
-
-    # Chat compute backend: "ngent" (default) or "acp" (agent-gateway ACP data plane).
-    chat_backend: str = "ngent"
-
-    # agent-gateway ACP data plane (alternative chat backend to ngent). The route
-    # prefix is the gateway's external path prefix for the ACP route; the client
-    # posts to <prefix>/turn and <prefix>/permission and reads history from
-    # <prefix>/sessions and <prefix>/sessions/{id}/transcript (all route-scoped and
-    # authenticated by acp_auth_token, so no admin plane is needed). cwd handling mirrors ngent:
-    # when acp_cwd_base is set each session's cwd is <base>/<tenant_id>, and it
-    # must resolve under the ACP service's allowedRoots (shared filesystem).
+    # agent-gateway ACP data plane. The route prefix is the gateway's external path prefix for
+    # the ACP route; the client posts to <prefix>/turn and <prefix>/permission and reads history
+    # from <prefix>/sessions and <prefix>/sessions/{id}/transcript (all route-scoped and
+    # authenticated by acp_auth_token, so no admin plane is needed). When acp_cwd_base is set
+    # each session's cwd is <base>/<tenant_id>, and it must resolve under the ACP service's
+    # allowedRoots (shared filesystem).
     acp_gateway_base_url: str | None = None
     acp_route_prefix: str = ""
     acp_auth_token: str | None = None

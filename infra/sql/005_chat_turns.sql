@@ -1,17 +1,15 @@
--- Chat turns: a durable local copy of one ngent turn (the question, the assembled answer, and the
--- terminal status). Mirrors the ngent turn-history shape (requestText/responseText/status/
--- stopReason/...). The ngent store is single-node and unbacked, so the conversational record is
--- persisted here and read back locally. The id equals the ngent turnId (captured from the
--- turn_started stream event).
+-- Chat turns: a durable local copy of one ACP turn (the question, the assembled reasoning,
+-- answer, and the terminal status). The ACP data plane has no server turn id, so the id is
+-- generated locally and emitted in the public turn_started stream event.
 create table if not exists chat_turns (
   id text primary key,
   session_id text not null references chat_sessions(id) on delete cascade,
   tenant_id text not null references tenants(id) on delete cascade,
   user_id text not null references users(id) on delete cascade,
   request_text text not null,
+  reasoning_text text,
   response_text text,
   model text,
-  knowledge_base_ids jsonb not null default '[]'::jsonb,
   query_rewrite boolean not null default false,
   multi_hop_config jsonb,
   status text not null check (status in ('running', 'completed', 'failed', 'cancelled')),
@@ -21,6 +19,8 @@ create table if not exists chat_turns (
   created_at timestamptz not null default now(),
   completed_at timestamptz
 );
+
+alter table chat_turns add column if not exists reasoning_text text;
 
 create index if not exists idx_chat_turns_session_created
   on chat_turns (session_id, created_at asc);

@@ -78,7 +78,7 @@ Current response:
   "derived": {
     "external": {
       "pageIndexConfigured": false,
-      "ngentConfigured": false
+      "acpConfigured": false
     }
   }
 }

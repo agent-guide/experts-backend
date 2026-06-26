@@ -4,11 +4,9 @@ from fastapi.responses import StreamingResponse
 from app.api.deps import (
     get_acp_gateway_client,
     get_database,
-    get_ngent_client,
     require_tenant_permission,
 )
 from app.clients.acp_gateway import AcpGatewayClient
-from app.clients.ngent import NgentClient
 from app.core.config import Settings, get_settings
 from app.db import DatabaseConnection
 from app.db import open_database_connection
@@ -29,13 +27,10 @@ router = APIRouter()
 def build_chat_service(
     connection: DatabaseConnection,
     settings: Settings,
-    ngent: NgentClient,
     acp: AcpGatewayClient,
 ) -> ChatService:
     return ChatService(
         connection,
-        backend=settings.chat_backend,
-        ngent=ngent,
         acp=acp,
     )
 
@@ -43,10 +38,9 @@ def build_chat_service(
 def get_chat_service(
     connection: DatabaseConnection = Depends(get_database),
     settings: Settings = Depends(get_settings),
-    ngent: NgentClient = Depends(get_ngent_client),
     acp: AcpGatewayClient = Depends(get_acp_gateway_client),
 ) -> ChatService:
-    return build_chat_service(connection, settings, ngent, acp)
+    return build_chat_service(connection, settings, acp)
 
 
 # --- Sessions -----------------------------------------------------------------
@@ -95,7 +89,7 @@ async def list_messages(
     principal: Principal = Depends(require_tenant_permission("chat:ask")),
     service: ChatService = Depends(get_chat_service),
 ) -> dict:
-    return {"items": service.list_messages(principal, session_id)}
+    return {"items": await service.list_messages(principal, session_id)}
 
 
 @router.get("/sessions/{session_id}/transcript")
@@ -148,15 +142,13 @@ async def create_turn(
     body: ChatTurnRequest,
     principal: Principal = Depends(require_tenant_permission("chat:ask")),
     settings: Settings = Depends(get_settings),
-    ngent: NgentClient = Depends(get_ngent_client),
     acp: AcpGatewayClient = Depends(get_acp_gateway_client),
 ) -> StreamingResponse:
     # The compute engine creates and streams a turn in one shot; the service forwards the SSE
-    # stream to the caller while persisting the assembled turn record locally (translating ACP
-    # events to the same public contract when the ACP backend is active).
+    # stream to the caller while persisting the assembled turn record locally.
     async def events():
         with open_database_connection(settings) as connection:
-            service = build_chat_service(connection, settings, ngent, acp)
+            service = build_chat_service(connection, settings, acp)
             async for line in service.stream_turn(principal, session_id, body):
                 yield line
 

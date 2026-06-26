@@ -162,6 +162,18 @@ def create_object_store(settings: Settings) -> ObjectStore:
     )
     store = _STORE_CACHE.get(key)
     if store is None:
-        store = MinioObjectStore(settings)
+        try:
+            store = MinioObjectStore(settings)
+        except ApiError:
+            raise
+        except Exception as exc:
+            # Surface storage bootstrap failures (bad endpoint/credentials/unreachable host)
+            # as a typed API error instead of an unhandled 500 traceback.
+            raise ApiError(
+                503,
+                "OBJECT_STORE_UNAVAILABLE",
+                "Object storage is unavailable",
+                {"reason": str(exc)},
+            ) from exc
         _STORE_CACHE[key] = store
     return store
