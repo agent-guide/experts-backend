@@ -28,3 +28,6 @@ data/
 ngent-workspace/
 
 docs_my/
+
+# Generated API artifacts (regenerate via scripts/export_api_docs.py)
+docs/api/openapi.json
