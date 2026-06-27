@@ -4409,11 +4409,18 @@ def test_upload_url_returns_503_when_object_store_unavailable(tmp_path: Path) ->
         assert "Object storage is unavailable" in body["message"]
 
 
-def test_storage_gc_endpoint_reclaims_all_three_classes(tmp_path: Path) -> None:
+def test_storage_gc_endpoint_reclaims_document_and_library_objects(tmp_path: Path) -> None:
     settings = _kb_test_settings(tmp_path)
     store = FakeObjectStore()
     with TestClient(_kb_app(settings, store)) as client:
+        _seed_tenant(settings)
         admin = _login(client, settings, "admin_user", "admin@example.com", "admin")
+        tenant_user = _library_headers(
+            client,
+            settings,
+            user_id="tenant_user",
+            email="tenant@example.com",
+        )
 
         kb_id = client.post(
             "/api/v1/knowledge-bases", headers=admin, json={"name": "KB"}
@@ -4465,6 +4472,31 @@ def test_storage_gc_endpoint_reclaims_all_three_classes(tmp_path: Path) -> None:
         )
         client.delete(f"/api/v1/knowledge-bases/{kb2_id}", headers=admin)
 
+        # (d) An expired, never-completed library upload session -> expiredLibrarySessions.
+        library_orphan = client.post(
+            "/api/v1/library/files/upload-url",
+            headers=tenant_user,
+            json={"fileName": "orphan.md", "mimeType": "text/markdown", "fileSizeBytes": 7},
+        ).json()
+        store.put(library_orphan["objectKey"], 7)
+        with open_database_connection(settings) as connection:
+            connection.execute(
+                "update library_upload_sessions set expires_at = ? where id = ?",
+                ("2000-01-01T00:00:00+00:00", library_orphan["uploadSessionId"]),
+            )
+            connection.commit()
+
+        # (e) A soft-deleted library file -> purgedLibraryFiles.
+        library_file, library_upload = _upload_library_file(
+            client,
+            tenant_user,
+            file_name="deleted.md",
+            content=b"delete me",
+            mime_type="text/markdown",
+            store=store,
+        )
+        client.delete(f"/api/v1/library/files/{library_file['id']}", headers=tenant_user)
+
         resp = client.post("/api/v1/ops/storage/gc", headers=admin)
         assert resp.status_code == 200, resp.text
         body = resp.json()
@@ -4472,8 +4504,16 @@ def test_storage_gc_endpoint_reclaims_all_three_classes(tmp_path: Path) -> None:
             "expiredSessions": 1,
             "purgedDocuments": 1,
             "purgedKnowledgeBases": 1,
+            "expiredLibrarySessions": 1,
+            "purgedLibraryFiles": 1,
         }
-        for key in (doc_payload["objectKey"], orphan["objectKey"], kb2_doc["objectKey"]):
+        for key in (
+            doc_payload["objectKey"],
+            orphan["objectKey"],
+            kb2_doc["objectKey"],
+            library_orphan["objectKey"],
+            library_upload["objectKey"],
+        ):
             assert key in store.removed
 
         # Idempotent: a second pass reclaims nothing.
@@ -4481,6 +4521,8 @@ def test_storage_gc_endpoint_reclaims_all_three_classes(tmp_path: Path) -> None:
             "expiredSessions": 0,
             "purgedDocuments": 0,
             "purgedKnowledgeBases": 0,
+            "expiredLibrarySessions": 0,
+            "purgedLibraryFiles": 0,
         }
 
 
@@ -4488,7 +4530,14 @@ def test_storage_gc_keeps_rows_when_object_remove_fails(tmp_path: Path) -> None:
     settings = _kb_test_settings(tmp_path)
     store = FakeObjectStore()
     with TestClient(_kb_app(settings, store)) as client:
+        _seed_tenant(settings)
         admin = _login(client, settings, "admin_user", "admin@example.com", "admin")
+        tenant_user = _library_headers(
+            client,
+            settings,
+            user_id="tenant_user",
+            email="tenant@example.com",
+        )
         kb_id = client.post(
             "/api/v1/knowledge-bases", headers=admin, json={"name": "KB"}
         ).json()["id"]
@@ -4540,13 +4589,50 @@ def test_storage_gc_keeps_rows_when_object_remove_fails(tmp_path: Path) -> None:
         )
         assert client.delete(f"/api/v1/knowledge-bases/{kb2_id}", headers=admin).status_code == 204
 
+        library_orphan = client.post(
+            "/api/v1/library/files/upload-url",
+            headers=tenant_user,
+            json={"fileName": "orphan.md", "mimeType": "text/markdown", "fileSizeBytes": 7},
+        ).json()
+        store.put(library_orphan["objectKey"], 7)
+        with open_database_connection(settings) as connection:
+            connection.execute(
+                "update library_upload_sessions set expires_at = ? where id = ?",
+                ("2000-01-01T00:00:00+00:00", library_orphan["uploadSessionId"]),
+            )
+            connection.commit()
+
+        library_file, library_upload = _upload_library_file(
+            client,
+            tenant_user,
+            file_name="deleted.md",
+            content=b"delete me",
+            mime_type="text/markdown",
+            store=store,
+        )
+        assert (
+            client.delete(
+                f"/api/v1/library/files/{library_file['id']}",
+                headers=tenant_user,
+            ).status_code
+            == 200
+        )
+
         store.fail_remove.update(
-            {deleted_doc["objectKey"], orphan["objectKey"], kb_doc["objectKey"]}
+            {
+                deleted_doc["objectKey"],
+                orphan["objectKey"],
+                kb_doc["objectKey"],
+                library_orphan["objectKey"],
+                library_upload["objectKey"],
+            }
         )
         assert client.post("/api/v1/ops/storage/gc", headers=admin).json() == {
             "expiredSessions": 0,
             "purgedDocuments": 0,
             "purgedKnowledgeBases": 0,
+            "expiredLibrarySessions": 0,
+            "purgedLibraryFiles": 0,
         }
 
         with open_database_connection(settings) as connection:
@@ -4559,15 +4645,27 @@ def test_storage_gc_keeps_rows_when_object_remove_fails(tmp_path: Path) -> None:
             kb_row = connection.execute(
                 "select id from knowledge_bases where id = ?", (kb2_id,)
             ).fetchone()
+            library_session_row = connection.execute(
+                "select status from library_upload_sessions where id = ?",
+                (library_orphan["uploadSessionId"],),
+            ).fetchone()
+            library_file_row = connection.execute(
+                "select id from library_files where id = ?",
+                (library_file["id"],),
+            ).fetchone()
         assert doc_row is not None
         assert session_row["status"] == "initiated"
         assert kb_row is not None
+        assert library_session_row["status"] == "initiated"
+        assert library_file_row is not None
 
         store.fail_remove.clear()
         assert client.post("/api/v1/ops/storage/gc", headers=admin).json() == {
             "expiredSessions": 1,
             "purgedDocuments": 1,
             "purgedKnowledgeBases": 1,
+            "expiredLibrarySessions": 1,
+            "purgedLibraryFiles": 1,
         }
 
 
@@ -4777,6 +4875,7 @@ def test_library_presigned_upload_flow(tmp_path: Path) -> None:
                 "fileName": "notes.md",
                 "mimeType": "text/markdown",
                 "fileSizeBytes": 12,
+                "contentHash": "client-declared-sha256",
             },
         )
         assert created.status_code == 200, created.text
@@ -4789,7 +4888,10 @@ def test_library_presigned_upload_flow(tmp_path: Path) -> None:
         completed = client.post(
             "/api/v1/library/files/complete-upload",
             headers=headers,
-            json={"uploadSessionId": upload["uploadSessionId"]},
+            json={
+                "uploadSessionId": upload["uploadSessionId"],
+                "contentHash": "different-client-declared-sha256",
+            },
         )
         assert completed.status_code == 201, completed.text
         item = completed.json()
@@ -4801,6 +4903,19 @@ def test_library_presigned_upload_flow(tmp_path: Path) -> None:
         preview = client.get(f"/api/v1/library/files/{item['id']}/preview", headers=headers)
         assert preview.status_code == 200
         assert preview.json()["content"] == "# Hello\nbody"
+        with open_database_connection(settings) as connection:
+            file_row = connection.execute(
+                "select content_hash from library_files where id = ?",
+                (item["id"],),
+            ).fetchone()
+            session_row = connection.execute(
+                "select content_hash from library_upload_sessions where id = ?",
+                (upload["uploadSessionId"],),
+            ).fetchone()
+        assert file_row is not None
+        assert file_row["content_hash"] is None
+        assert session_row is not None
+        assert session_row["content_hash"] is None
 
 
 def test_library_local_object_store_presigned_upload(tmp_path: Path) -> None:

@@ -102,9 +102,9 @@ system:ops
 ```
 
 Each pass is idempotent and best-effort by object key, so repeated runs are safe and a partial
-failure is retried on the next call. Reclaims, in order: expired upload-session objects,
-soft-deleted document objects, and soft-deleted knowledge-base objects (then hard-deletes the
-rows).
+failure is retried on the next call. Reclaims, in order: expired document upload-session objects,
+soft-deleted document objects, soft-deleted knowledge-base objects, expired library upload-session
+objects, and soft-deleted library file objects.
 
 Current response (counts reclaimed by each pass):
 
@@ -112,6 +112,8 @@ Current response (counts reclaimed by each pass):
 {
   "expiredSessions": 0,
   "purgedDocuments": 0,
-  "purgedKnowledgeBases": 0
+  "purgedKnowledgeBases": 0,
+  "expiredLibrarySessions": 0,
+  "purgedLibraryFiles": 0
 }
 ```

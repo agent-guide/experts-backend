@@ -1130,10 +1130,10 @@ No input parameters.
 - Summary: Run Storage Gc
 - Description: Run the object-storage garbage collection passes and report what each reclaimed.
 
-The reclamation methods on DocumentService are otherwise only reachable from code; this is the
-operational entry point (call it from a cron via the `system:ops` permission). Each pass is
-idempotent and best-effort by object key, so repeated runs are safe and a partial failure is
-retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section 11.
+The reclamation methods on DocumentService and LibraryService are otherwise only reachable from
+code; this is the operational entry point (call it from a cron via the `system:ops`
+permission). Each pass is idempotent and best-effort by object key, so repeated runs are safe
+and a partial failure is retried on the next call.
 
 #### Input Parameters
 

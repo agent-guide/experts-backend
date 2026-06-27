@@ -27,7 +27,7 @@ from app.domain.library import (
 )
 from app.services._sql import is_unique_violation
 from app.services.library_repository import LibraryRepository
-from app.services.object_store import ObjectStore
+from app.services.object_store import ObjectStore, best_effort_remove, remove_if_present
 
 
 _IMAGE_MIME_PREFIX = "image/"
@@ -41,26 +41,6 @@ _INLINE_TEXT_MIME = {
 _INLINE_TEXT_EXTENSIONS = {"txt", "md", "csv", "json"}
 _PDF_MIME = "application/pdf"
 _DOCX_EXTENSIONS = {"docx"}
-_ALLOWED_EXTENSIONS = {
-    "jpg",
-    "jpeg",
-    "png",
-    "gif",
-    "webp",
-    "bmp",
-    "svg",
-    "pdf",
-    "doc",
-    "docx",
-    "xls",
-    "xlsx",
-    "ppt",
-    "pptx",
-    "txt",
-    "md",
-    "csv",
-    "json",
-}
 _FILE_TYPE_BY_EXT = {
     "jpg": "image",
     "jpeg": "image",
@@ -140,7 +120,7 @@ class LibraryService:
             file_size_bytes=request.fileSizeBytes,
             storage_bucket=self.store.bucket,
             storage_object_key=object_key,
-            content_hash=request.contentHash,
+            content_hash=None,
             expires_at=expires,
             now=now,
         )
@@ -184,7 +164,7 @@ class LibraryService:
         if stat.size != session.fileSizeBytes:
             self.repo.set_upload_session_status(session.id, "failed", _now_iso())
             self.connection.commit()
-            _best_effort_remove(self.store, session.storageObjectKey)
+            best_effort_remove(self.store, session.storageObjectKey)
             raise ApiError(
                 400,
                 "LIBRARY_UPLOAD_SIZE_MISMATCH",
@@ -206,7 +186,10 @@ class LibraryService:
                 size_bytes=session.fileSizeBytes,
                 storage_bucket=session.storageBucket,
                 storage_object_key=session.storageObjectKey,
-                content_hash=request.contentHash or session.contentHash,
+                # A single presigned PUT only gives us object size/ETag, not a verifiable sha256.
+                # Keep client-declared contentHash off the durable file row until a trusted
+                # server-side hash pass exists.
+                content_hash=None,
                 preview_supported=_preview_supported(
                     session.mimeType, session.extension, session.fileType
                 ),
@@ -278,16 +261,25 @@ class LibraryService:
         self.connection.commit()
         return LibraryDeletedResponse(id=file_id)
 
+    def expire_stale_sessions(self) -> int:
+        """Expire timed-out upload sessions and remove their orphan objects."""
+        now = _now_iso()
+        sessions = self.repo.list_expired_upload_sessions(now)
+        reclaimed = 0
+        for session in sessions:
+            if remove_if_present(self.store, session.storageObjectKey):
+                self.repo.set_upload_session_status(session.id, "expired", now)
+                reclaimed += 1
+        self.connection.commit()
+        return reclaimed
+
     def purge_deleted_files(self, limit: int = 100) -> int:
         deleted = self.repo.list_deleted(limit)
         purged = 0
         for file_id, storage_key in deleted:
-            try:
-                self.store.remove(storage_key)
-            except Exception:  # noqa: BLE001 - best effort, retry on next GC pass
-                continue
-            self.repo.hard_delete_file(file_id)
-            purged += 1
+            if remove_if_present(self.store, storage_key):
+                self.repo.hard_delete_file(file_id)
+                purged += 1
         self.connection.commit()
         return purged
 
@@ -441,10 +433,3 @@ def _expired(value: str) -> bool:
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
     return expires_at <= datetime.now(timezone.utc)
-
-
-def _best_effort_remove(store: ObjectStore, object_key: str) -> None:
-    try:
-        store.remove(object_key)
-    except Exception:
-        return
