@@ -28,7 +28,7 @@ from app.services._sql import is_unique_violation
 from app.services.document_repository import DocumentRepository
 from app.services.kb_authz import authorize_kb_access
 from app.services.knowledge_base_repository import KnowledgeBaseRepository
-from app.services.object_store import ObjectStore
+from app.services.object_store import ObjectStore, best_effort_remove, remove_if_present
 
 
 # Extension -> documents.file_type whitelist. The upload-url request carries an arbitrary
@@ -179,7 +179,7 @@ class DocumentService:
         if stat.size != session.file_size_bytes:
             self.docs.set_session_status(session.id, "failed", _iso(_now()))
             self.connection.commit()
-            _best_effort_remove(self.store, session.object_key)
+            best_effort_remove(self.store, session.object_key)
             raise ApiError(
                 400,
                 "UPLOAD_SIZE_MISMATCH",
@@ -331,7 +331,7 @@ class DocumentService:
         sessions = self.docs.list_expired_sessions(now)
         reclaimed = 0
         for session in sessions:
-            if _remove_if_present(self.store, session.object_key):
+            if remove_if_present(self.store, session.object_key):
                 self.docs.set_session_status(session.id, "expired", now)
                 reclaimed += 1
         self.connection.commit()
@@ -346,7 +346,7 @@ class DocumentService:
         deleted = self.docs.list_deleted(limit)
         purged = 0
         for document_id, storage_key in deleted:
-            if _remove_if_present(self.store, storage_key):
+            if remove_if_present(self.store, storage_key):
                 self.docs.hard_delete_document(document_id)
                 purged += 1
         self.connection.commit()
@@ -364,7 +364,7 @@ class DocumentService:
         purged = 0
         for kb_id in kb_ids:
             object_keys = set(self.docs.list_object_keys_for_kb(kb_id))
-            if not all(_remove_if_present(self.store, object_key) for object_key in object_keys):
+            if not all(remove_if_present(self.store, object_key) for object_key in object_keys):
                 continue
             self.docs.delete_rows_for_kb(kb_id)
             self.kbs.delete(kb_id)
@@ -411,21 +411,6 @@ def _batch_error(exc: ApiError) -> BatchItemError:
     return BatchItemError(code=exc.code, message=exc.message, details=exc.details)
 
 
-def _best_effort_remove(store: ObjectStore, object_key: str) -> None:
-    try:
-        store.remove(object_key)
-    except Exception:  # noqa: BLE001 - cleanup is best-effort; GC will retry by key
-        pass
-
-
-def _remove_if_present(store: ObjectStore, object_key: str) -> bool:
-    try:
-        store.remove(object_key)
-        return True
-    except ApiError as exc:
-        return exc.status_code == 404
-    except Exception:  # noqa: BLE001 - keep DB rows so GC can retry later
-        return False
 
 
 def _now() -> datetime:

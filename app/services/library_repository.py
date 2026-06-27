@@ -161,6 +161,17 @@ class LibraryRepository:
             (status, completed_at, now, session_id),
         )
 
+    def list_expired_upload_sessions(self, before: str) -> list[LibraryUploadSessionRecord]:
+        rows = fetch_all(
+            self.connection,
+            f"""
+            select {_SESSION_COLUMNS} from library_upload_sessions
+            where status = 'initiated' and expires_at < ?
+            """,
+            (before,),
+        )
+        return [s for s in (_map_session(row) for row in rows) if s is not None]
+
     def get_file(
         self, user_id: str, tenant_id: str, file_id: str
     ) -> LibraryFileRecord | None:

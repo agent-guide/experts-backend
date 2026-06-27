@@ -465,3 +465,27 @@ def _safe_object_key(object_key: str) -> str:
 def _safe_object_prefix(object_prefix: str) -> str:
     cleaned = _safe_object_key(object_prefix)
     return cleaned.rstrip("/") + "/"
+
+
+def best_effort_remove(store: ObjectStore, object_key: str) -> None:
+    """Remove an object, swallowing any failure (GC retries by key on the next pass)."""
+    try:
+        store.remove(object_key)
+    except Exception:  # noqa: BLE001 - cleanup is best-effort; GC will retry by key
+        pass
+
+
+def remove_if_present(store: ObjectStore, object_key: str) -> bool:
+    """Remove an object, reporting whether it is now gone.
+
+    Returns True when the object was removed or was already absent (a 404), so the caller can
+    safely drop the owning DB row. Returns False on any other failure (e.g. backend unavailable)
+    so the row is kept and reclaimed on the next GC pass.
+    """
+    try:
+        store.remove(object_key)
+        return True
+    except ApiError as exc:
+        return exc.status_code == 404
+    except Exception:  # noqa: BLE001 - keep DB rows so GC can retry later
+        return False
