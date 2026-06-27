@@ -1,16 +1,19 @@
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import get_database, get_object_store, get_settings, require_tenant_permission
 from app.core.config import Settings
 from app.db import DatabaseConnection
 from app.domain.auth import Principal
 from app.domain.library import (
+    LibraryCompleteUploadRequest,
     LibraryDeletedResponse,
     LibraryDownloadResponse,
     LibraryFile,
     LibraryFileListResponse,
     LibraryPreviewResponse,
     LibrarySort,
+    LibraryUploadUrlRequest,
+    LibraryUploadUrlResponse,
 )
 from app.services.library_service import LibraryService
 from app.services.object_store import ObjectStore
@@ -48,21 +51,26 @@ async def list_files(
     )
 
 
-@router.post("/files", response_model=LibraryFile, status_code=201)
-async def upload_file(
-    file: UploadFile = File(...),
+@router.post("/files/upload-url", response_model=LibraryUploadUrlResponse)
+async def create_upload_url(
+    body: LibraryUploadUrlRequest,
+    principal: Principal = Depends(require_tenant_permission("chat:ask")),
+    connection: DatabaseConnection = Depends(get_database),
+    object_store: ObjectStore = Depends(get_object_store),
+    settings: Settings = Depends(get_settings),
+) -> LibraryUploadUrlResponse:
+    return _service(connection, object_store, settings).create_upload_url(principal, body)
+
+
+@router.post("/files/complete-upload", response_model=LibraryFile, status_code=201)
+async def complete_upload(
+    body: LibraryCompleteUploadRequest,
     principal: Principal = Depends(require_tenant_permission("chat:ask")),
     connection: DatabaseConnection = Depends(get_database),
     object_store: ObjectStore = Depends(get_object_store),
     settings: Settings = Depends(get_settings),
 ) -> LibraryFile:
-    content = await file.read()
-    return _service(connection, object_store, settings).upload_file(
-        principal,
-        file_name=file.filename or "upload.bin",
-        mime_type=file.content_type,
-        content=content,
-    )
+    return _service(connection, object_store, settings).complete_upload(principal, body)
 
 
 @router.get("/files/{file_id}/preview", response_model=LibraryPreviewResponse)

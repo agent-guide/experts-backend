@@ -34,6 +34,28 @@ class LibraryFileListResponse(BaseModel):
     pageSize: int
 
 
+class LibraryUploadUrlRequest(BaseModel):
+    fileName: str
+    mimeType: str | None = None
+    fileSizeBytes: int
+    contentHash: str | None = None
+
+
+class LibraryUploadUrlResponse(BaseModel):
+    uploadSessionId: str
+    fileId: str
+    method: Literal["PUT"] = "PUT"
+    uploadUrl: str
+    headers: dict[str, str] = Field(default_factory=dict)
+    objectKey: str
+    expiresAt: str
+
+
+class LibraryCompleteUploadRequest(BaseModel):
+    uploadSessionId: str
+    contentHash: str | None = None
+
+
 class LibraryDownloadResponse(BaseModel):
     method: Literal["GET"] = "GET"
     downloadUrl: str
@@ -68,5 +90,26 @@ class LibraryFileRecord(BaseModel):
     contentHash: str | None = None
     previewSupported: bool
     metadata: dict[str, Any] = Field(default_factory=dict)
+    createdAt: str
+    updatedAt: str
+
+
+class LibraryUploadSessionRecord(BaseModel):
+    id: str
+    fileId: str
+    userId: str
+    tenantId: str
+    originalName: str
+    safeName: str
+    mimeType: str | None = None
+    fileType: LibraryFileType
+    extension: str | None = None
+    fileSizeBytes: int
+    storageBucket: str
+    storageObjectKey: str
+    contentHash: str | None = None
+    status: str
+    expiresAt: str
+    completedAt: str | None = None
     createdAt: str
     updatedAt: str

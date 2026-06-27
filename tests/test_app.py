@@ -67,6 +67,9 @@ def test_openapi_loads() -> None:
     assert "/api/v1/knowledge-bases" in paths
     assert "/api/v1/knowledge-bases/official" not in paths
     assert "/api/v1/chat/sessions/{session_id}/turns" in paths
+    assert "post" not in paths["/api/v1/library/files"]
+    assert "/api/v1/library/files/upload-url" in paths
+    assert "/api/v1/library/files/complete-upload" in paths
     assert "/api/v1/skills" in paths
 
 
@@ -4616,6 +4619,41 @@ def _library_headers(
     }
 
 
+def _upload_library_file(
+    client: TestClient,
+    headers: dict[str, str],
+    *,
+    file_name: str,
+    content: bytes,
+    mime_type: str,
+    store: FakeObjectStore | None = None,
+) -> tuple[dict, dict]:
+    created = client.post(
+        "/api/v1/library/files/upload-url",
+        headers=headers,
+        json={
+            "fileName": file_name,
+            "mimeType": mime_type,
+            "fileSizeBytes": len(content),
+        },
+    )
+    assert created.status_code == 200, created.text
+    upload = created.json()
+    if store is None:
+        put = client.put(upload["uploadUrl"], headers=upload["headers"], content=content)
+        assert put.status_code == 204, put.text
+    else:
+        store.put(upload["objectKey"], content, content_type=mime_type)
+
+    completed = client.post(
+        "/api/v1/library/files/complete-upload",
+        headers=headers,
+        json={"uploadSessionId": upload["uploadSessionId"]},
+    )
+    assert completed.status_code == 201, completed.text
+    return completed.json(), upload
+
+
 def test_library_upload_list_preview_download_and_delete(tmp_path: Path) -> None:
     settings = _library_test_settings(tmp_path)
     store = FakeObjectStore()
@@ -4631,20 +4669,21 @@ def test_library_upload_list_preview_download_and_delete(tmp_path: Path) -> None
             email="tenant@example.com",
         )
 
-        uploaded = client.post(
-            "/api/v1/library/files",
-            headers=headers,
-            files={"file": ("notes.md", b"# Hello\nbody", "text/markdown")},
+        item, upload = _upload_library_file(
+            client,
+            headers,
+            file_name="notes.md",
+            content=b"# Hello\nbody",
+            mime_type="text/markdown",
+            store=store,
         )
-        assert uploaded.status_code == 201, uploaded.text
-        item = uploaded.json()
         assert item["name"] == "notes.md"
         assert item["type"] == "file"
         assert item["sizeBytes"] == 12
         assert item["previewSupported"] is True
         file_id = item["id"]
 
-        object_key = next(iter(store.objects))
+        object_key = upload["objectKey"]
         assert object_key.startswith(f"library/tenant_default/users/tenant_user/{file_id}/")
 
         listed = client.get("/api/v1/library/files", headers=headers)
@@ -4696,13 +4735,14 @@ def test_library_local_object_store_download_url_is_backend_controlled(tmp_path:
             email="tenant@example.com",
         )
 
-        uploaded = client.post(
-            "/api/v1/library/files",
-            headers=headers,
-            files={"file": ("notes.md", b"# Local", "text/markdown")},
+        item, _ = _upload_library_file(
+            client,
+            headers,
+            file_name="notes.md",
+            content=b"# Local",
+            mime_type="text/markdown",
         )
-        assert uploaded.status_code == 201, uploaded.text
-        file_id = uploaded.json()["id"]
+        file_id = item["id"]
 
         download = client.get(f"/api/v1/library/files/{file_id}/download", headers=headers)
         assert download.status_code == 200
@@ -4713,6 +4753,143 @@ def test_library_local_object_store_download_url_is_backend_controlled(tmp_path:
         content = client.get(download_url)
         assert content.status_code == 200
         assert content.content == b"# Local"
+
+
+def test_library_presigned_upload_flow(tmp_path: Path) -> None:
+    settings = _library_test_settings(tmp_path)
+    store = FakeObjectStore()
+    app = create_app(settings)
+    app.dependency_overrides[get_object_store] = lambda: store
+
+    with TestClient(app) as client:
+        _seed_tenant(settings)
+        headers = _library_headers(
+            client,
+            settings,
+            user_id="tenant_user",
+            email="tenant@example.com",
+        )
+
+        created = client.post(
+            "/api/v1/library/files/upload-url",
+            headers=headers,
+            json={
+                "fileName": "notes.md",
+                "mimeType": "text/markdown",
+                "fileSizeBytes": 12,
+            },
+        )
+        assert created.status_code == 200, created.text
+        upload = created.json()
+        assert upload["uploadUrl"].startswith("https://minio.test/expert-docs/library/")
+        assert upload["headers"] == {"Content-Type": "text/markdown"}
+        assert upload["objectKey"].startswith("library/tenant_default/users/tenant_user/")
+
+        store.put(upload["objectKey"], b"# Hello\nbody", content_type="text/markdown")
+        completed = client.post(
+            "/api/v1/library/files/complete-upload",
+            headers=headers,
+            json={"uploadSessionId": upload["uploadSessionId"]},
+        )
+        assert completed.status_code == 201, completed.text
+        item = completed.json()
+        assert item["id"] == upload["fileId"]
+        assert item["name"] == "notes.md"
+        assert item["sizeBytes"] == 12
+        assert item["previewSupported"] is True
+
+        preview = client.get(f"/api/v1/library/files/{item['id']}/preview", headers=headers)
+        assert preview.status_code == 200
+        assert preview.json()["content"] == "# Hello\nbody"
+
+
+def test_library_local_object_store_presigned_upload(tmp_path: Path) -> None:
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'library.sqlite3'}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+        object_storage_backend="local",
+        object_storage_local_dir=str(tmp_path / "objects"),
+    )
+    app = create_app(settings)
+
+    with TestClient(app) as client:
+        _seed_tenant(settings)
+        headers = _library_headers(
+            client,
+            settings,
+            user_id="tenant_user",
+            email="tenant@example.com",
+        )
+
+        created = client.post(
+            "/api/v1/library/files/upload-url",
+            headers=headers,
+            json={
+                "fileName": "local.txt",
+                "mimeType": "text/plain",
+                "fileSizeBytes": 5,
+            },
+        )
+        assert created.status_code == 200, created.text
+        upload = created.json()
+        assert upload["uploadUrl"].startswith("/api/v1/storage/objects/")
+        assert str(tmp_path) not in upload["uploadUrl"]
+
+        put = client.put(upload["uploadUrl"], headers=upload["headers"], content=b"hello")
+        assert put.status_code == 204, put.text
+        completed = client.post(
+            "/api/v1/library/files/complete-upload",
+            headers=headers,
+            json={"uploadSessionId": upload["uploadSessionId"]},
+        )
+        assert completed.status_code == 201, completed.text
+        file_id = completed.json()["id"]
+
+        download = client.get(f"/api/v1/library/files/{file_id}/download", headers=headers)
+        assert download.status_code == 200
+        content = client.get(download.json()["downloadUrl"])
+        assert content.status_code == 200
+        assert content.content == b"hello"
+
+
+def test_library_complete_upload_size_mismatch_is_rejected(tmp_path: Path) -> None:
+    settings = _library_test_settings(tmp_path)
+    store = FakeObjectStore()
+    app = create_app(settings)
+    app.dependency_overrides[get_object_store] = lambda: store
+
+    with TestClient(app) as client:
+        _seed_tenant(settings)
+        headers = _library_headers(
+            client,
+            settings,
+            user_id="tenant_user",
+            email="tenant@example.com",
+        )
+
+        created = client.post(
+            "/api/v1/library/files/upload-url",
+            headers=headers,
+            json={
+                "fileName": "oversized.txt",
+                "mimeType": "text/plain",
+                "fileSizeBytes": 5,
+            },
+        )
+        assert created.status_code == 200, created.text
+        upload = created.json()
+        store.put(upload["objectKey"], b"too large")
+
+        completed = client.post(
+            "/api/v1/library/files/complete-upload",
+            headers=headers,
+            json={"uploadSessionId": upload["uploadSessionId"]},
+        )
+        assert completed.status_code == 400
+        assert completed.json()["code"] == "LIBRARY_UPLOAD_SIZE_MISMATCH"
+        assert upload["objectKey"] in store.removed
+        assert client.get("/api/v1/library/files", headers=headers).json()["items"] == []
 
 
 def test_library_files_are_isolated_by_current_user(tmp_path: Path) -> None:
@@ -4736,13 +4913,15 @@ def test_library_files_are_isolated_by_current_user(tmp_path: Path) -> None:
             email="bob@example.com",
         )
 
-        uploaded = client.post(
-            "/api/v1/library/files",
-            headers=alice,
-            files={"file": ("private.txt", b"secret", "text/plain")},
+        item, _ = _upload_library_file(
+            client,
+            alice,
+            file_name="private.txt",
+            content=b"secret",
+            mime_type="text/plain",
+            store=store,
         )
-        assert uploaded.status_code == 201, uploaded.text
-        file_id = uploaded.json()["id"]
+        file_id = item["id"]
 
         assert client.get("/api/v1/library/files", headers=alice).json()["total"] == 1
         assert client.get("/api/v1/library/files", headers=bob).json()["total"] == 0
@@ -4765,16 +4944,21 @@ def test_library_search_type_filter_and_image_preview_url(tmp_path: Path) -> Non
             email="tenant@example.com",
         )
 
-        image = client.post(
-            "/api/v1/library/files",
-            headers=headers,
-            files={"file": ("chart.png", b"\x89PNG", "image/png")},
+        image, _ = _upload_library_file(
+            client,
+            headers,
+            file_name="chart.png",
+            content=b"\x89PNG",
+            mime_type="image/png",
+            store=store,
         )
-        assert image.status_code == 201, image.text
-        client.post(
-            "/api/v1/library/files",
-            headers=headers,
-            files={"file": ("report.pdf", b"%PDF", "application/pdf")},
+        _upload_library_file(
+            client,
+            headers,
+            file_name="report.pdf",
+            content=b"%PDF",
+            mime_type="application/pdf",
+            store=store,
         )
 
         images = client.get("/api/v1/library/files", headers=headers, params={"type": "image"})
@@ -4786,7 +4970,7 @@ def test_library_search_type_filter_and_image_preview_url(tmp_path: Path) -> Non
         assert [item["name"] for item in search.json()["items"]] == ["report.pdf"]
 
         preview = client.get(
-            f"/api/v1/library/files/{image.json()['id']}/preview",
+            f"/api/v1/library/files/{image['id']}/preview",
             headers=headers,
         )
         assert preview.status_code == 200
@@ -4809,13 +4993,14 @@ def test_library_pdf_preview_returns_inline_pdf_url(tmp_path: Path) -> None:
             email="tenant@example.com",
         )
 
-        uploaded = client.post(
-            "/api/v1/library/files",
-            headers=headers,
-            files={"file": ("report.pdf", b"%PDF-1.7", "application/pdf")},
+        item, _ = _upload_library_file(
+            client,
+            headers,
+            file_name="report.pdf",
+            content=b"%PDF-1.7",
+            mime_type="application/pdf",
+            store=store,
         )
-        assert uploaded.status_code == 201, uploaded.text
-        item = uploaded.json()
         assert item["mimeType"] == "application/pdf"
         assert item["previewSupported"] is True
 
@@ -4856,13 +5041,15 @@ def test_library_preview_supported_is_derived_from_file_type_not_db_flag(tmp_pat
             email="tenant@example.com",
         )
 
-        uploaded = client.post(
-            "/api/v1/library/files",
-            headers=headers,
-            files={"file": ("legacy.pdf", b"%PDF", "application/pdf")},
+        item, _ = _upload_library_file(
+            client,
+            headers,
+            file_name="legacy.pdf",
+            content=b"%PDF",
+            mime_type="application/pdf",
+            store=store,
         )
-        assert uploaded.status_code == 201, uploaded.text
-        file_id = uploaded.json()["id"]
+        file_id = item["id"]
 
         with open_database_connection(settings) as connection:
             connection.execute(
@@ -4910,19 +5097,14 @@ def test_library_docx_preview_extracts_text(tmp_path: Path) -> None:
             email="tenant@example.com",
         )
 
-        uploaded = client.post(
-            "/api/v1/library/files",
-            headers=headers,
-            files={
-                "file": (
-                    "proposal.docx",
-                    docx.getvalue(),
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                )
-            },
+        item, _ = _upload_library_file(
+            client,
+            headers,
+            file_name="proposal.docx",
+            content=docx.getvalue(),
+            mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            store=store,
         )
-        assert uploaded.status_code == 201, uploaded.text
-        item = uploaded.json()
         assert item["previewSupported"] is True
 
         listed = client.get("/api/v1/library/files", headers=headers)
