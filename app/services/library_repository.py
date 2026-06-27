@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.db import DatabaseConnection
-from app.domain.library import LibraryFileRecord, LibrarySort
+from app.domain.library import LibraryFileRecord, LibrarySort, LibraryUploadSessionRecord
 from app.services._sql import execute, fetch_all, fetch_one, json_load, json_param, rowcount
 
 
@@ -11,6 +11,12 @@ _COLUMNS = (
     "id, user_id, tenant_id, original_name, safe_name, mime_type, file_type, extension, "
     "size_bytes, storage_bucket, storage_object_key, content_hash, preview_supported, "
     "metadata, created_at, updated_at"
+)
+
+_SESSION_COLUMNS = (
+    "id, file_id, user_id, tenant_id, original_name, safe_name, mime_type, file_type, extension, "
+    "file_size_bytes, storage_bucket, storage_object_key, content_hash, status, expires_at, "
+    "completed_at, created_at, updated_at"
 )
 
 _SORT_SQL: dict[str, str] = {
@@ -78,6 +84,82 @@ class LibraryRepository:
         file = self.get_file(user_id, tenant_id, file_id)
         assert file is not None
         return file
+
+    def create_upload_session(
+        self,
+        *,
+        session_id: str,
+        file_id: str,
+        user_id: str,
+        tenant_id: str,
+        original_name: str,
+        safe_name: str,
+        mime_type: str | None,
+        file_type: str,
+        extension: str | None,
+        file_size_bytes: int,
+        storage_bucket: str,
+        storage_object_key: str,
+        content_hash: str | None,
+        expires_at: str,
+        now: str,
+    ) -> None:
+        execute(
+            self.connection,
+            """
+            insert into library_upload_sessions (
+              id, file_id, user_id, tenant_id, original_name, safe_name, mime_type, file_type,
+              extension, file_size_bytes, storage_bucket, storage_object_key, content_hash,
+              status, expires_at, created_at, updated_at
+            )
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'initiated', ?, ?, ?)
+            """,
+            (
+                session_id,
+                file_id,
+                user_id,
+                tenant_id,
+                original_name,
+                safe_name,
+                mime_type,
+                file_type,
+                extension,
+                file_size_bytes,
+                storage_bucket,
+                storage_object_key,
+                content_hash,
+                expires_at,
+                now,
+                now,
+            ),
+        )
+
+    def get_upload_session(self, session_id: str) -> LibraryUploadSessionRecord | None:
+        row = fetch_one(
+            self.connection,
+            f"select {_SESSION_COLUMNS} from library_upload_sessions where id = ? limit 1",
+            (session_id,),
+        )
+        return _map_session(row)
+
+    def set_upload_session_status(
+        self,
+        session_id: str,
+        status: str,
+        now: str,
+        *,
+        completed: bool = False,
+    ) -> None:
+        completed_at = now if completed else None
+        execute(
+            self.connection,
+            """
+            update library_upload_sessions
+            set status = ?, completed_at = coalesce(?, completed_at), updated_at = ?
+            where id = ?
+            """,
+            (status, completed_at, now, session_id),
+        )
 
     def get_file(
         self, user_id: str, tenant_id: str, file_id: str
@@ -179,6 +261,31 @@ def _map_file(row: dict[str, Any] | None) -> LibraryFileRecord | None:
         contentHash=str(row["content_hash"]) if row.get("content_hash") is not None else None,
         previewSupported=bool(row["preview_supported"]),
         metadata=json_load(row["metadata"]),
+        createdAt=str(row["created_at"]),
+        updatedAt=str(row["updated_at"]),
+    )
+
+
+def _map_session(row: dict[str, Any] | None) -> LibraryUploadSessionRecord | None:
+    if not row:
+        return None
+    return LibraryUploadSessionRecord(
+        id=str(row["id"]),
+        fileId=str(row["file_id"]),
+        userId=str(row["user_id"]),
+        tenantId=str(row["tenant_id"]),
+        originalName=str(row["original_name"]),
+        safeName=str(row["safe_name"]),
+        mimeType=str(row["mime_type"]) if row.get("mime_type") is not None else None,
+        fileType=str(row["file_type"]),
+        extension=str(row["extension"]) if row.get("extension") is not None else None,
+        fileSizeBytes=int(row["file_size_bytes"]),
+        storageBucket=str(row["storage_bucket"]),
+        storageObjectKey=str(row["storage_object_key"]),
+        contentHash=str(row["content_hash"]) if row.get("content_hash") is not None else None,
+        status=str(row["status"]),
+        expiresAt=str(row["expires_at"]),
+        completedAt=str(row["completed_at"]) if row.get("completed_at") is not None else None,
         createdAt=str(row["created_at"]),
         updatedAt=str(row["updated_at"]),
     )

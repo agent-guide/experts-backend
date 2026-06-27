@@ -13,6 +13,7 @@ from app.core.errors import ApiError
 from app.db import DatabaseConnection
 from app.domain.auth import Principal
 from app.domain.library import (
+    LibraryCompleteUploadRequest,
     LibraryDeletedResponse,
     LibraryDownloadResponse,
     LibraryFile,
@@ -21,7 +22,10 @@ from app.domain.library import (
     LibraryFileListResponse,
     LibraryPreviewResponse,
     LibrarySort,
+    LibraryUploadUrlRequest,
+    LibraryUploadUrlResponse,
 )
+from app.services._sql import is_unique_violation
 from app.services.library_repository import LibraryRepository
 from app.services.object_store import ObjectStore
 
@@ -103,44 +107,125 @@ class LibraryService:
             pageSize=page_size,
         )
 
-    def upload_file(
+    def create_upload_url(
         self,
         principal: Principal,
-        *,
-        file_name: str,
-        mime_type: str | None,
-        content: bytes,
-    ) -> LibraryFile:
+        request: LibraryUploadUrlRequest,
+    ) -> LibraryUploadUrlResponse:
         user_id, tenant_id = self._owner(principal)
-        safe_name = _safe_file_name(file_name)
+        if request.fileSizeBytes <= 0:
+            raise ApiError(400, "LIBRARY_INVALID_SIZE", "fileSizeBytes must be positive")
+        if request.fileSizeBytes > self.settings.object_storage_max_upload_bytes:
+            raise ApiError(413, "OBJECT_TOO_LARGE", "Object upload is too large")
+
+        safe_name = _safe_file_name(request.fileName)
         extension = _extension(safe_name)
-        file_type = _resolve_file_type(safe_name, mime_type)
-        preview_supported = _preview_supported(mime_type, extension, file_type)
+        file_type = _resolve_file_type(safe_name, request.mimeType)
         file_id = f"file_{uuid4().hex}"
+        session_id = f"upl_{uuid4().hex}"
         object_key = _object_key(tenant_id, user_id, file_id, safe_name)
         now = _now_iso()
-        self.store.put(object_key, content, content_type=mime_type)
-        self.repo.create_file(
+        expires = _now_plus_ttl(self.settings.presigned_url_ttl_seconds)
+
+        self.repo.create_upload_session(
+            session_id=session_id,
             file_id=file_id,
             user_id=user_id,
             tenant_id=tenant_id,
-            original_name=file_name,
+            original_name=request.fileName,
             safe_name=safe_name,
-            mime_type=mime_type,
+            mime_type=request.mimeType,
             file_type=file_type,
             extension=extension,
-            size_bytes=len(content),
+            file_size_bytes=request.fileSizeBytes,
             storage_bucket=self.store.bucket,
             storage_object_key=object_key,
-            content_hash=None,
-            preview_supported=preview_supported,
-            metadata={},
+            content_hash=request.contentHash,
+            expires_at=expires,
             now=now,
         )
+        upload_url = self.store.presigned_put_url(
+            object_key,
+            expires=timedelta(seconds=self.settings.presigned_url_ttl_seconds),
+            content_type=request.mimeType,
+            content_length=request.fileSizeBytes,
+        )
         self.connection.commit()
-        file = self.repo.get_file(user_id, tenant_id, file_id)
-        assert file is not None
-        return _to_item(file)
+
+        headers = {"Content-Type": request.mimeType} if request.mimeType else {}
+        return LibraryUploadUrlResponse(
+            uploadSessionId=session_id,
+            fileId=file_id,
+            uploadUrl=upload_url,
+            headers=headers,
+            objectKey=object_key,
+            expiresAt=expires,
+        )
+
+    def complete_upload(
+        self,
+        principal: Principal,
+        request: LibraryCompleteUploadRequest,
+    ) -> LibraryFile:
+        user_id, tenant_id = self._owner(principal)
+        session = self.repo.get_upload_session(request.uploadSessionId)
+        if session is None:
+            raise ApiError(404, "LIBRARY_UPLOAD_SESSION_NOT_FOUND", "Upload session not found")
+        if session.userId != user_id or session.tenantId != tenant_id:
+            raise ApiError(404, "LIBRARY_UPLOAD_SESSION_NOT_FOUND", "Upload session not found")
+        if session.status != "initiated":
+            raise ApiError(409, "LIBRARY_UPLOAD_SESSION_NOT_ACTIVE", "Upload session is not active")
+        if _expired(session.expiresAt):
+            self.repo.set_upload_session_status(session.id, "expired", _now_iso())
+            self.connection.commit()
+            raise ApiError(409, "LIBRARY_UPLOAD_SESSION_EXPIRED", "Upload session has expired")
+
+        stat = self.store.stat(session.storageObjectKey)
+        if stat.size != session.fileSizeBytes:
+            self.repo.set_upload_session_status(session.id, "failed", _now_iso())
+            self.connection.commit()
+            _best_effort_remove(self.store, session.storageObjectKey)
+            raise ApiError(
+                400,
+                "LIBRARY_UPLOAD_SIZE_MISMATCH",
+                "Uploaded object size does not match the declared size",
+                {"declared": session.fileSizeBytes, "actual": stat.size},
+            )
+
+        now = _now_iso()
+        try:
+            record = self.repo.create_file(
+                file_id=session.fileId,
+                user_id=user_id,
+                tenant_id=tenant_id,
+                original_name=session.originalName,
+                safe_name=session.safeName,
+                mime_type=session.mimeType,
+                file_type=session.fileType,
+                extension=session.extension,
+                size_bytes=session.fileSizeBytes,
+                storage_bucket=session.storageBucket,
+                storage_object_key=session.storageObjectKey,
+                content_hash=request.contentHash or session.contentHash,
+                preview_supported=_preview_supported(
+                    session.mimeType, session.extension, session.fileType
+                ),
+                metadata={},
+                now=now,
+            )
+        except Exception as exc:  # noqa: BLE001 - mapped only for documented completion race
+            if is_unique_violation(exc):
+                self.connection.rollback()
+                raise ApiError(
+                    409,
+                    "LIBRARY_UPLOAD_ALREADY_COMPLETED",
+                    "Upload session has already been completed",
+                ) from exc
+            raise
+
+        self.repo.set_upload_session_status(session.id, "completed", now, completed=True)
+        self.connection.commit()
+        return _to_item(record)
 
     def preview_file(self, principal: Principal, file_id: str) -> LibraryPreviewResponse:
         record = self._require_file(principal, file_id)
@@ -349,3 +434,17 @@ def _now_iso() -> str:
 
 def _now_plus_ttl(ttl_seconds: int) -> str:
     return (datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)).isoformat()
+
+
+def _expired(value: str) -> bool:
+    expires_at = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return expires_at <= datetime.now(timezone.utc)
+
+
+def _best_effort_remove(store: ObjectStore, object_key: str) -> None:
+    try:
+        store.remove(object_key)
+    except Exception:
+        return

@@ -973,9 +973,9 @@ No input parameters.
 | 200 | application/json | LibraryFileListResponse |
 | 422 | application/json | HTTPValidationError |
 
-### POST `/api/v1/library/files`
+### POST `/api/v1/library/files/complete-upload`
 
-- Summary: Upload File
+- Summary: Complete Upload
 
 #### Input Parameters
 
@@ -983,13 +983,32 @@ No input parameters.
 | --- | --- | --- | --- | --- |
 | header | x-tenant-id | no | string \| null | - |
 | header | Authorization | no | string \| null | - |
-| body | multipart/form-data | yes | Body_upload_file_api_v1_library_files_post | - |
+| body | application/json | yes | LibraryCompleteUploadRequest | - |
 
 #### Response
 
 | Status | Content Type | Schema |
 | --- | --- | --- |
 | 201 | application/json | LibraryFile |
+| 422 | application/json | HTTPValidationError |
+
+### POST `/api/v1/library/files/upload-url`
+
+- Summary: Create Upload Url
+
+#### Input Parameters
+
+| Location | Name | Required | Type | Description |
+| --- | --- | --- | --- | --- |
+| header | x-tenant-id | no | string \| null | - |
+| header | Authorization | no | string \| null | - |
+| body | application/json | yes | LibraryUploadUrlRequest | - |
+
+#### Response
+
+| Status | Content Type | Schema |
+| --- | --- | --- |
+| 200 | application/json | LibraryUploadUrlResponse |
 | 422 | application/json | HTTPValidationError |
 
 ### DELETE `/api/v1/library/files/{file_id}`
@@ -1968,12 +1987,6 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | message | yes | string | - |
 | details | no | object | - |
 
-### `Body_upload_file_api_v1_library_files_post`
-
-| Field | Required | Type | Description |
-| --- | --- | --- | --- |
-| file | yes | string | - |
-
 ### `Body_upload_skill_api_v1_skills_post`
 
 | Field | Required | Type | Description |
@@ -2264,6 +2277,13 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | --- | --- | --- | --- |
 | items | yes | array[KnowledgeBase] | - |
 
+### `LibraryCompleteUploadRequest`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| uploadSessionId | yes | string | - |
+| contentHash | no | string \| null | - |
+
 ### `LibraryDeletedResponse`
 
 | Field | Required | Type | Description |
@@ -2311,6 +2331,27 @@ retried on the next call. See KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md section
 | content | no | string \| null | - |
 | mimeType | no | string \| null | - |
 | expiresAt | no | string \| null | - |
+
+### `LibraryUploadUrlRequest`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| fileName | yes | string | - |
+| mimeType | no | string \| null | - |
+| fileSizeBytes | yes | integer | - |
+| contentHash | no | string \| null | - |
+
+### `LibraryUploadUrlResponse`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| uploadSessionId | yes | string | - |
+| fileId | yes | string | - |
+| method | no | string | - |
+| uploadUrl | yes | string | - |
+| headers | no | object | - |
+| objectKey | yes | string | - |
+| expiresAt | yes | string | - |
 
 ### `ListManagedUsersResponse`
 

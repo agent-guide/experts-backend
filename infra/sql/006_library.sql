@@ -30,3 +30,30 @@ create index if not exists idx_library_files_user_tenant_type
 
 create unique index if not exists idx_library_files_storage_object_key
   on library_files (storage_object_key);
+
+create table if not exists library_upload_sessions (
+  id text primary key,
+  file_id text not null,
+  user_id text not null references users(id) on delete cascade,
+  tenant_id text not null references tenants(id) on delete cascade,
+  original_name text not null,
+  safe_name text not null,
+  mime_type text,
+  file_type text not null check (file_type in ('image', 'file')),
+  extension text,
+  file_size_bytes bigint not null,
+  storage_bucket text not null,
+  storage_object_key text not null unique,
+  content_hash text,
+  status text not null default 'initiated' check (status in ('initiated', 'completed', 'expired', 'failed')),
+  expires_at timestamptz not null,
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_library_upload_sessions_status
+  on library_upload_sessions (status, expires_at);
+
+create index if not exists idx_library_upload_sessions_file
+  on library_upload_sessions (file_id);

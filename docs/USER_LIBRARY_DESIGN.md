@@ -285,7 +285,7 @@ Backend steps:
 
 1. Read `user_id` from the token principal.
 2. Read `tenant_id` from `x-tenant-id`.
-3. Validate size, extension, and MIME type.
+3. Validate size and normalize filename/type metadata.
 4. Generate `file_id` and `upload_session_id`.
 5. Build `safe_name`.
 6. Build `storage_object_key`.
@@ -327,31 +327,14 @@ Backend steps:
 1. Load upload session by ID.
 2. Verify `user_id` and `tenant_id`.
 3. Verify session is `initiated` and not expired.
-4. `HEAD` MinIO object.
-5. Verify object size equals declared `size_bytes`.
+4. `HEAD` or stat the object in the configured object store.
+5. Verify object size equals the declared `fileSizeBytes`.
 6. Insert `library_files`.
 7. Mark upload session `completed`.
 
 Response: a file item.
 
-### 5.3 Upload, Optional Multipart Shortcut
-
-For small files and simpler frontend integration, the backend may also support:
-
-```http
-POST /api/v1/library/files
-Content-Type: multipart/form-data
-```
-
-This endpoint should internally apply the same validation and metadata rules, then upload the
-bytes to MinIO through the backend. It is easier for the frontend but less ideal for large files.
-
-Recommended implementation order:
-
-1. Implement direct upload first for consistency with existing document APIs.
-2. Add multipart only if the product needs a simpler upload path.
-
-### 5.4 Preview
+### 5.3 Preview
 
 ```http
 GET /api/v1/library/files/{file_id}/preview
@@ -395,7 +378,7 @@ Suggested response for text preview:
 }
 ```
 
-### 5.5 Download
+### 5.4 Download
 
 ```http
 GET /api/v1/library/files/{file_id}/download
@@ -412,7 +395,7 @@ Recommended response:
 
 The backend must authorize by DB row first, then presign `storage_object_key`.
 
-### 5.6 Delete
+### 5.5 Delete
 
 ```http
 DELETE /api/v1/library/files/{file_id}
