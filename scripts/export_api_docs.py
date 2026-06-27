@@ -189,18 +189,32 @@ def build_markdown(schema: dict[str, Any]) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Export FastAPI OpenAPI schema as Markdown.")
+    parser = argparse.ArgumentParser(description="Export FastAPI OpenAPI schema.")
     parser.add_argument(
         "--output",
         default="docs/api/API_REFERENCE.md",
         help="Markdown output path.",
     )
+    parser.add_argument(
+        "--json-output",
+        default="docs/api/openapi.json",
+        help="OpenAPI JSON output path.",
+    )
     args = parser.parse_args()
+
+    schema = app.openapi()
 
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(build_markdown(app.openapi()), encoding="utf-8")
+    output.write_text(build_markdown(schema), encoding="utf-8")
     print(f"Wrote {output}")
+
+    json_output = Path(args.json_output)
+    json_output.parent.mkdir(parents=True, exist_ok=True)
+    json_output.write_text(
+        json.dumps(schema, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    print(f"Wrote {json_output}")
 
 
 if __name__ == "__main__":
