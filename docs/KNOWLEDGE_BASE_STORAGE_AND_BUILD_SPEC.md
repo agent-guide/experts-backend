@@ -326,7 +326,7 @@ Server steps (`DocumentService.create_upload_url`):
 
 1. Authorize: load the KB; `authorize_kb_access(principal, kb, "doc")` rejects archived KBs.
 2. Validate `fileSizeBytes > 0` (`400 DOC_INVALID_SIZE`) and
-   `fileSizeBytes <= EXPERT_NEXT_OBJECT_STORAGE_MAX_UPLOAD_BYTES` (`413 OBJECT_TOO_LARGE`).
+   `fileSizeBytes <= EXPERT_OBJECT_STORAGE_MAX_UPLOAD_BYTES` (`413 OBJECT_TOO_LARGE`).
 3. Sanitize the file name (strip path separators + control chars; reject `.`/`..`/empty —
    `400 DOC_INVALID_FILE_NAME`).
 4. Resolve `file_type` from the **file extension** against a whitelist; unknown →
@@ -362,7 +362,7 @@ The client issues `PUT {uploadUrl}` with the raw file body and the matching `Con
 header. In `minio` mode this request goes directly to MinIO/S3. In `local` mode this
 request goes to the backend's signed storage route, which streams the body to disk and
 rejects bodies larger than the upload session's declared `fileSizeBytes` or
-`EXPERT_NEXT_OBJECT_STORAGE_MAX_UPLOAD_BYTES`.
+`EXPERT_OBJECT_STORAGE_MAX_UPLOAD_BYTES`.
 
 ### 5.3 Complete upload
 

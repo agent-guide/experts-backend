@@ -23,7 +23,7 @@ python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 15000
 
 OpenAPI docs are then served at `http://127.0.0.1:15000/docs`.
 
-All runtime configuration is read from environment variables prefixed with `EXPERT_NEXT_`,
+All runtime configuration is read from environment variables prefixed with `EXPERT_`,
 or from the project root `.env` file (see `app/core/config.py`). Copy `.env.example` to
 `.env` to get started. Files such as `.env.local` and `.env.remote` are configuration
 copies only and are not loaded automatically.
@@ -33,12 +33,12 @@ copies only and are not loaded automatically.
 ### Choosing the database: SQLite vs PostgreSQL
 
 The backend is selected automatically from the **URL scheme** of
-`EXPERT_NEXT_DATABASE_URL` — there is no separate toggle (see `app/db.py`).
+`EXPERT_DATABASE_URL` — there is no separate toggle (see `app/db.py`).
 
 - SQLite (default, local/tests) — the URL starts with `sqlite:///`:
 
   ```text
-  EXPERT_NEXT_DATABASE_URL=sqlite:///./.data/amazon-experts-backend.sqlite3
+  EXPERT_DATABASE_URL=sqlite:///./.data/amazon-experts-backend.sqlite3
   ```
 
   Use `sqlite:///:memory:` for an in-memory database.
@@ -46,16 +46,16 @@ The backend is selected automatically from the **URL scheme** of
 - PostgreSQL (production) — the URL starts with `postgresql://` (or `postgres://`):
 
   ```text
-  EXPERT_NEXT_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/expert
+  EXPERT_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/expert
   ```
 
   PostgreSQL requires the `psycopg` dependency; without it the service fails at
   startup with `PostgreSQL requires the psycopg dependency.`
 
 Both backends share the same schema files. On startup (when
-`EXPERT_NEXT_DATABASE_AUTO_MIGRATE=true`) the service applies every
+`EXPERT_DATABASE_AUTO_MIGRATE=true`) the service applies every
 `*.sql` file under `amazon-experts-backend/infra/sql`; override the location with
-`EXPERT_NEXT_DATABASE_SCHEMA_DIR`. The runner re-runs all SQL on each boot and
+`EXPERT_DATABASE_SCHEMA_DIR`. The runner re-runs all SQL on each boot and
 relies on `if not exists` idempotency. The SQL files are written in PostgreSQL
 syntax; for SQLite, `app/db.py` rewrites Postgres-only constructs (`jsonb`,
 `timestamptz`, `now()`, ...) into SQLite-compatible forms on the fly.
@@ -63,30 +63,30 @@ syntax; for SQLite, `app/db.py` rewrites Postgres-only constructs (`jsonb`,
 ### Choosing object storage: local filesystem vs MinIO
 
 Documents, library files and skill packages use the same object storage backend.
-The backend is selected by `EXPERT_NEXT_OBJECT_STORAGE_BACKEND` (default `local`).
+The backend is selected by `EXPERT_OBJECT_STORAGE_BACKEND` (default `local`).
 
 - Local filesystem (default):
 
   ```text
-  EXPERT_NEXT_OBJECT_STORAGE_BACKEND=local
-  EXPERT_NEXT_OBJECT_STORAGE_LOCAL_DIR=./.data/objects
-  EXPERT_NEXT_OBJECT_STORAGE_MAX_UPLOAD_BYTES=104857600
+  EXPERT_OBJECT_STORAGE_BACKEND=local
+  EXPERT_OBJECT_STORAGE_LOCAL_DIR=./.data/objects
+  EXPERT_OBJECT_STORAGE_MAX_UPLOAD_BYTES=104857600
   ```
 
 - MinIO object storage — recommended for production. Set the backend to `minio`
   and provide the connection settings:
 
   ```text
-  EXPERT_NEXT_OBJECT_STORAGE_BACKEND=minio
-  EXPERT_NEXT_MINIO_ENDPOINT=127.0.0.1:9000
-  EXPERT_NEXT_MINIO_ACCESS_KEY=minioadmin
-  EXPERT_NEXT_MINIO_SECRET_KEY=minioadmin
-  EXPERT_NEXT_MINIO_BUCKET=expert-files
-  EXPERT_NEXT_MINIO_SECURE=false
+  EXPERT_OBJECT_STORAGE_BACKEND=minio
+  EXPERT_MINIO_ENDPOINT=127.0.0.1:9000
+  EXPERT_MINIO_ACCESS_KEY=minioadmin
+  EXPERT_MINIO_SECRET_KEY=minioadmin
+  EXPERT_MINIO_BUCKET=expert-files
+  EXPERT_MINIO_SECURE=false
   ```
 
 Skills always use the `skills/{slug}/...` object-key prefix inside the shared
-object storage backend. The old `EXPERT_NEXT_SKILL_STORAGE_*` settings are no
+object storage backend. The old `EXPERT_SKILL_STORAGE_*` settings are no
 longer read. Existing deployments that stored skill objects in a separate bucket
 such as `expert-skills` should manually copy the old `skills/...` objects into
 the configured shared bucket before switching production to `minio`.
@@ -105,9 +105,9 @@ Auth endpoints are backed by the shared auth tables:
 - `POST /api/v1/rbac/tenant/users/{id}/roles`
 - `POST /api/v1/rbac/platform/users/{id}/roles`
 
-Register/login use `EXPERT_NEXT_DEFAULT_TENANT_ID`, which defaults to
+Register/login use `EXPERT_DEFAULT_TENANT_ID`, which defaults to
 `tenant_default` to match the current Expert project seed data. Production
-deployments must set a strong `EXPERT_NEXT_JWT_SECRET`.
+deployments must set a strong `EXPERT_JWT_SECRET`.
 
 RBAC permissions are resolved from tenant roles (`admin`, `member`) and platform
 roles (`admin`, `expert`, `operator`).

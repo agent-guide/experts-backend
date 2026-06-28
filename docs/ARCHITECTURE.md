@@ -187,7 +187,7 @@ Design:
   slug, stores files, and records metadata.
 - Database metadata includes slug, name, description, version, allowed tools,
   file paths, tags and storage URI.
-- Storage backend is selected by `EXPERT_NEXT_OBJECT_STORAGE_BACKEND`, which
+- Storage backend is selected by `EXPERT_OBJECT_STORAGE_BACKEND`, which
   defaults to local storage for development and should be set to `minio` for
   production. The same setting is used by documents and library files. Skill
   objects always use the `skills/{slug}/...` object-key prefix.

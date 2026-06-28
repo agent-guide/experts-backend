@@ -61,7 +61,7 @@ The client then `PUT`s the file body to `uploadUrl`. In `minio` mode this goes t
 `local` mode it goes to the backend's signed storage route. Local upload URLs enforce the
 declared `fileSizeBytes` and `Content-Type` from the upload session while streaming the body to
 disk, so oversized uploads are rejected before completion. Requests whose declared
-`fileSizeBytes` exceeds `EXPERT_NEXT_OBJECT_STORAGE_MAX_UPLOAD_BYTES` are rejected before an
+`fileSizeBytes` exceeds `EXPERT_OBJECT_STORAGE_MAX_UPLOAD_BYTES` are rejected before an
 upload URL is signed.
 
 ## POST /upload-urls

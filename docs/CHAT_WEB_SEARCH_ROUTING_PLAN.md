@@ -47,9 +47,9 @@ The first version uses two explicit ACP routes:
 
 Backend configuration:
 
-- `EXPERT_NEXT_ACP_ROUTE_PREFIX` configures the no-search route prefix, for example
+- `EXPERT_ACP_ROUTE_PREFIX` configures the no-search route prefix, for example
   `/acp/codex-qa`.
-- `EXPERT_NEXT_ACP_SEARCH_ROUTE_PREFIX` configures the search route prefix, for example
+- `EXPERT_ACP_SEARCH_ROUTE_PREFIX` configures the search route prefix, for example
   `/acp/codex-qa-search`.
 - If the search prefix is not configured, search turns fall back to the default ACP prefix
   while still sending `search_mode: "auto"`.

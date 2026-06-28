@@ -2,7 +2,7 @@
 
 Drives the real AcpGatewayClient (the same code the chat backend uses), so a green run validates
 the actual integration, not a re-implementation. Connection config is read from the environment /
-.env (EXPERT_NEXT_ACP_*) and can be overridden per flag.
+.env (EXPERT_ACP_*) and can be overridden per flag.
 
 Examples:
     # Run one turn against the data plane configured in .env
@@ -181,7 +181,7 @@ async def _main(args: argparse.Namespace) -> int:
     settings = _settings_from_args(args)
     acp = AcpGatewayClient(settings)
     if not acp.base_url:
-        print("ERROR: ACP gateway base URL is not configured (set --base-url or EXPERT_NEXT_ACP_GATEWAY_BASE_URL)")
+        print("ERROR: ACP gateway base URL is not configured (set --base-url or EXPERT_ACP_GATEWAY_BASE_URL)")
         return 2
 
     thread_id = args.thread_id or f"thread_smoke_{uuid4().hex}"
@@ -248,11 +248,11 @@ def main() -> None:
         help="Resolve+create the per-tenant cwd via the client (mirrors backend behavior).",
     )
     # Connection overrides (otherwise read from env / .env).
-    parser.add_argument("--base-url", default=None, help="Override EXPERT_NEXT_ACP_GATEWAY_BASE_URL.")
-    parser.add_argument("--prefix", default=None, help="Override EXPERT_NEXT_ACP_ROUTE_PREFIX.")
-    parser.add_argument("--token", default=None, help="Override EXPERT_NEXT_ACP_AUTH_TOKEN.")
-    parser.add_argument("--model", default=None, help="Override EXPERT_NEXT_ACP_DEFAULT_MODEL.")
-    parser.add_argument("--cwd", default=None, help="Override EXPERT_NEXT_ACP_DEFAULT_CWD.")
+    parser.add_argument("--base-url", default=None, help="Override EXPERT_ACP_GATEWAY_BASE_URL.")
+    parser.add_argument("--prefix", default=None, help="Override EXPERT_ACP_ROUTE_PREFIX.")
+    parser.add_argument("--token", default=None, help="Override EXPERT_ACP_AUTH_TOKEN.")
+    parser.add_argument("--model", default=None, help="Override EXPERT_ACP_DEFAULT_MODEL.")
+    parser.add_argument("--cwd", default=None, help="Override EXPERT_ACP_DEFAULT_CWD.")
     args = parser.parse_args()
 
     raise SystemExit(asyncio.run(_main(args)))

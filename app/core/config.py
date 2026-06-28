@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=(".env", ".env.local"),
-        env_prefix="EXPERT_NEXT_",
+        env_prefix="EXPERT_",
         extra="ignore",
     )
 

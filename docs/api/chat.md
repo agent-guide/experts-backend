@@ -38,9 +38,9 @@ select a session first, then post the user's message to `/sessions/{session_id}/
 
 Create a chat session.
 
-The ACP working directory is resolved per tenant: when `EXPERT_NEXT_ACP_CWD_BASE` is
+The ACP working directory is resolved per tenant: when `EXPERT_ACP_CWD_BASE` is
 configured, it is `<base>/<tenant_id>` (created on demand); otherwise the shared
-`EXPERT_NEXT_ACP_DEFAULT_CWD` is used. The path must resolve under the ACP service's
+`EXPERT_ACP_DEFAULT_CWD` is used. The path must resolve under the ACP service's
 `allowedRoots`.
 
 Request:

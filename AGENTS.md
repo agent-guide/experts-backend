@@ -68,7 +68,7 @@ ngent / Codex are upstream/optional integrations, not the source of truth.
   (pin) ngent lacks. Session/turn ids equal ngent's thread/turn ids.
 - Every chat endpoint authorizes by **local ownership** (caller's tenant+user) before calling
   ngent — never trust ngent to scope. Flat `/turns/{id}/*` ops check `chat_turns` ownership.
-- **Per-tenant working dir**: when `EXPERT_NEXT_NGENT_CWD_BASE` is set, `NgentClient.prepare_cwd`
+- **Per-tenant working dir**: when `EXPERT_NGENT_CWD_BASE` is set, `NgentClient.prepare_cwd`
   gives each session `cwd = <base>/<tenant_id>` (created on demand, since ngent requires cwd to
   exist); empty base shares `ngent_default_cwd`. This is soft filesystem separation, not a
   sandbox — the real boundary is ngent's `allowedRoots`. Backend and ngent must share the host so
@@ -100,7 +100,7 @@ ngent / Codex are upstream/optional integrations, not the source of truth.
 - **Expert marketplace (`/expert-market/*`) requires sign-in** (`require_principal`, any
   authenticated caller) but no specific permission; it lists only `published` experts/categories.
 
-### Pluggable compute backend (`EXPERT_NEXT_CHAT_BACKEND` = `ngent` | `acp`)
+### Pluggable compute backend (`EXPERT_CHAT_BACKEND` = `ngent` | `acp`)
 
 - `ChatService` is backend-agnostic; the local DB stays the source of truth either way. The
   router (`build_chat_service`) injects both clients and the configured backend. ngent is the
