@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Self-readme for AI agents working in `amazon-experts-backend`.
+Self-readme for AI agents working in `experts-backend`.
 
 ## What this is
 

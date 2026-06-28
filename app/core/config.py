@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     app_env: str = "development"
     jwt_secret: str = "change-me"
-    jwt_issuer: str = "amazon-experts-backend"
+    jwt_issuer: str = "experts-backend"
     jwt_audience: str = "expert-web"
     access_token_ttl_seconds: int = 900
     refresh_token_ttl_seconds: int = 60 * 60 * 24 * 7
@@ -23,7 +23,7 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = Field(default_factory=lambda: ["*"])
 
-    database_url: str = "sqlite:///./.data/amazon-experts-backend.sqlite3"
+    database_url: str = "sqlite:///./.data/experts-backend.sqlite3"
     database_auto_migrate: bool = True
     database_schema_dir: str = Field(
         default_factory=lambda: str(Path(__file__).resolve().parents[2] / "infra" / "sql")
@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     acp_route_prefix: str = ""
     acp_search_route_prefix: str | None = None
     acp_auth_token: str | None = None
-    acp_client_id: str = "amazon-experts-backend"
+    acp_client_id: str = "experts-backend"
     acp_default_model: str | None = None
     acp_default_cwd: str = Field(default_factory=lambda: str(Path.cwd()))
     acp_cwd_base: str | None = None

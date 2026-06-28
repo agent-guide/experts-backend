@@ -1,7 +1,7 @@
 # User, Tenant and RBAC — Architecture Design and Technical Specification
 
 This document defines the identity, tenancy and RBAC model for
-`amazon-experts-backend`, and specifies the concrete schema, domain model,
+`experts-backend`, and specifies the concrete schema, domain model,
 permission matrix and authorization dependencies that implement it. The model
 described here is implemented.
 

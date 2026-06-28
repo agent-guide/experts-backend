@@ -1,4 +1,4 @@
-# Amazon Experts Backend API
+# Experts Backend API
 
 Version: `0.1.0`
 

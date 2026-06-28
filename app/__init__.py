@@ -1,1 +1,1 @@
-"""Amazon Experts Backend package."""
+"""Experts Backend package."""

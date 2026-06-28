@@ -151,10 +151,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         yield
 
     app = FastAPI(
-        title="Amazon Experts Backend API",
+        title="Experts Backend API",
         version="0.1.0",
         description=(
-            "Swagger/OpenAPI documentation for the Amazon Experts backend service. "
+            "Swagger/OpenAPI documentation for the Experts backend service. "
             "Platform APIs do not require x-tenant-id; tenant APIs require x-tenant-id "
             "in the request header."
         ),
@@ -175,7 +175,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/health", tags=["health"], summary="Health check")
     async def health() -> dict[str, str]:
-        return {"status": "ok", "service": "amazon-experts-backend"}
+        return {"status": "ok", "service": "experts-backend"}
 
     app.include_router(api_router, prefix="/api/v1")
     _apply_operation_summaries(app)

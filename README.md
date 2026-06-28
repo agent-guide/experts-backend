@@ -1,6 +1,6 @@
-# Amazon Experts Backend
+# Experts Backend
 
-Python 3 + FastAPI backend scaffold for the Amazon experts API.
+Python 3 + FastAPI backend scaffold for the experts API.
 
 The new service keeps the existing API shape where useful, while owning the
 control-plane data model locally:
@@ -13,7 +13,7 @@ control-plane data model locally:
 ## Run
 
 ```bash
-cd amazon-experts-backend
+cd experts-backend
 python3 -m venv .venv
 . .venv/bin/activate    
 .\.venv\Scripts\Activate
@@ -38,7 +38,7 @@ The backend is selected automatically from the **URL scheme** of
 - SQLite (default, local/tests) — the URL starts with `sqlite:///`:
 
   ```text
-  EXPERT_DATABASE_URL=sqlite:///./.data/amazon-experts-backend.sqlite3
+  EXPERT_DATABASE_URL=sqlite:///./.data/experts-backend.sqlite3
   ```
 
   Use `sqlite:///:memory:` for an in-memory database.
@@ -54,7 +54,7 @@ The backend is selected automatically from the **URL scheme** of
 
 Both backends share the same schema files. On startup (when
 `EXPERT_DATABASE_AUTO_MIGRATE=true`) the service applies every
-`*.sql` file under `amazon-experts-backend/infra/sql`; override the location with
+`*.sql` file under `experts-backend/infra/sql`; override the location with
 `EXPERT_DATABASE_SCHEMA_DIR`. The runner re-runs all SQL on each boot and
 relies on `if not exists` idempotency. The SQL files are written in PostgreSQL
 syntax; for SQLite, `app/db.py` rewrites Postgres-only constructs (`jsonb`,
@@ -132,7 +132,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 Run the following commands from the project root:
 
 ```bat
-cd /d D:\my_python\maiyun\amazon-experts-backend
+cd /d D:\my_python\maiyun\experts-backend
 py -m venv .venv
 ```
 
