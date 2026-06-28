@@ -5,7 +5,7 @@ Self-readme for AI agents working in `amazon-experts-backend`.
 ## What this is
 
 FastAPI control-plane backend. It owns auth/RBAC, knowledge bases, documents, chat and skills.
-PageIndex / ngent / Codex are upstream/optional integrations, not the source of truth.
+ngent / Codex are upstream/optional integrations, not the source of truth.
 
 ## Conventions
 

@@ -6,10 +6,9 @@ Replace the current TypeScript/Node expert-system API with a Python 3 + FastAPI
 service while reducing owned implementation surface.
 
 The new service should keep the client-facing API stable enough for the current
-web/API consumers, but delegate specialized work to external systems:
+web/API consumers, while owning control-plane data locally and delegating agent
+runtime work to external systems:
 
-- PageIndex: knowledge base, document management, upload/object storage, document
-  indexing and retrieval.
 - agent-gateway ACP data plane: chat sessions, turns, streaming and agent runtime.
 - Codex skills: skill discovery, installation and file management.
 - Expert Next API: tenant/auth/RBAC, compatibility routing, orchestration,
@@ -17,12 +16,6 @@ web/API consumers, but delegate specialized work to external systems:
 
 ## 2. External References
 
-- PageIndex is a vectorless, reasoning-based RAG project that builds a
-  hierarchical document tree and performs reasoning/tree-search retrieval instead
-  of vector similarity search. Source: <https://github.com/VectifyAI/PageIndex>
-- PageIndex can be used through open-source code, cookbooks/examples, API and MCP
-  resources according to its README. The exact integration mode should be decided
-  before production wiring.
 - agent-gateway ACP route contract:
   - `POST {prefix}/turn`
   - `POST {prefix}/permission`
@@ -39,11 +32,9 @@ FastAPI Expert Next API
         |
         +-- AuthService / TenantService / RBAC
         |
-        +-- PageIndexClient
-        |      +-- knowledge bases
-        |      +-- documents
-        |      +-- uploads / object storage
-        |      +-- document index/search
+        +-- KnowledgeBaseService / DocumentService
+        |      +-- local metadata database
+        |      +-- shared object storage
         |
         +-- AcpGatewayClient
         |      +-- codex ACP runtime
@@ -169,7 +160,7 @@ Mapping:
 
 Open decisions:
 
-- Whether PageIndex retrieval is injected into Codex prompt by Expert Next API,
+- Whether retrieval context is injected into Codex prompt by Expert Next API,
   by ACP tools, by MCP, or by Codex skills.
 - Whether session pinning remains local metadata.
 - How to expand ACP permission requests for richer web UI flows.
@@ -213,8 +204,8 @@ Current API shell:
 Design:
 
 - LLM model discovery should eventually use ACP/gateway route metadata when available.
-- Embedding model should become PageIndex-managed or return PageIndex retrieval
-  mode metadata.
+- Embedding model metadata is currently unconfigured and should be wired only
+  when a concrete retrieval backend is selected.
 - Metrics should expose local adapter metrics and upstream health.
 
 ## 5. Project Structure
@@ -226,7 +217,6 @@ next_api/
       deps.py                 # FastAPI dependencies and auth guards
       v1/routers/             # Old API-compatible route groups
     clients/
-      pageindex.py            # PageIndex SDK/API adapter
       acp_gateway.py          # agent-gateway ACP data-plane adapter
       codex_skills.py         # Codex skills filesystem adapter
     core/
@@ -247,7 +237,7 @@ next_api/
 
 - Create FastAPI project and route modules.
 - Preserve old route paths and coarse response shapes.
-- Add adapters for PageIndex, ACP and Codex skills.
+- Add adapters for ACP and Codex skills.
 - Make OpenAPI load and fail clearly when upstreams are not configured.
 
 Status: scaffolded.
@@ -259,12 +249,11 @@ Status: scaffolded.
 - Add request-scoped tenant enforcement and audit logging.
 - Add test coverage for auth and RBAC.
 
-### Phase 3: PageIndex Integration
+### Phase 3: Retrieval Integration
 
-- Decide integration mode: direct SDK, self-hosted API, PageIndex cloud API, or MCP.
-- Implement exact mappings for knowledge bases, documents, upload sessions and
-  job status.
-- Add local ID mapping only if PageIndex IDs cannot be exposed directly.
+- Decide the retrieval/indexing backend and integration mode.
+- Implement exact mappings for document indexing and job status.
+- Keep knowledge-base, document and upload-session metadata in the local database.
 - Remove all legacy ingestion/vector-store assumptions.
 
 ### Phase 4: ACP/Codex Chat Integration
@@ -273,7 +262,7 @@ Status: scaffolded.
 - Normalize SSE events to the existing web client contract.
 - Add cancellation, event replay, active-turn conflict behavior and permission
   workflow.
-- Decide how PageIndex search context is made available to Codex.
+- Decide how retrieval context is made available to Codex.
 
 ### Phase 5: Skills Integration
 
@@ -285,13 +274,13 @@ Status: scaffolded.
 
 - Add rate limiting.
 - Add upstream health checks.
-- Add metrics for auth, PageIndex, ACP, skills and request latency.
+- Add metrics for auth, ACP, skills and request latency.
 - Add structured logging and trace IDs.
 
 ## 7. Risks and Design Notes
 
-- PageIndex's public project emphasizes document tree/search capability, not the
-  exact legacy knowledge-base/upload REST contract. Expect an adapter wrapper.
+- Retrieval/indexing backend selection is still open; keep document metadata and
+  upload contracts owned by this service.
 - ACP sessions are not a perfect match for legacy chat sessions; pinning, ownership
   and tenant scoping need local metadata.
 - Codex skills are filesystem assets; multi-tenant skill isolation must be

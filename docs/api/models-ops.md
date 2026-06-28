@@ -40,8 +40,8 @@ Current response:
 
 ```json
 {
-  "provider": "pageindex",
-  "model": "pageindex-managed"
+  "provider": null,
+  "model": null
 }
 ```
 
@@ -77,7 +77,6 @@ Current response:
   "gauges": {},
   "derived": {
     "external": {
-      "pageIndexConfigured": false,
       "acpConfigured": false
     }
   }

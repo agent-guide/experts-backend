@@ -17,8 +17,8 @@ All endpoints require a platform role and platform permissions:
 Authorization: Bearer <accessToken>
 ```
 
-No `x-tenant-id` header is used. Metadata is stored in this project's database (not proxied
-to PageIndex). See [Knowledge Base Storage and Build Design](../KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md).
+No `x-tenant-id` header is used. Metadata is stored in this project's database.
+See [Knowledge Base Storage and Build Design](../KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md).
 
 ## Resource shape
 

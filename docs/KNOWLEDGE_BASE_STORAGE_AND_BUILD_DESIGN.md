@@ -2,14 +2,13 @@
 
 ## 1. 背景
 
-当前知识库与文档能力是否只能依赖 PageIndex 尚不确定，因此需要把平台 API
-设计为更通用的知识库管理方案：
+知识库与文档能力需要由平台 API 统一管理，并为后续检索/索引后端保留扩展点：
 
 - 知识库信息由本项目数据库管理。
 - 文档原文存储在 MinIO/S3。
 - 文档上传不经过 API 服务中转，优先采用前端直传 MinIO。
 - 构建知识库由独立 build 操作触发，从 MinIO 下载文档后执行构建。
-- PageIndex 只作为未来可选的构建 provider，而不是 API 与数据模型的唯一依赖。
+- 检索/索引后端只作为未来可选的构建 provider，而不是 API 与数据模型的依赖。
 
 本方案不兼容旧 `/api/v1/documents/*`、`/api/v1/uploads/*` 或
 `/api/v1/knowledge-bases/{id}/documents` 路径。所有文档操作统一收敛到
@@ -23,13 +22,13 @@
 - 使用 MinIO/S3 存储文档原文。
 - 前端通过 API 获取 presigned URL 后直接上传 MinIO，API 只负责控制面。
 - build 操作与上传操作解耦，文档变化只标记知识库为 `stale`，不会自动重建。
-- build provider 可插拔，支持先用空实现占位，后续接入 PageIndex、Qdrant 或自研
+- build provider 可插拔，支持先用空实现占位，后续接入 Qdrant 或自研
   RAG pipeline。
 
 ### 2.2 非目标
 
 - 不保留旧文档 API 的兼容层。
-- 不迁移 PageIndex 中已有的知识库与文档数据；存量 PageIndex 数据不在本方案范围内，本项目数据库即为唯一权威源。
+- 不迁移外部索引系统中已有的知识库与文档数据；本项目数据库即为唯一权威源。
 - 当前阶段 build 只提供占位接口，不实现任何真实构建逻辑（不创建构建任务、不生成快照、不解析/切分/向量化）。
 - 当前阶段不要求 API 服务接收大文件正文并转发 MinIO。
 
@@ -54,7 +53,7 @@ Expert API
         +-- Build Worker
                +-- download documents from MinIO
                +-- parse / chunk / index
-               +-- PageIndex / Qdrant / custom provider
+               +-- Qdrant / custom provider
 ```
 
 API 服务是控制面：
@@ -80,7 +79,7 @@ PATCH  /api/v1/knowledge-bases/{knowledge_base_id}
 DELETE /api/v1/knowledge-bases/{knowledge_base_id}
 ```
 
-知识库元数据由本项目数据库管理，不代理 PageIndex。
+知识库元数据由本项目数据库管理，不代理外部索引系统。
 
 ### 4.2 Docs
 
@@ -286,7 +285,7 @@ chunk。因此**检索侧（chat/search）必须按引用文档的 `documents.de
 
 ### 7.1 knowledge_bases
 
-**已落地的最小形态**（事实来源在本地 DB，不再透传 PageIndex）：
+**已落地的最小形态**（事实来源在本地 DB，不再透传外部索引系统）：
 
 ```sql
 create table if not exists knowledge_bases (
@@ -525,8 +524,8 @@ Response:
 4. 从 MinIO 下载每个 `storageKey`。
 5. 解析文档。
 6. 切分 chunk。
-7. 生成 embedding 或 PageIndex tree。
-8. 写入向量库、PageIndex 或其他索引后端。
+7. 生成 embedding 或其他索引结构。
+8. 写入向量库或其他索引后端。
 9. 更新文档 `parse_status`、`index_status`。
 10. 构建成功后更新：
 
@@ -565,19 +564,18 @@ knowledge_bases.build_status = failed
 
 ## 9. Provider 抽象（后续实现）
 
-> 同样属于 build 真实实现阶段，当前不落地。PageIndex 在此阶段才作为一个 provider 接入。
+> 同样属于 build 真实实现阶段，当前不落地。具体检索/索引后端在此阶段接入。
 
 构建 provider 建议抽象为：
 
 ```text
 KnowledgeBaseBuildProvider
   - NoneBuildProvider
-  - PageIndexBuildProvider
   - QdrantBuildProvider
   - CustomBuildProvider
 ```
 
-API 层只创建 build 记录，不直接调用 PageIndex。
+API 层只创建 build 记录，不直接调用外部索引系统。
 
 Provider 输入：
 
@@ -596,7 +594,7 @@ output_metadata
 error_message
 ```
 
-PageIndex 后续作为 `PageIndexBuildProvider` 接入，而不是作为知识库 API 的代理目标。
+外部索引后端后续作为 provider 接入，而不是作为知识库 API 的代理目标。
 
 ## 10. 权限模型
 
@@ -703,7 +701,7 @@ multipart 仍遵循同样原则：
 - 同步更新 API 文档：删除/替换 `docs/api/documents.md`、`docs/api/uploads.md`，修订
   `docs/api/knowledge-bases.md` 中旧的 `/{id}/documents` 段，并更新 `docs/api/README.md` 的链接
   （现仍指向已移除接口，见第 4 条 review）。
-- KB CRUD 改为读写本项目数据库（不再透传 PageIndex）。
+- KB CRUD 改为读写本项目数据库（不再透传外部索引系统）。
 - 同步调整 `app/domain/auth.py` 权限映射（§10：`doc:upload→doc:create`、移除 `doc:reindex`、
   新增 `doc:read`/`doc:update`）。
 - 实现统一的资源级鉴权 `authorize_kb_access`，并在所有 docs 流程第 1 步调用（§10）。
@@ -724,7 +722,7 @@ multipart 仍遵循同样原则：
 - 新增 `knowledge_base_builds` 表。
 - build 接口改为真正创建任务、写入 `input_snapshot`、置 `queued`。
 - 增加 build worker。
-- 实现 `NoneBuildProvider`，再接入 PageIndex 或其他 provider。
+- 实现 `NoneBuildProvider`，再接入其他 provider。
 - 构建成功后更新 `active_build_id` 与 `last_built_at`。
 
 ### Phase 4: 检索接入
@@ -746,4 +744,4 @@ multipart 仍遵循同样原则：
 - `object_bucket` 持久化且 `not null`（当前单 bucket 来自配置）。
 - 当前阶段 build 仅占位接口，不建表、不写记录、不改状态。
 - build 是显式操作，从 MinIO 下载文档构建索引（后续阶段）。
-- PageIndex 是可选 provider，不是知识库管理的单一事实来源。
+- 检索/索引 provider 不是知识库管理的单一事实来源。

@@ -243,7 +243,7 @@ Tenant resource access:
 - The user must be a member of the tenant.
 - Resource `tenant_id` must match the active tenant.
 - Required permission is derived from tenant role.
-- For delegated PageIndex/ACP resources, Expert Next API forwards the active
+- For delegated ACP resources, Expert Next API forwards the active
   tenant as `X-Tenant-Id` to the upstream service. Upstream services must use
   that value as the resource isolation boundary for read/update/delete calls by
   resource id.

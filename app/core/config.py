@@ -29,9 +29,6 @@ class Settings(BaseSettings):
         default_factory=lambda: str(Path(__file__).resolve().parents[2] / "infra" / "sql")
     )
 
-    pageindex_base_url: str | None = None
-    pageindex_api_key: str | None = None
-
     # agent-gateway ACP data plane. The route prefix is the gateway's external path prefix for
     # the ACP route; the client posts to <prefix>/turn and <prefix>/permission and reads history
     # from <prefix>/sessions and <prefix>/sessions/{id}/transcript (all route-scoped and

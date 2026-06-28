@@ -2,10 +2,10 @@
 
 Python 3 + FastAPI backend scaffold for the Amazon experts API.
 
-The new service keeps the existing API shape where useful, but delegates major
-capabilities to external systems:
+The new service keeps the existing API shape where useful, while owning the
+control-plane data model locally:
 
-- Knowledge bases, documents, uploads and object storage: PageIndex adapter.
+- Knowledge bases, documents, uploads and object storage: implemented in this service.
 - Chat/session execution: agent-gateway ACP data plane.
 - Skill management: DB metadata plus local or MinIO-backed skill file storage.
 - Multi-tenant auth and common APIs: implemented in this service.
@@ -124,8 +124,7 @@ Skill endpoints (file storage backend is configured above):
 ## Current Status
 
 This is a framework scaffold. It exposes the API modules and dependency
-boundaries. PageIndex and ACP integrations are intentionally thin adapters for
-future hardening.
+boundaries. ACP integration is intentionally a thin adapter for future hardening.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 ## Windows Quick Start

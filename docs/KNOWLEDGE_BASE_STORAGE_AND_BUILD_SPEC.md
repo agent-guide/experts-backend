@@ -22,7 +22,7 @@ routes; uploads are streamed to disk with size enforcement.
 Key properties of the shipped design:
 
 - The local database is the single source of truth for knowledge base / document /
-  upload-session metadata. There is no PageIndex pass-through.
+  upload-session metadata. There is no external index pass-through.
 - Documents are uploaded through the configured object storage backend. MinIO mode
   uses direct presigned object-store URLs; local mode uses signed backend storage URLs.
 - Knowledge bases, documents, and upload sessions carry **no `tenant_id`** — they are
@@ -545,8 +545,7 @@ The following are designed in
 - **Phase 3 — Build worker & providers.** A `knowledge_base_builds` table; build endpoints
   that create records, snapshot the document set (`input_snapshot`), and queue work; a worker
   that downloads objects by `storage_key`, parses/chunks/indexes, and writes back status; a
-  `KnowledgeBaseBuildProvider` abstraction (`None` / PageIndex / Qdrant / custom). PageIndex
-  becomes one provider, not an API pass-through target.
+  `KnowledgeBaseBuildProvider` abstraction (`None` / Qdrant / custom).
   - Open design points to resolve at that time: a comparable KB-level version watermark to
     guard the `stale` transition; concurrency mutual-exclusion (one queued/running build per
     KB); a foreign key for `active_build_id`; reconciling KB-level vs build-record status
@@ -563,7 +562,7 @@ Large-file **multipart** upload is likewise deferred; the schema reserves `uploa
 
 ## 12. Key Decisions (summary)
 
-- Local DB is the single source of truth; no PageIndex pass-through.
+- Local DB is the single source of truth; no external index pass-through.
 - The API is a control plane and never proxies document bytes.
 - Object keys are server-generated, with no tenant prefix.
 - KB/doc/upload carry no `tenant_id`; access is purely permission-based; `owner_user_id` is

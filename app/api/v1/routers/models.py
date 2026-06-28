@@ -13,4 +13,4 @@ async def list_llm_models(_: Principal = Depends(require_tenant_principal)) -> d
 
 @router.get("/embedding")
 async def get_embedding_model(_: Principal = Depends(require_tenant_principal)) -> dict:
-    return {"provider": "pageindex", "model": "pageindex-managed"}
+    return {"provider": None, "model": None}

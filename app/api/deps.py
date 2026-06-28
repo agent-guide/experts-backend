@@ -3,7 +3,6 @@ from collections.abc import Iterator
 from fastapi import Depends, Header
 
 from app.clients.acp_gateway import AcpGatewayClient
-from app.clients.pageindex import PageIndexClient
 from app.core.config import Settings, get_settings
 from app.core.errors import ApiError
 from app.core.security import decode_access_token
@@ -16,10 +15,6 @@ from app.services.skill_storage import SkillStorage, create_skill_storage
 
 def get_auth_service(settings: Settings = Depends(get_settings)) -> AuthService:
     return AuthService(settings)
-
-
-def get_pageindex_client(settings: Settings = Depends(get_settings)) -> PageIndexClient:
-    return PageIndexClient(settings)
 
 
 def get_acp_gateway_client(settings: Settings = Depends(get_settings)) -> AcpGatewayClient:
