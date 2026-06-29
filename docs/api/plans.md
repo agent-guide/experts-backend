@@ -35,36 +35,34 @@ plan:write
 
 ```json
 {
-  "id": "plan_pro",
-  "code": "pro",
-  "name": "专业版",
-  "level": 2,
-  "description": "进阶级效率专家，解锁更多专业专家和更高月度额度。",
-  "typeLabel": "个人付费",
-  "subtitle": "进阶级效率专家",
-  "badgeLabel": "最受欢迎",
+  "id": "plan_default",
+  "code": "default",
+  "name": "默认套餐",
+  "level": 1,
+  "description": "系统默认套餐，包含默认专家和基础使用额度。",
+  "typeLabel": "默认套餐",
+  "subtitle": "基础默认能力",
+  "badgeLabel": "默认",
   "highlightItems": [
-    "深度评论拆解",
-    "精准申诉顾问",
-    "地道客服话术",
-    "高频使用权限"
+    "默认专家访问",
+    "基础问答额度"
   ],
   "upgradeRules": {
-    "fromPlanIds": ["plan_free"],
-    "toPlanIds": ["plan_max", "plan_business"],
-    "rules": ["立即生效", "按差价补款"],
-    "selfServiceEnabled": true
+    "fromPlanIds": [],
+    "toPlanIds": [],
+    "rules": ["默认开通"],
+    "selfServiceEnabled": false
   },
   "status": "active",
   "isRecommended": true,
-  "sortOrder": 20,
+  "sortOrder": 10,
   "prices": [
     {
-      "id": "plan_price_pro_monthly_cny",
-      "planId": "plan_pro",
-      "billingPeriod": "monthly",
+      "id": "plan_price_default_free_cny",
+      "planId": "plan_default",
+      "billingPeriod": "free",
       "currency": "CNY",
-      "amountCents": 9900,
+      "amountCents": 0,
       "discountLabel": null,
       "isEnabled": true,
       "createdAt": "2026-06-12T00:00:00+00:00",
@@ -72,13 +70,13 @@ plan:write
     }
   ],
   "entitlements": {
-    "id": "plan_entitlement_pro",
-    "planId": "plan_pro",
-    "monthlyQuestionLimit": 1000,
-    "monthlyTokenLimit": 2000000,
+    "id": "plan_entitlement_default",
+    "planId": "plan_default",
+    "monthlyQuestionLimit": 100,
+    "monthlyTokenLimit": 100000,
     "seatLimit": 1,
     "singleTurnTokenLimit": null,
-    "modelTiers": ["core", "enhanced"],
+    "modelTiers": ["core"],
     "features": {
       "teamManagement": false,
       "apiAccess": false,
@@ -87,7 +85,7 @@ plan:write
     "createdAt": "2026-06-12T00:00:00+00:00",
     "updatedAt": "2026-06-12T00:00:00+00:00"
   },
-  "expertIds": ["expert_123"],
+  "expertIds": ["expert_default"],
   "createdAt": "2026-06-12T00:00:00+00:00",
   "updatedAt": "2026-06-12T00:00:00+00:00"
 }
@@ -123,28 +121,28 @@ Response `200`:
 {
   "items": [
     {
-      "id": "plan_free",
-      "code": "free",
-      "name": "免费版",
+      "id": "plan_default",
+      "code": "default",
+      "name": "默认套餐",
       "level": 1,
-      "description": "入门级运营助手，适合首次体验专家问答能力。",
-      "typeLabel": "免费版",
-      "subtitle": "入门级运营助手",
-      "badgeLabel": "入门体验",
-      "highlightItems": ["基础专家问答", "基础体验权限", "轻量运营辅助"],
+      "description": "系统默认套餐，包含默认专家和基础使用额度。",
+      "typeLabel": "默认套餐",
+      "subtitle": "基础默认能力",
+      "badgeLabel": "默认",
+      "highlightItems": ["默认专家访问", "基础问答额度"],
       "upgradeRules": {
         "fromPlanIds": [],
-        "toPlanIds": ["plan_pro", "plan_max", "plan_business"],
-        "rules": ["立即生效"],
-        "selfServiceEnabled": true
+        "toPlanIds": [],
+        "rules": ["默认开通"],
+        "selfServiceEnabled": false
       },
       "status": "active",
-      "isRecommended": false,
+      "isRecommended": true,
       "sortOrder": 10,
       "prices": [
         {
-          "id": "plan_price_free_free_cny",
-          "planId": "plan_free",
+          "id": "plan_price_default_free_cny",
+          "planId": "plan_default",
           "billingPeriod": "free",
           "currency": "CNY",
           "amountCents": 0,
@@ -155,8 +153,8 @@ Response `200`:
         }
       ],
       "entitlements": {
-        "id": "plan_entitlement_free",
-        "planId": "plan_free",
+        "id": "plan_entitlement_default",
+        "planId": "plan_default",
         "monthlyQuestionLimit": 100,
         "monthlyTokenLimit": 100000,
         "seatLimit": 1,
@@ -170,7 +168,7 @@ Response `200`:
         "createdAt": "2026-06-12T00:00:00+00:00",
         "updatedAt": "2026-06-12T00:00:00+00:00"
       },
-      "expertIds": [],
+      "expertIds": ["expert_default"],
       "createdAt": "2026-06-12T00:00:00+00:00",
       "updatedAt": "2026-06-12T00:00:00+00:00"
     }
@@ -226,6 +224,7 @@ Supported `typeLabel` values and base codes:
 
 | typeLabel | Base code |
 | --- | --- |
+| `默认套餐` | `default` |
 | `免费版` | `free` |
 | `个人付费` | `pro` |
 | `团队` / `Business` / `Business 版` | `business` |
@@ -381,11 +380,11 @@ Errors:
 
 ```text
 404 PLAN_NOT_FOUND
-409 PLAN_FREE_DELETE_FORBIDDEN
+409 PLAN_DEFAULT_DELETE_FORBIDDEN
 409 PLAN_HAS_SUBSCRIPTIONS
 ```
 
-The seeded `free` plan cannot be deleted. Plans with subscription history cannot be deleted.
+The seeded `default` plan cannot be deleted. Plans with subscription history cannot be deleted.
 
 ## User Plan Market
 
@@ -413,36 +412,34 @@ Response `200`:
 {
   "items": [
     {
-      "id": "plan_pro",
-      "code": "pro",
-      "name": "专业版",
-      "level": 2,
-      "description": "进阶级效率专家，解锁更多专业专家和更高月度额度。",
-      "typeLabel": "个人付费",
-      "subtitle": "进阶级效率专家",
-      "badgeLabel": "最受欢迎",
+      "id": "plan_default",
+      "code": "default",
+      "name": "默认套餐",
+      "level": 1,
+      "description": "系统默认套餐，包含默认专家和基础使用额度。",
+      "typeLabel": "默认套餐",
+      "subtitle": "基础默认能力",
+      "badgeLabel": "默认",
       "highlightItems": [
-        "深度评论拆解",
-        "精准申诉顾问",
-        "地道客服话术",
-        "高频使用权限"
+        "默认专家访问",
+        "基础问答额度"
       ],
       "upgradeRules": {
-        "fromPlanIds": ["plan_free"],
-        "toPlanIds": ["plan_max", "plan_business"],
-        "rules": ["立即生效", "按差价补款"],
-        "selfServiceEnabled": true
+        "fromPlanIds": [],
+        "toPlanIds": [],
+        "rules": ["默认开通"],
+        "selfServiceEnabled": false
       },
       "status": "active",
       "isRecommended": true,
-      "sortOrder": 20,
+      "sortOrder": 10,
       "prices": [
         {
-          "id": "plan_price_pro_monthly_cny",
-          "planId": "plan_pro",
-          "billingPeriod": "monthly",
+          "id": "plan_price_default_free_cny",
+          "planId": "plan_default",
+          "billingPeriod": "free",
           "currency": "CNY",
-          "amountCents": 9900,
+          "amountCents": 0,
           "discountLabel": null,
           "isEnabled": true,
           "createdAt": "2026-06-12T00:00:00+00:00",
@@ -450,13 +447,13 @@ Response `200`:
         }
       ],
       "entitlements": {
-        "id": "plan_entitlement_pro",
-        "planId": "plan_pro",
-        "monthlyQuestionLimit": 1000,
-        "monthlyTokenLimit": 2000000,
+        "id": "plan_entitlement_default",
+        "planId": "plan_default",
+        "monthlyQuestionLimit": 100,
+        "monthlyTokenLimit": 100000,
         "seatLimit": 1,
         "singleTurnTokenLimit": null,
-        "modelTiers": ["core", "enhanced"],
+        "modelTiers": ["core"],
         "features": {
           "teamManagement": false,
           "apiAccess": false,
@@ -465,7 +462,7 @@ Response `200`:
         "createdAt": "2026-06-12T00:00:00+00:00",
         "updatedAt": "2026-06-12T00:00:00+00:00"
       },
-      "expertIds": [],
+      "expertIds": ["expert_default"],
       "createdAt": "2026-06-12T00:00:00+00:00",
       "updatedAt": "2026-06-12T00:00:00+00:00"
     }
@@ -476,7 +473,7 @@ Response `200`:
 ## GET /current-subscription
 
 Return the active tenant subscription and current plan configuration. If the active tenant has no
-subscription, the backend creates a default `free` subscription.
+subscription, the backend creates a default `default` plan subscription.
 
 Response `200`:
 
@@ -485,7 +482,7 @@ Response `200`:
   "subscription": {
     "id": "tenant_subscription_123",
     "tenantId": "tenant_123",
-    "planId": "plan_free",
+    "planId": "plan_default",
     "status": "active",
     "billingPeriod": "free",
     "currentPeriodStart": "2026-06-12T00:00:00+00:00",
@@ -495,29 +492,29 @@ Response `200`:
     "updatedAt": "2026-06-12T00:00:00+00:00"
   },
   "plan": {
-    "id": "plan_free",
-    "code": "free",
-    "name": "免费版",
+    "id": "plan_default",
+    "code": "default",
+    "name": "默认套餐",
     "level": 1,
-    "description": "入门级运营助手，适合首次体验专家问答能力。",
-    "typeLabel": "免费版",
-    "subtitle": "入门级运营助手",
-    "badgeLabel": "入门体验",
-    "highlightItems": ["基础专家问答", "基础体验权限", "轻量运营辅助"],
+    "description": "系统默认套餐，包含默认专家和基础使用额度。",
+    "typeLabel": "默认套餐",
+    "subtitle": "基础默认能力",
+    "badgeLabel": "默认",
+    "highlightItems": ["默认专家访问", "基础问答额度"],
     "upgradeRules": {
       "fromPlanIds": [],
-      "toPlanIds": ["plan_pro", "plan_max", "plan_business"],
-      "rules": ["立即生效"],
-      "selfServiceEnabled": true
+      "toPlanIds": [],
+      "rules": ["默认开通"],
+      "selfServiceEnabled": false
     },
     "status": "active",
-    "isRecommended": false,
+    "isRecommended": true,
     "sortOrder": 10,
     "subscriptionCount": 1,
     "prices": [],
     "entitlements": {
-      "id": "plan_entitlement_free",
-      "planId": "plan_free",
+      "id": "plan_entitlement_default",
+      "planId": "plan_default",
       "monthlyQuestionLimit": 100,
       "monthlyTokenLimit": 100000,
       "seatLimit": 1,
@@ -531,7 +528,7 @@ Response `200`:
       "createdAt": "2026-06-12T00:00:00+00:00",
       "updatedAt": "2026-06-12T00:00:00+00:00"
     },
-    "expertIds": [],
+    "expertIds": ["expert_default"],
     "createdAt": "2026-06-12T00:00:00+00:00",
     "updatedAt": "2026-06-12T00:00:00+00:00"
   }
@@ -542,5 +539,5 @@ Errors:
 
 ```text
 400 TENANT_REQUIRED
-500 FREE_PLAN_MISSING
+500 DEFAULT_PLAN_MISSING
 ```

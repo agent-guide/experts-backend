@@ -22,7 +22,7 @@ class SubscriptionService:
 
         subscription = self.repo.get_current(tenant_id)
         if subscription is None:
-            subscription = self._create_default_free_subscription(tenant_id)
+            subscription = self._create_default_subscription(tenant_id)
 
         plan = self.plan_repo.get(subscription.planId)
         if not plan:
@@ -31,10 +31,10 @@ class SubscriptionService:
         self.connection.commit()
         return CurrentSubscriptionResponse(subscription=subscription, plan=plan)
 
-    def _create_default_free_subscription(self, tenant_id: str):
-        plan = self.plan_repo.get_by_code("free")
+    def _create_default_subscription(self, tenant_id: str):
+        plan = self.plan_repo.get_by_code("default")
         if not plan:
-            raise ApiError(500, "FREE_PLAN_MISSING", "Free plan is not configured")
+            raise ApiError(500, "DEFAULT_PLAN_MISSING", "Default plan is not configured")
 
         now = _now_iso()
         subscription_id = f"tenant_subscription_{uuid4().hex}"

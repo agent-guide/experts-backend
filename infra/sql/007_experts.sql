@@ -48,3 +48,29 @@ create index if not exists idx_expert_skills_skill
 
 create index if not exists idx_expert_knowledge_bases_kb
   on expert_knowledge_bases (knowledge_base_id);
+
+insert into expert_categories (id, name, description)
+values ('expert_category_default', '默认分类', '系统默认专家分类')
+on conflict (name) do nothing;
+
+insert into experts (
+  id,
+  category_id,
+  name,
+  ability_intro,
+  tags,
+  status,
+  guide_questions,
+  summon_button_text
+)
+values (
+  'expert_default',
+  'expert_category_default',
+  '默认专家',
+  '系统默认专家，用于初始化套餐访问能力。',
+  '["默认"]'::jsonb,
+  'published',
+  '["我可以咨询哪些问题？"]'::jsonb,
+  '咨询默认专家'
+)
+on conflict (id) do nothing;

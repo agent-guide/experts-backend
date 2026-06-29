@@ -183,8 +183,8 @@ class PlanService:
 
     def delete(self, plan_id: str) -> None:
         plan = self.get(plan_id)
-        if plan.code == "free":
-            raise ApiError(409, "PLAN_FREE_DELETE_FORBIDDEN", "Free plan cannot be deleted")
+        if plan.code == "default":
+            raise ApiError(409, "PLAN_DEFAULT_DELETE_FORBIDDEN", "Default plan cannot be deleted")
         if self.repo.has_subscriptions(plan_id):
             raise ApiError(409, "PLAN_HAS_SUBSCRIPTIONS", "Plan has subscriptions")
         if self.repo.delete(plan_id) <= 0:
@@ -202,6 +202,9 @@ def _base_code_for_type_label(type_label: str) -> str:
         "免费版": "free",
         "免费": "free",
         "free": "free",
+        "默认套餐": "default",
+        "默认": "default",
+        "default": "default",
         "个人付费": "pro",
         "专业版": "pro",
         "pro": "pro",

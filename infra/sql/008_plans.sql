@@ -53,6 +53,12 @@ alter table plans add constraint plans_level_check check (level >= 1 and level <
 alter table plans drop constraint if exists plans_sort_order_check;
 alter table plans add constraint plans_sort_order_check check (sort_order >= 0 and sort_order <= 9999);
 
+delete from plans
+where id in ('plan_free', 'plan_pro', 'plan_max', 'plan_business')
+  and not exists (
+    select 1 from subscriptions s where s.plan_id = plans.id
+  );
+
 insert into plans (
   id,
   code,
@@ -73,75 +79,21 @@ insert into plans (
 )
 values
   (
-    'plan_free',
-    'free',
-    '免费版',
+    'plan_default',
+    'default',
+    '默认套餐',
     1,
-    '入门级运营助手，适合首次体验专家问答能力。',
-    '免费版',
-    '入门级运营助手',
-    '入门体验',
-    '["基础专家问答", "基础体验权限", "轻量运营辅助"]'::jsonb,
-    '{"fromPlanIds": [], "toPlanIds": ["plan_pro", "plan_max", "plan_business"], "rules": ["立即生效"], "selfServiceEnabled": true}'::jsonb,
-    '[{"id": "plan_price_free_free_cny", "planId": "plan_free", "billingPeriod": "free", "currency": "CNY", "amountCents": 0, "discountLabel": null, "isEnabled": true}]'::jsonb,
-    '{"id": "plan_entitlement_free", "planId": "plan_free", "monthlyQuestionLimit": 100, "monthlyTokenLimit": 100000, "seatLimit": 1, "singleTurnTokenLimit": null, "modelTiers": ["core"], "features": {"teamManagement": false, "apiAccess": false, "privateDeployment": false}}'::jsonb,
-    '[]'::jsonb,
-    'active',
-    false,
-    10
-  ),
-  (
-    'plan_pro',
-    'pro',
-    '专业版',
-    2,
-    '进阶级效率专家，解锁更多专业专家和更高月度额度。',
-    '个人付费',
-    '进阶级效率专家',
-    '最受欢迎',
-    '["深度评论拆解", "精准申诉顾问", "地道客服话术", "高频使用权限"]'::jsonb,
-    '{"fromPlanIds": ["plan_free"], "toPlanIds": ["plan_max", "plan_business"], "rules": ["立即生效", "按差价补款"], "selfServiceEnabled": true}'::jsonb,
-    '[{"id": "plan_price_pro_monthly_cny", "planId": "plan_pro", "billingPeriod": "monthly", "currency": "CNY", "amountCents": 9900, "discountLabel": null, "isEnabled": true}, {"id": "plan_price_pro_yearly_cny", "planId": "plan_pro", "billingPeriod": "yearly", "currency": "CNY", "amountCents": 99900, "discountLabel": "年付优惠", "isEnabled": true}]'::jsonb,
-    '{"id": "plan_entitlement_pro", "planId": "plan_pro", "monthlyQuestionLimit": 1000, "monthlyTokenLimit": 2000000, "seatLimit": 1, "singleTurnTokenLimit": null, "modelTiers": ["core", "enhanced"], "features": {"teamManagement": false, "apiAccess": false, "privateDeployment": false}}'::jsonb,
-    '[]'::jsonb,
+    '系统默认套餐，包含默认专家和基础使用额度。',
+    '默认套餐',
+    '基础默认能力',
+    '默认',
+    '["默认专家访问", "基础问答额度"]'::jsonb,
+    '{"fromPlanIds": [], "toPlanIds": [], "rules": ["默认开通"], "selfServiceEnabled": false}'::jsonb,
+    '[{"id": "plan_price_default_free_cny", "planId": "plan_default", "billingPeriod": "free", "currency": "CNY", "amountCents": 0, "discountLabel": null, "isEnabled": true}]'::jsonb,
+    '{"id": "plan_entitlement_default", "planId": "plan_default", "monthlyQuestionLimit": 100, "monthlyTokenLimit": 100000, "seatLimit": 1, "singleTurnTokenLimit": null, "modelTiers": ["core"], "features": {"teamManagement": false, "apiAccess": false, "privateDeployment": false}}'::jsonb,
+    '["expert_default"]'::jsonb,
     'active',
     true,
-    20
-  ),
-  (
-    'plan_max',
-    'max',
-    'Max 版',
-    3,
-    '战略级决策顾问，支持高级专家、更强模型和更高使用额度。',
-    '个人付费',
-    '战略级决策顾问',
-    '高频决策',
-    '["高级专家访问", "高频问答额度", "高级模型能力", "复杂任务处理"]'::jsonb,
-    '{"fromPlanIds": ["plan_free", "plan_pro"], "toPlanIds": ["plan_business"], "rules": ["立即生效", "按差价补款"], "selfServiceEnabled": true}'::jsonb,
-    '[{"id": "plan_price_max_monthly_cny", "planId": "plan_max", "billingPeriod": "monthly", "currency": "CNY", "amountCents": 29900, "discountLabel": null, "isEnabled": true}, {"id": "plan_price_max_yearly_cny", "planId": "plan_max", "billingPeriod": "yearly", "currency": "CNY", "amountCents": 299900, "discountLabel": "年付优惠", "isEnabled": true}]'::jsonb,
-    '{"id": "plan_entitlement_max", "planId": "plan_max", "monthlyQuestionLimit": 5000, "monthlyTokenLimit": 10000000, "seatLimit": 1, "singleTurnTokenLimit": null, "modelTiers": ["core", "enhanced", "advanced"], "features": {"teamManagement": true, "apiAccess": true, "privateDeployment": false}}'::jsonb,
-    '[]'::jsonb,
-    'active',
-    false,
-    30
-  ),
-  (
-    'plan_business',
-    'business',
-    'Business 版',
-    4,
-    '团队协作与企业级能力，适合多人席位和组织管理。',
-    '团队',
-    '团队协作与企业级能力',
-    '团队协作',
-    '["多人席位", "团队协作", "企业定制专家", "组织级管理"]'::jsonb,
-    '{"fromPlanIds": ["plan_free", "plan_pro", "plan_max"], "toPlanIds": [], "rules": ["联系销售"], "selfServiceEnabled": false}'::jsonb,
-    '[{"id": "plan_price_business_sales_cny", "planId": "plan_business", "billingPeriod": "sales", "currency": "CNY", "amountCents": 0, "discountLabel": "联系销售", "isEnabled": true}]'::jsonb,
-    '{"id": "plan_entitlement_business", "planId": "plan_business", "monthlyQuestionLimit": 50000, "monthlyTokenLimit": 100000000, "seatLimit": 5, "singleTurnTokenLimit": null, "modelTiers": ["core", "enhanced", "advanced"], "features": {"teamManagement": true, "apiAccess": true, "privateDeployment": true}}'::jsonb,
-    '[]'::jsonb,
-    'active',
-    false,
-    40
+    10
   )
 on conflict (code) do nothing;

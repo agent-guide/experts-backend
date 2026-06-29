@@ -92,6 +92,10 @@ def test_sqlite_migration_uses_infra_sql(tmp_path: Path) -> None:
         chat_session_columns = {
             row["name"] for row in connection.execute("pragma table_info(chat_sessions)").fetchall()
         }
+        plans = connection.execute("select id, code, name, expert_ids from plans").fetchall()
+        default_expert = connection.execute(
+            "select id, name, status from experts where id = 'expert_default'"
+        ).fetchone()
 
     assert "tenants" in tables
     assert "knowledge_bases" in tables
@@ -115,6 +119,13 @@ def test_sqlite_migration_uses_infra_sql(tmp_path: Path) -> None:
     assert "plan_entitlements" not in tables
     assert "plan_experts" not in tables
     assert "subscription_entitlement_snapshots" not in tables
+    assert [(row["id"], row["code"], row["name"]) for row in plans] == [
+        ("plan_default", "default", "默认套餐")
+    ]
+    assert plans[0]["expert_ids"] == '["expert_default"]'
+    assert default_expert is not None
+    assert default_expert["name"] == "默认专家"
+    assert default_expert["status"] == "published"
 
 
 def test_app_startup_migrates_sqlite(tmp_path: Path) -> None:
@@ -1026,11 +1037,11 @@ def test_managed_users_include_subscription_usage_filters_and_detail(tmp_path: P
                   cancel_at_period_end
                 )
                 values (
-                  'sub_tenant_user_pro',
+                  'sub_tenant_user_default',
                   'tenant_default',
-                  'plan_pro',
+                  'plan_default',
                   'active',
-                  'monthly',
+                  'free',
                   CURRENT_TIMESTAMP,
                   datetime('now', '+9 days'),
                   false
@@ -1105,9 +1116,9 @@ def test_managed_users_include_subscription_usage_filters_and_detail(tmp_path: P
             "/api/v1/users",
             headers=admin_headers,
             params={
-                "search": "专业版",
+                "search": "默认套餐",
                 "subscriptionStatus": "即将到期",
-                "subscriptionType": "专业版 · 月付",
+                "subscriptionType": "默认套餐 · 免费",
                 "sort": "monthlyUsage",
                 "page": 1,
                 "pageSize": 10,
@@ -1120,16 +1131,16 @@ def test_managed_users_include_subscription_usage_filters_and_detail(tmp_path: P
         assert body["pageSize"] == 10
         item = body["items"][0]
         assert item["id"] == "tenant_user"
-        assert item["currentSubscription"]["subscriptionId"] == "sub_tenant_user_pro"
-        assert item["currentSubscription"]["planName"] == "专业版"
-        assert item["currentSubscription"]["billingPeriod"] == "monthly"
+        assert item["currentSubscription"]["subscriptionId"] == "sub_tenant_user_default"
+        assert item["currentSubscription"]["planName"] == "默认套餐"
+        assert item["currentSubscription"]["billingPeriod"] == "free"
         assert item["currentSubscription"]["status"] == "expiring_soon"
         assert item["currentSubscription"]["statusLabel"] == "即将到期"
-        assert item["currentSubscription"]["priceLabel"] == "¥99 / 月"
+        assert item["currentSubscription"]["priceLabel"] == "免费"
         assert item["monthlyUsage"]["questionUsed"] == 2
-        assert item["monthlyUsage"]["questionLimit"] == 1000
+        assert item["monthlyUsage"]["questionLimit"] == 100
         assert item["monthlyUsage"]["tokenUsed"] == 0
-        assert item["monthlyUsage"]["tokenLimit"] == 2000000
+        assert item["monthlyUsage"]["tokenLimit"] == 100000
         assert item["monthlyUsage"]["status"] == "expiring_soon"
         assert item["orderSummary"] == {
             "totalAmountCents": 0,
@@ -1142,7 +1153,7 @@ def test_managed_users_include_subscription_usage_filters_and_detail(tmp_path: P
         assert detail.status_code == 200
         detail_body = detail.json()
         assert detail_body["currentSubscription"]["tenantId"] == "tenant_default"
-        assert detail_body["monthlyUsage"]["questionUsagePercent"] == 0.2
+        assert detail_body["monthlyUsage"]["questionUsagePercent"] == 2
         assert detail_body["tenants"][0]["id"] == "tenant_default"
 
 
@@ -1187,8 +1198,8 @@ def test_platform_tenant_management_crud_members_and_guards(tmp_path: Path) -> N
         assert tenant["ownerUserName"] == "Owner User"
         assert tenant["ownerUserEmail"] == "owner@example.com"
         assert tenant["memberCount"] == 1
-        assert tenant["currentSubscription"]["planCode"] == "free"
-        assert tenant["currentPlan"]["code"] == "free"
+        assert tenant["currentSubscription"]["planCode"] == "default"
+        assert tenant["currentPlan"]["code"] == "default"
         assert tenant["monthlyUsage"]["questionUsed"] == 0
 
         listed = client.get("/api/v1/tenants", headers=admin_headers)
@@ -1266,12 +1277,12 @@ def test_platform_tenant_management_crud_members_and_guards(tmp_path: Path) -> N
         subscription = client.patch(
             f"/api/v1/tenants/{tenant_id}/subscription",
             headers=admin_headers,
-            json={"planId": "plan_pro", "billingPeriod": "monthly"},
+            json={"planId": "plan_default", "billingPeriod": "free"},
         )
         assert subscription.status_code == 200, subscription.text
-        assert subscription.json()["currentSubscription"]["planCode"] == "pro"
-        assert subscription.json()["currentSubscription"]["billingPeriod"] == "monthly"
-        assert subscription.json()["currentPlan"]["id"] == "plan_pro"
+        assert subscription.json()["currentSubscription"]["planCode"] == "default"
+        assert subscription.json()["currentSubscription"]["billingPeriod"] == "free"
+        assert subscription.json()["currentPlan"]["id"] == "plan_default"
 
         duplicate = client.post(
             "/api/v1/tenants",
@@ -1339,11 +1350,11 @@ def test_tenant_management_subscription_usage_filters_and_personal_guards(
                   cancel_at_period_end
                 )
                 values (
-                  'sub_tenant_default_pro',
+                  'sub_tenant_default_default',
                   'tenant_default',
-                  'plan_pro',
+                  'plan_default',
                   'active',
-                  'monthly',
+                  'free',
                   CURRENT_TIMESTAMP,
                   datetime('now', '+9 days'),
                   false
@@ -1420,7 +1431,7 @@ def test_tenant_management_subscription_usage_filters_and_personal_guards(
             params={
                 "search": "default",
                 "type": "personal",
-                "subscriptionType": "monthly",
+                "subscriptionType": "free",
                 "subscriptionStatus": "expiring_soon",
                 "sort": "monthlyUsage",
                 "page": 1,
@@ -1434,13 +1445,13 @@ def test_tenant_management_subscription_usage_filters_and_personal_guards(
         assert item["id"] == "tenant_default"
         assert item["type"] == "personal"
         assert item["ownerUserEmail"] == "tenant@example.com"
-        assert item["currentSubscription"]["subscriptionId"] == "sub_tenant_default_pro"
+        assert item["currentSubscription"]["subscriptionId"] == "sub_tenant_default_default"
         assert item["currentSubscription"]["status"] == "expiring_soon"
-        assert item["currentPlan"]["code"] == "pro"
+        assert item["currentPlan"]["code"] == "default"
         assert item["monthlyUsage"]["questionUsed"] == 2
-        assert item["monthlyUsage"]["questionLimit"] == 1000
+        assert item["monthlyUsage"]["questionLimit"] == 100
         assert item["monthlyUsage"]["tokenUsed"] == 0
-        assert item["monthlyUsage"]["tokenLimit"] == 2000000
+        assert item["monthlyUsage"]["tokenLimit"] == 100000
         assert item["orderSummary"] == {
             "totalAmountCents": 0,
             "orderCount": 0,
@@ -1856,8 +1867,8 @@ def test_expert_stats_summary_counts_statuses(tmp_path: Path) -> None:
         response = client.get("/api/v1/experts/stats/summary", headers=admin_headers)
         assert response.status_code == 200
         assert response.json() == {
-            "total": 4,
-            "published": 2,
+            "total": 5,
+            "published": 3,
             "draft": 1,
             "unlisted": 1,
         }
@@ -1992,24 +2003,19 @@ def test_plan_phase1_admin_market_and_current_subscription(tmp_path: Path) -> No
         seeded = client.get("/api/v1/plans", headers=admin_headers)
         assert seeded.status_code == 200, seeded.text
         seeded_codes = [item["code"] for item in seeded.json()["items"]]
-        assert seeded_codes[:4] == ["free", "pro", "max", "business"]
-        free_plan = next(item for item in seeded.json()["items"] if item["code"] == "free")
-        pro_plan = next(item for item in seeded.json()["items"] if item["code"] == "pro")
-        assert free_plan["name"] == "免费版"
-        assert free_plan["description"] == "入门级运营助手，适合首次体验专家问答能力。"
-        assert free_plan["typeLabel"] == "免费版"
-        assert free_plan["subtitle"] == "入门级运营助手"
-        assert free_plan["badgeLabel"] == "入门体验"
-        assert "基础专家问答" in free_plan["highlightItems"]
-        assert pro_plan["name"] == "专业版"
-        assert pro_plan["description"] == "进阶级效率专家，解锁更多专业专家和更高月度额度。"
-        assert pro_plan["typeLabel"] == "个人付费"
-        assert pro_plan["subtitle"] == "进阶级效率专家"
-        assert pro_plan["badgeLabel"] == "最受欢迎"
-        assert "深度评论拆解" in pro_plan["highlightItems"]
-        assert pro_plan["upgradeRules"]["fromPlanIds"] == ["plan_free"]
-        assert pro_plan["upgradeRules"]["selfServiceEnabled"] is True
-        assert pro_plan["isRecommended"] is True
+        assert seeded_codes == ["default"]
+        default_plan = seeded.json()["items"][0]
+        assert default_plan["id"] == "plan_default"
+        assert default_plan["name"] == "默认套餐"
+        assert default_plan["description"] == "系统默认套餐，包含默认专家和基础使用额度。"
+        assert default_plan["typeLabel"] == "默认套餐"
+        assert default_plan["subtitle"] == "基础默认能力"
+        assert default_plan["badgeLabel"] == "默认"
+        assert "默认专家访问" in default_plan["highlightItems"]
+        assert default_plan["upgradeRules"]["fromPlanIds"] == []
+        assert default_plan["upgradeRules"]["selfServiceEnabled"] is False
+        assert default_plan["isRecommended"] is True
+        assert default_plan["expertIds"] == ["expert_default"]
 
         operator_create = client.post(
             "/api/v1/plans",
@@ -2085,7 +2091,7 @@ def test_plan_phase1_admin_market_and_current_subscription(tmp_path: Path) -> No
                 "badgeLabel": "团队版",
                 "highlightItems": ["多人协作", "组织管理"],
                 "upgradeRules": {
-                    "fromPlanIds": ["plan_pro"],
+                    "fromPlanIds": ["plan_default"],
                     "toPlanIds": [],
                     "rules": ["联系销售"],
                     "selfServiceEnabled": False,
@@ -2096,7 +2102,7 @@ def test_plan_phase1_admin_market_and_current_subscription(tmp_path: Path) -> No
         )
         assert created.status_code == 201, created.text
         plan = created.json()
-        assert plan["code"] == "business_2"
+        assert plan["code"] == "business"
         assert plan["typeLabel"] == "团队"
         assert plan["subtitle"] == "团队协作"
         assert plan["badgeLabel"] == "团队版"
@@ -2140,9 +2146,9 @@ def test_plan_phase1_admin_market_and_current_subscription(tmp_path: Path) -> No
                   (
                     'plan_sub_active_1',
                     'plan_sub_tenant_1',
-                    'plan_pro',
+                    'plan_default',
                     'active',
-                    'monthly',
+                    'free',
                     CURRENT_TIMESTAMP,
                     datetime('now', '+30 days'),
                     false
@@ -2150,9 +2156,9 @@ def test_plan_phase1_admin_market_and_current_subscription(tmp_path: Path) -> No
                   (
                     'plan_sub_trialing_2',
                     'plan_sub_tenant_2',
-                    'plan_pro',
+                    'plan_default',
                     'trialing',
-                    'monthly',
+                    'free',
                     CURRENT_TIMESTAMP,
                     datetime('now', '+14 days'),
                     false
@@ -2160,9 +2166,9 @@ def test_plan_phase1_admin_market_and_current_subscription(tmp_path: Path) -> No
                   (
                     'plan_sub_cancelled_ignored',
                     'plan_sub_tenant_cancelled',
-                    'plan_pro',
+                    'plan_default',
                     'cancelled',
-                    'monthly',
+                    'free',
                     CURRENT_TIMESTAMP,
                     datetime('now', '+30 days'),
                     false
@@ -2173,13 +2179,13 @@ def test_plan_phase1_admin_market_and_current_subscription(tmp_path: Path) -> No
 
         after_recommend = client.get("/api/v1/plans", headers=admin_headers)
         by_code = {item["code"]: item for item in after_recommend.json()["items"]}
-        assert by_code["pro"]["isRecommended"] is False
-        assert by_code["pro"]["subscriptionCount"] == 2
+        assert by_code["default"]["isRecommended"] is False
+        assert by_code["default"]["subscriptionCount"] == 2
         assert by_code["enterprise"]["isRecommended"] is True
 
-        pro_detail = client.get("/api/v1/plans/plan_pro", headers=admin_headers)
-        assert pro_detail.status_code == 200
-        assert pro_detail.json()["subscriptionCount"] == 2
+        default_detail = client.get("/api/v1/plans/plan_default", headers=admin_headers)
+        assert default_detail.status_code == 200
+        assert default_detail.json()["subscriptionCount"] == 2
 
         priced = client.put(
             f"/api/v1/plans/{plan['id']}/prices",
@@ -2232,14 +2238,14 @@ def test_plan_phase1_admin_market_and_current_subscription(tmp_path: Path) -> No
         current = client.get("/api/v1/plan-market/current-subscription", headers=tenant_headers)
         assert current.status_code == 200, current.text
         body = current.json()
-        assert body["subscription"]["planId"] == free_plan["id"]
-        assert body["plan"]["code"] == "free"
-        assert body["plan"]["name"] == "免费版"
+        assert body["subscription"]["planId"] == default_plan["id"]
+        assert body["plan"]["code"] == "default"
+        assert body["plan"]["name"] == "默认套餐"
         assert body["plan"]["entitlements"]["monthlyQuestionLimit"] == 100
-        assert body["plan"]["expertIds"] == []
+        assert body["plan"]["expertIds"] == ["expert_default"]
 
         client.put(
-            f"/api/v1/plans/{free_plan['id']}/entitlements",
+            f"/api/v1/plans/{default_plan['id']}/entitlements",
             headers=admin_headers,
             json={
                 "monthlyQuestionLimit": 999,
@@ -2255,8 +2261,8 @@ def test_plan_phase1_admin_market_and_current_subscription(tmp_path: Path) -> No
         assert changed_current.status_code == 200
         assert changed_current.json()["plan"]["entitlements"]["monthlyQuestionLimit"] == 999
 
-        delete_free = client.delete(f"/api/v1/plans/{free_plan['id']}", headers=admin_headers)
-        assert delete_free.status_code == 409
+        delete_default = client.delete(f"/api/v1/plans/{default_plan['id']}", headers=admin_headers)
+        assert delete_default.status_code == 409
 
 
 def test_expert_market_requires_sign_in_and_only_lists_published_experts(tmp_path: Path) -> None:
@@ -2322,12 +2328,20 @@ def test_expert_market_requires_sign_in_and_only_lists_published_experts(tmp_pat
                 "id": "expert_cat_ops",
                 "name": "Operations",
                 "description": "Operations experts",
-            }
+            },
+            {
+                "id": "expert_category_default",
+                "name": "默认分类",
+                "description": "系统默认专家分类",
+            },
         ]
 
         experts = client.get("/api/v1/expert-market/experts", headers=headers)
         assert experts.status_code == 200
-        assert [item["id"] for item in experts.json()["items"]] == ["expert_listing"]
+        assert {item["id"] for item in experts.json()["items"]} == {
+            "expert_default",
+            "expert_listing",
+        }
 
         by_category = client.get(
             "/api/v1/expert-market/experts",
