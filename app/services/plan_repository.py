@@ -10,7 +10,7 @@ from app.services._sql import execute, fetch_all, fetch_one, json_param, rowcoun
 
 
 class PlanRepository:
-    """Raw SQL data access for plans, prices, entitlements, and plan groups."""
+    """Raw SQL data access for flattened plan configuration."""
 
     def __init__(self, connection: DatabaseConnection) -> None:
         self.connection = connection
@@ -21,7 +21,7 @@ class PlanRepository:
             self.connection,
             f"""
             select id, code, name, level, description, type_label, subtitle, badge_label,
-                   highlight_items, upgrade_rules, status, is_recommended,
+                   highlight_items, upgrade_rules, prices, entitlements, expert_ids, status, is_recommended,
                    sort_order, created_at, updated_at
             from plans
             {where}
@@ -35,7 +35,7 @@ class PlanRepository:
             self.connection,
             """
             select id, code, name, level, description, type_label, subtitle, badge_label,
-                   highlight_items, upgrade_rules, status, is_recommended,
+                   highlight_items, upgrade_rules, prices, entitlements, expert_ids, status, is_recommended,
                    sort_order, created_at, updated_at
             from plans
             where id = ?
@@ -51,7 +51,7 @@ class PlanRepository:
             self.connection,
             """
             select id, code, name, level, description, type_label, subtitle, badge_label,
-                   highlight_items, upgrade_rules, status, is_recommended,
+                   highlight_items, upgrade_rules, prices, entitlements, expert_ids, status, is_recommended,
                    sort_order, created_at, updated_at
             from plans
             where code = ?
@@ -92,9 +92,10 @@ class PlanRepository:
             """
             insert into plans (
               id, code, name, level, description, type_label, subtitle, badge_label,
-              highlight_items, upgrade_rules, status, is_recommended, sort_order
+              highlight_items, upgrade_rules, prices, entitlements, expert_ids,
+              status, is_recommended, sort_order
             )
-            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 plan_id,
@@ -107,6 +108,9 @@ class PlanRepository:
                 badge_label,
                 json_param(self.connection, highlight_items),
                 json_param(self.connection, upgrade_rules),
+                json_param(self.connection, []),
+                json_param(self.connection, None),
+                json_param(self.connection, []),
                 status,
                 is_recommended,
                 sort_order,
@@ -187,33 +191,33 @@ class PlanRepository:
     def has_subscriptions(self, plan_id: str) -> bool:
         row = fetch_one(
             self.connection,
-            "select id from tenant_subscriptions where plan_id = ? limit 1",
+            "select id from subscriptions where plan_id = ? limit 1",
             (plan_id,),
         )
         return row is not None
 
     def replace_prices(self, plan_id: str, prices: list[dict[str, Any]]) -> None:
-        execute(self.connection, "delete from plan_prices where plan_id = ?", (plan_id,))
-        for price in prices:
-            execute(
-                self.connection,
-                """
-                insert into plan_prices (
-                  id, plan_id, billing_period, currency, amount_cents,
-                  discount_label, is_enabled
-                )
-                values (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    f"plan_price_{uuid4().hex}",
-                    plan_id,
-                    price["billing_period"],
-                    price["currency"],
-                    price["amount_cents"],
-                    price["discount_label"],
-                    price["is_enabled"],
-                ),
-            )
+        rows = [
+            {
+                "id": f"plan_price_{uuid4().hex}",
+                "planId": plan_id,
+                "billingPeriod": price["billing_period"],
+                "currency": price["currency"],
+                "amountCents": price["amount_cents"],
+                "discountLabel": price["discount_label"],
+                "isEnabled": price["is_enabled"],
+            }
+            for price in prices
+        ]
+        execute(
+            self.connection,
+            """
+            update plans
+            set prices = ?, updated_at = CURRENT_TIMESTAMP
+            where id = ?
+            """,
+            (json_param(self.connection, rows), plan_id),
+        )
 
     def replace_entitlements(
         self,
@@ -226,25 +230,28 @@ class PlanRepository:
         model_tiers: list[str],
         features: dict[str, Any],
     ) -> None:
-        execute(self.connection, "delete from plan_entitlements where plan_id = ?", (plan_id,))
         execute(
             self.connection,
             """
-            insert into plan_entitlements (
-              id, plan_id, monthly_question_limit, monthly_token_limit, seat_limit,
-              single_turn_token_limit, model_tiers, features
-            )
-            values (?, ?, ?, ?, ?, ?, ?, ?)
+            update plans
+            set entitlements = ?, updated_at = CURRENT_TIMESTAMP
+            where id = ?
             """,
             (
-                f"plan_entitlement_{uuid4().hex}",
+                json_param(
+                    self.connection,
+                    {
+                        "id": f"plan_entitlement_{uuid4().hex}",
+                        "planId": plan_id,
+                        "monthlyQuestionLimit": monthly_question_limit,
+                        "monthlyTokenLimit": monthly_token_limit,
+                        "seatLimit": seat_limit,
+                        "singleTurnTokenLimit": single_turn_token_limit,
+                        "modelTiers": model_tiers,
+                        "features": features,
+                    },
+                ),
                 plan_id,
-                monthly_question_limit,
-                monthly_token_limit,
-                seat_limit,
-                single_turn_token_limit,
-                json_param(self.connection, model_tiers),
-                json_param(self.connection, features),
             ),
         )
 
@@ -260,40 +267,21 @@ class PlanRepository:
         return {str(row["id"]) for row in rows}
 
     def replace_experts(self, plan_id: str, expert_ids: list[str]) -> None:
-        execute(self.connection, "delete from plan_experts where plan_id = ?", (plan_id,))
-        for expert_id in expert_ids:
-            execute(
-                self.connection,
-                "insert into plan_experts (id, plan_id, expert_id) values (?, ?, ?)",
-                (f"plan_expert_{uuid4().hex}", plan_id, expert_id),
-            )
-
-    def _expert_ids_by_plan(self, plan_ids: list[str]) -> dict[str, list[str]]:
-        if not plan_ids:
-            return {}
-        placeholders = ", ".join(["?"] * len(plan_ids))
-        rows = fetch_all(
+        execute(
             self.connection,
-            f"""
-            select plan_id, expert_id from plan_experts
-            where plan_id in ({placeholders})
-            order by plan_id, created_at asc, expert_id asc
+            """
+            update plans
+            set expert_ids = ?, updated_at = CURRENT_TIMESTAMP
+            where id = ?
             """,
-            plan_ids,
+            (json_param(self.connection, expert_ids), plan_id),
         )
-        grouped: dict[str, list[str]] = {}
-        for row in rows:
-            grouped.setdefault(str(row["plan_id"]), []).append(str(row["expert_id"]))
-        return grouped
 
     def _map_plans(
         self, rows: list[dict[str, Any]], *, enabled_prices_only: bool = False
     ) -> list[Plan]:
         plan_ids = [str(row["id"]) for row in rows]
-        prices = self._prices_by_plan(plan_ids, enabled_only=enabled_prices_only)
-        entitlements = self._entitlements_by_plan(plan_ids)
         subscription_counts = self._subscription_counts_by_plan(plan_ids)
-        expert_ids_by_plan = self._expert_ids_by_plan(plan_ids)
         return [
             Plan(
                 id=str(row["id"]),
@@ -310,9 +298,14 @@ class PlanRepository:
                 isRecommended=bool(row["is_recommended"]),
                 sortOrder=int(row["sort_order"]),
                 subscriptionCount=subscription_counts.get(str(row["id"]), 0),
-                prices=prices.get(str(row["id"]), []),
-                entitlements=entitlements.get(str(row["id"])),
-                expertIds=expert_ids_by_plan.get(str(row["id"]), []),
+                prices=[
+                    price for price in _map_prices(row["prices"], str(row["id"]), row["created_at"], row["updated_at"])
+                    if not enabled_prices_only or price.isEnabled
+                ],
+                entitlements=_map_entitlements_json(
+                    row["entitlements"], str(row["id"]), row["created_at"], row["updated_at"]
+                ),
+                expertIds=_json_list(row["expert_ids"]),
                 createdAt=str(row["created_at"]),
                 updatedAt=str(row["updated_at"]),
             )
@@ -327,7 +320,7 @@ class PlanRepository:
             self.connection,
             f"""
             select plan_id, count(*) as count
-            from tenant_subscriptions
+            from subscriptions
             where plan_id in ({placeholders})
               and status in ('active', 'trialing', 'past_due')
             group by plan_id
@@ -336,77 +329,63 @@ class PlanRepository:
         )
         return {str(row["plan_id"]): int(row["count"]) for row in rows}
 
-    def _prices_by_plan(
-        self, plan_ids: list[str], *, enabled_only: bool = False
-    ) -> dict[str, list[PlanPrice]]:
-        if not plan_ids:
-            return {}
-        placeholders = ", ".join(["?"] * len(plan_ids))
-        enabled_sql = "and is_enabled = true" if enabled_only else ""
-        rows = fetch_all(
-            self.connection,
-            f"""
-            select id, plan_id, billing_period, currency, amount_cents,
-                   discount_label, is_enabled, created_at, updated_at
-            from plan_prices
-            where plan_id in ({placeholders}) {enabled_sql}
-            order by plan_id, created_at asc, id asc
-            """,
-            plan_ids,
+def _map_prices(value: Any, plan_id: str, created_at: Any, updated_at: Any) -> list[PlanPrice]:
+    parsed = _json_any(value)
+    if not isinstance(parsed, list):
+        return []
+    prices: list[PlanPrice] = []
+    for index, item in enumerate(parsed):
+        if not isinstance(item, dict):
+            continue
+        prices.append(
+            PlanPrice(
+                id=str(item.get("id") or f"{plan_id}_price_{index}"),
+                planId=str(item.get("planId") or plan_id),
+                billingPeriod=str(item.get("billingPeriod") or "monthly"),
+                currency=str(item.get("currency") or "CNY"),
+                amountCents=int(item.get("amountCents") or 0),
+                discountLabel=(
+                    str(item["discountLabel"]) if item.get("discountLabel") is not None else None
+                ),
+                isEnabled=bool(item.get("isEnabled", True)),
+                createdAt=str(item.get("createdAt") or created_at),
+                updatedAt=str(item.get("updatedAt") or updated_at),
+            )
         )
-        grouped: dict[str, list[PlanPrice]] = {}
-        for row in rows:
-            grouped.setdefault(str(row["plan_id"]), []).append(_map_price(row))
-        return grouped
-
-    def _entitlements_by_plan(self, plan_ids: list[str]) -> dict[str, PlanEntitlements]:
-        if not plan_ids:
-            return {}
-        placeholders = ", ".join(["?"] * len(plan_ids))
-        rows = fetch_all(
-            self.connection,
-            f"""
-            select id, plan_id, monthly_question_limit, monthly_token_limit, seat_limit,
-                   single_turn_token_limit, model_tiers, features, created_at, updated_at
-            from plan_entitlements
-            where plan_id in ({placeholders})
-            """,
-            plan_ids,
-        )
-        return {str(row["plan_id"]): _map_entitlements(row) for row in rows}
+    return prices
 
 
-def _map_price(row: dict[str, Any]) -> PlanPrice:
-    return PlanPrice(
-        id=str(row["id"]),
-        planId=str(row["plan_id"]),
-        billingPeriod=str(row["billing_period"]),
-        currency=str(row["currency"]),
-        amountCents=int(row["amount_cents"]),
-        discountLabel=str(row["discount_label"]) if row["discount_label"] is not None else None,
-        isEnabled=bool(row["is_enabled"]),
-        createdAt=str(row["created_at"]),
-        updatedAt=str(row["updated_at"]),
-    )
-
-
-def _map_entitlements(row: dict[str, Any]) -> PlanEntitlements:
+def _map_entitlements_json(
+    value: Any, plan_id: str, created_at: Any, updated_at: Any
+) -> PlanEntitlements | None:
+    parsed = _json_any(value)
+    if not isinstance(parsed, dict):
+        return None
     return PlanEntitlements(
-        id=str(row["id"]),
-        planId=str(row["plan_id"]),
-        monthlyQuestionLimit=int(row["monthly_question_limit"]),
-        monthlyTokenLimit=int(row["monthly_token_limit"]),
-        seatLimit=int(row["seat_limit"]),
+        id=str(parsed.get("id") or f"plan_entitlement_{plan_id}"),
+        planId=str(parsed.get("planId") or plan_id),
+        monthlyQuestionLimit=int(parsed.get("monthlyQuestionLimit") or 0),
+        monthlyTokenLimit=int(parsed.get("monthlyTokenLimit") or 0),
+        seatLimit=int(parsed.get("seatLimit") or 1),
         singleTurnTokenLimit=(
-            int(row["single_turn_token_limit"])
-            if row["single_turn_token_limit"] is not None
+            int(parsed["singleTurnTokenLimit"])
+            if parsed.get("singleTurnTokenLimit") is not None
             else None
         ),
-        modelTiers=_json_list(row["model_tiers"]),
-        features=_json_dict(row["features"]),
-        createdAt=str(row["created_at"]),
-        updatedAt=str(row["updated_at"]),
+        modelTiers=_json_list(parsed.get("modelTiers")),
+        features=_json_dict(parsed.get("features")),
+        createdAt=str(parsed.get("createdAt") or created_at),
+        updatedAt=str(parsed.get("updatedAt") or updated_at),
     )
+
+
+def _json_any(value: Any) -> Any:
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return None
+    return value
 
 
 def _json_list(value: Any) -> list[str]:

@@ -1,5 +1,12 @@
 # 专家套餐第一阶段后端设计
 
+> Historical design note: this document describes the original normalized Phase 1 design.
+> The implemented subscription model has since been simplified: `plans` now stores prices,
+> entitlements, and expert ids directly as JSON; `subscriptions` points to `plans`;
+> `plan_prices`, `plan_entitlements`, `plan_experts`, expert group tables, and
+> `subscription_entitlement_snapshots` are obsolete. See `docs/api/plans.md` and
+> `infra/sql/008_plans.sql` for the current shape.
+
 ## 目标
 
 本文档定义专家系统套餐的第一阶段后端设计。第一阶段重点建设套餐配置、专家分组授权、租户订阅状态和权益快照。

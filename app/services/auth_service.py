@@ -36,6 +36,7 @@ from app.domain.auth import (
     platform_role_permissions,
     tenant_role_permissions,
 )
+from app.services.plan_pricing import select_price_snapshot
 
 
 @dataclass
@@ -797,39 +798,33 @@ class AuthService:
             connection,
             """
             select
-              ts.id,
-              ts.tenant_id,
-              ts.plan_id,
-              ts.status,
-              ts.billing_period,
-              ts.current_period_start,
-              ts.current_period_end,
-              ts.cancel_at_period_end,
+              s.id,
+              s.tenant_id,
+              s.plan_id,
+              s.status,
+              s.billing_period,
+              s.current_period_start,
+              s.current_period_end,
+              s.cancel_at_period_end,
               p.code as plan_code,
               p.name as plan_name,
+              p.prices,
               t.name as tenant_name,
-              ss.price_snapshot,
-              ss.entitlements_snapshot
+              p.entitlements,
+              p.expert_ids
             from tenant_members tm
             inner join tenants t on t.id = tm.tenant_id
-            inner join tenant_subscriptions ts on ts.tenant_id = t.id
-            inner join plans p on p.id = ts.plan_id
-            left join subscription_entitlement_snapshots ss on ss.id = (
-              select ss2.id
-              from subscription_entitlement_snapshots ss2
-              where ss2.subscription_id = ts.id
-              order by ss2.starts_at desc, ss2.created_at desc
-              limit 1
-            )
+            inner join subscriptions s on s.tenant_id = t.id
+            inner join plans p on p.id = s.plan_id
             where tm.user_id = ?
             order by
               case
-                when ts.status in ('active', 'trialing', 'past_due')
-                 and (ts.current_period_end is null or ts.current_period_end > CURRENT_TIMESTAMP)
+                when s.status in ('active', 'trialing', 'past_due')
+                 and (s.current_period_end is null or s.current_period_end > CURRENT_TIMESTAMP)
                 then 0 else 1
               end,
-              ts.current_period_start desc,
-              ts.created_at desc
+              s.current_period_start desc,
+              s.created_at desc
             limit 1
             """,
             (user_id,),
@@ -839,7 +834,9 @@ class AuthService:
         ends_at = str(row["current_period_end"]) if row["current_period_end"] is not None else None
         days_until_expiry = _days_until(ends_at)
         status = _subscription_status(str(row["status"]), ends_at)
-        price_snapshot = _json_dict(row["price_snapshot"])
+        price_snapshot = select_price_snapshot(
+            _json_list_dicts(row["prices"]), str(row["billing_period"])
+        )
         return UserSubscriptionSummary(
             subscriptionId=str(row["id"]),
             planId=str(row["plan_id"]),
@@ -907,15 +904,19 @@ class AuthService:
         row = _fetch_one(
             connection,
             """
-            select ss.entitlements_snapshot
-            from subscription_entitlement_snapshots ss
-            where ss.subscription_id = ?
-            order by ss.starts_at desc, ss.created_at desc
+            select p.entitlements, p.expert_ids
+            from subscriptions s
+            inner join plans p on p.id = s.plan_id
+            where s.id = ?
             limit 1
             """,
             (subscription.subscriptionId,),
         )
-        return _json_dict(row["entitlements_snapshot"]) if row else {}
+        if not row:
+            return {}
+        entitlements = _json_dict(row["entitlements"])
+        entitlements["expertIds"] = _json_list(row["expert_ids"])
+        return entitlements
 
     def _list_user_tenants(
         self, connection: DatabaseConnection, user_id: str
@@ -1149,6 +1150,28 @@ def _json_dict(value: Any) -> dict[str, Any]:
             return {}
         return parsed if isinstance(parsed, dict) else {}
     return {}
+
+
+def _json_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            return []
+    if isinstance(value, list):
+        return [str(item) for item in value if isinstance(item, str)]
+    return []
+
+
+def _json_list_dicts(value: Any) -> list[dict[str, Any]]:
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            return []
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, dict)]
+    return []
 
 
 def _days_until(value: str | None) -> int | None:

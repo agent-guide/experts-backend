@@ -114,19 +114,6 @@ class PlanListResponse(BaseModel):
     items: list[Plan]
 
 
-class SubscriptionEntitlementSnapshot(BaseModel):
-    id: str
-    subscriptionId: str
-    planCode: str
-    planName: str
-    billingPeriod: BillingPeriod
-    priceSnapshot: dict[str, Any] = Field(default_factory=dict)
-    entitlementsSnapshot: dict[str, Any] = Field(default_factory=dict)
-    startsAt: str
-    endsAt: str | None = None
-    createdAt: str
-
-
 class TenantSubscription(BaseModel):
     id: str
     tenantId: str
@@ -142,4 +129,4 @@ class TenantSubscription(BaseModel):
 
 class CurrentSubscriptionResponse(BaseModel):
     subscription: TenantSubscription
-    snapshot: SubscriptionEntitlementSnapshot
+    plan: Plan

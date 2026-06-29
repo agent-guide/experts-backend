@@ -74,7 +74,7 @@ token claims; they are derived server-side from the current role mapping.
 - [Knowledge Bases](./knowledge-bases.md) (platform-owned; minimal shape, single `status`)
 - [Documents](./documents.md) (nested under a knowledge base; shared object storage upload)
 - [Experts](./experts.md) (platform-owned expert categories, experts and expert groups)
-- [Plans](./plans.md) (plan configuration, plan market and current subscription snapshot)
+- [Plans](./plans.md) (plan configuration, plan market and current subscription)
 - [Build](./builds.md) (Phase 2 placeholder)
 - [Chat](./chat.md)
 - [Skills](./skills.md)

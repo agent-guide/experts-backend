@@ -140,7 +140,7 @@ Notes:
 - `monthlyUsage.questionUsed` is counted from this month's non-internal
   `chat_turns` for the selected subscription tenant.
 - `monthlyUsage.tokenUsed` is currently `0` because persisted token usage is not
-  available yet. `tokenLimit` comes from the subscription entitlement snapshot.
+  available yet. `tokenLimit` comes from the current plan entitlements.
 - `orderSummary` is a real empty summary until order/payment tables are added.
 - Current tenant membership roles are `admin` and `member`; the database does not
   yet model `owner` or `viewer` tenant roles.

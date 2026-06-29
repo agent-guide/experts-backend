@@ -109,11 +109,12 @@ def test_sqlite_migration_uses_infra_sql(tmp_path: Path) -> None:
     assert "expert_skills" in tables
     assert "expert_knowledge_bases" in tables
     assert "plans" in tables
-    assert "plan_prices" in tables
-    assert "plan_entitlements" in tables
-    assert "plan_experts" in tables
-    assert "tenant_subscriptions" in tables
-    assert "subscription_entitlement_snapshots" in tables
+    assert "subscriptions" in tables
+    assert "tenant_subscriptions" not in tables
+    assert "plan_prices" not in tables
+    assert "plan_entitlements" not in tables
+    assert "plan_experts" not in tables
+    assert "subscription_entitlement_snapshots" not in tables
 
 
 def test_app_startup_migrates_sqlite(tmp_path: Path) -> None:
@@ -1014,7 +1015,7 @@ def test_managed_users_include_subscription_usage_filters_and_detail(tmp_path: P
         with open_database_connection(settings) as connection:
             connection.execute(
                 """
-                insert into tenant_subscriptions (
+                insert into subscriptions (
                   id,
                   tenant_id,
                   plan_id,
@@ -1033,30 +1034,6 @@ def test_managed_users_include_subscription_usage_filters_and_detail(tmp_path: P
                   CURRENT_TIMESTAMP,
                   datetime('now', '+9 days'),
                   false
-                )
-                """
-            )
-            connection.execute(
-                """
-                insert into subscription_entitlement_snapshots (
-                  id,
-                  subscription_id,
-                  plan_code,
-                  plan_name,
-                  billing_period,
-                  price_snapshot,
-                  entitlements_snapshot,
-                  starts_at
-                )
-                values (
-                  'snap_tenant_user_pro',
-                  'sub_tenant_user_pro',
-                  'pro',
-                  '专业版',
-                  'monthly',
-                  '{"billingPeriod":"monthly","currency":"CNY","amountCents":9900}',
-                  '{"monthlyQuestionLimit":100,"monthlyTokenLimit":50000}',
-                  CURRENT_TIMESTAMP
                 )
                 """
             )
@@ -1150,9 +1127,9 @@ def test_managed_users_include_subscription_usage_filters_and_detail(tmp_path: P
         assert item["currentSubscription"]["statusLabel"] == "即将到期"
         assert item["currentSubscription"]["priceLabel"] == "¥99 / 月"
         assert item["monthlyUsage"]["questionUsed"] == 2
-        assert item["monthlyUsage"]["questionLimit"] == 100
+        assert item["monthlyUsage"]["questionLimit"] == 1000
         assert item["monthlyUsage"]["tokenUsed"] == 0
-        assert item["monthlyUsage"]["tokenLimit"] == 50000
+        assert item["monthlyUsage"]["tokenLimit"] == 2000000
         assert item["monthlyUsage"]["status"] == "expiring_soon"
         assert item["orderSummary"] == {
             "totalAmountCents": 0,
@@ -1165,7 +1142,7 @@ def test_managed_users_include_subscription_usage_filters_and_detail(tmp_path: P
         assert detail.status_code == 200
         detail_body = detail.json()
         assert detail_body["currentSubscription"]["tenantId"] == "tenant_default"
-        assert detail_body["monthlyUsage"]["questionUsagePercent"] == 2
+        assert detail_body["monthlyUsage"]["questionUsagePercent"] == 0.2
         assert detail_body["tenants"][0]["id"] == "tenant_default"
 
 
@@ -1351,7 +1328,7 @@ def test_tenant_management_subscription_usage_filters_and_personal_guards(
             )
             connection.execute(
                 """
-                insert into tenant_subscriptions (
+                insert into subscriptions (
                   id,
                   tenant_id,
                   plan_id,
@@ -1370,30 +1347,6 @@ def test_tenant_management_subscription_usage_filters_and_personal_guards(
                   CURRENT_TIMESTAMP,
                   datetime('now', '+9 days'),
                   false
-                )
-                """
-            )
-            connection.execute(
-                """
-                insert into subscription_entitlement_snapshots (
-                  id,
-                  subscription_id,
-                  plan_code,
-                  plan_name,
-                  billing_period,
-                  price_snapshot,
-                  entitlements_snapshot,
-                  starts_at
-                )
-                values (
-                  'snap_tenant_default_pro',
-                  'sub_tenant_default_pro',
-                  'pro',
-                  'Pro',
-                  'monthly',
-                  '{"billingPeriod":"monthly","currency":"CNY","amountCents":9900}',
-                  '{"monthlyQuestionLimit":100,"monthlyTokenLimit":50000}',
-                  CURRENT_TIMESTAMP
                 )
                 """
             )
@@ -1485,9 +1438,9 @@ def test_tenant_management_subscription_usage_filters_and_personal_guards(
         assert item["currentSubscription"]["status"] == "expiring_soon"
         assert item["currentPlan"]["code"] == "pro"
         assert item["monthlyUsage"]["questionUsed"] == 2
-        assert item["monthlyUsage"]["questionLimit"] == 100
+        assert item["monthlyUsage"]["questionLimit"] == 1000
         assert item["monthlyUsage"]["tokenUsed"] == 0
-        assert item["monthlyUsage"]["tokenLimit"] == 50000
+        assert item["monthlyUsage"]["tokenLimit"] == 2000000
         assert item["orderSummary"] == {
             "totalAmountCents": 0,
             "orderCount": 0,
@@ -1998,7 +1951,7 @@ def test_expert_search_by_name_category_and_status(tmp_path: Path) -> None:
         assert [item["id"] for item in combined.json()["items"]] == ["expert_listing"]
 
 
-def test_plan_phase1_admin_market_and_subscription_snapshot(tmp_path: Path) -> None:
+def test_plan_phase1_admin_market_and_current_subscription(tmp_path: Path) -> None:
     database_path = tmp_path / "plans.sqlite3"
     settings = Settings(
         database_url=f"sqlite:///{database_path}",
@@ -2173,7 +2126,7 @@ def test_plan_phase1_admin_market_and_subscription_snapshot(tmp_path: Path) -> N
             )
             connection.execute(
                 """
-                insert into tenant_subscriptions (
+                insert into subscriptions (
                   id,
                   tenant_id,
                   plan_id,
@@ -2280,10 +2233,10 @@ def test_plan_phase1_admin_market_and_subscription_snapshot(tmp_path: Path) -> N
         assert current.status_code == 200, current.text
         body = current.json()
         assert body["subscription"]["planId"] == free_plan["id"]
-        assert body["snapshot"]["planCode"] == "free"
-        assert body["snapshot"]["planName"] == "免费版"
-        assert body["snapshot"]["entitlementsSnapshot"]["monthlyQuestionLimit"] == 100
-        assert body["snapshot"]["entitlementsSnapshot"]["expertIds"] == []
+        assert body["plan"]["code"] == "free"
+        assert body["plan"]["name"] == "免费版"
+        assert body["plan"]["entitlements"]["monthlyQuestionLimit"] == 100
+        assert body["plan"]["expertIds"] == []
 
         client.put(
             f"/api/v1/plans/{free_plan['id']}/entitlements",
@@ -2296,11 +2249,11 @@ def test_plan_phase1_admin_market_and_subscription_snapshot(tmp_path: Path) -> N
                 "features": {},
             },
         )
-        unchanged = client.get(
+        changed_current = client.get(
             "/api/v1/plan-market/current-subscription", headers=tenant_headers
         )
-        assert unchanged.status_code == 200
-        assert unchanged.json()["snapshot"]["entitlementsSnapshot"]["monthlyQuestionLimit"] == 100
+        assert changed_current.status_code == 200
+        assert changed_current.json()["plan"]["entitlements"]["monthlyQuestionLimit"] == 999
 
         delete_free = client.delete(f"/api/v1/plans/{free_plan['id']}", headers=admin_headers)
         assert delete_free.status_code == 409

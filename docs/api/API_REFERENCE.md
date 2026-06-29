@@ -2123,7 +2123,7 @@ and a partial failure is retried on the next call.
 | Field | Required | Type | Description |
 | --- | --- | --- | --- |
 | subscription | yes | TenantSubscription | - |
-| snapshot | yes | SubscriptionEntitlementSnapshot | - |
+| plan | yes | Plan | - |
 
 ### `Document`
 
@@ -2575,21 +2575,6 @@ and a partial failure is retried on the next call.
 | version | no | string \| null | - |
 | allowedTools | no | array[string] \| null | - |
 | tags | no | array[string] \| null | - |
-
-### `SubscriptionEntitlementSnapshot`
-
-| Field | Required | Type | Description |
-| --- | --- | --- | --- |
-| id | yes | string | - |
-| subscriptionId | yes | string | - |
-| planCode | yes | string | - |
-| planName | yes | string | - |
-| billingPeriod | yes | string | - |
-| priceSnapshot | no | object | - |
-| entitlementsSnapshot | no | object | - |
-| startsAt | yes | string | - |
-| endsAt | no | string \| null | - |
-| createdAt | yes | string | - |
 
 ### `Tenant`
 

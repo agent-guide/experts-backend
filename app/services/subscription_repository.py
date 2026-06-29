@@ -3,12 +3,12 @@ from __future__ import annotations
 from typing import Any
 
 from app.db import DatabaseConnection
-from app.domain.plans import SubscriptionEntitlementSnapshot, TenantSubscription
-from app.services._sql import execute, fetch_one, json_load, json_param
+from app.domain.plans import TenantSubscription
+from app.services._sql import execute, fetch_one
 
 
 class SubscriptionRepository:
-    """Raw SQL data access for tenant subscriptions and entitlement snapshots."""
+    """Raw SQL data access for subscriptions."""
 
     def __init__(self, connection: DatabaseConnection) -> None:
         self.connection = connection
@@ -19,7 +19,7 @@ class SubscriptionRepository:
             """
             select id, tenant_id, plan_id, status, billing_period, current_period_start,
                    current_period_end, cancel_at_period_end, created_at, updated_at
-            from tenant_subscriptions
+            from subscriptions
             where tenant_id = ?
               and status in ('active', 'trialing', 'past_due')
               and (current_period_end is null or current_period_end > CURRENT_TIMESTAMP)
@@ -44,7 +44,7 @@ class SubscriptionRepository:
         execute(
             self.connection,
             """
-            insert into tenant_subscriptions (
+            insert into subscriptions (
               id, tenant_id, plan_id, status, billing_period,
               current_period_start, current_period_end
             )
@@ -58,59 +58,6 @@ class SubscriptionRepository:
                 billing_period,
                 current_period_start,
                 current_period_end,
-            ),
-        )
-
-    def get_current_snapshot(
-        self, subscription_id: str
-    ) -> SubscriptionEntitlementSnapshot | None:
-        row = fetch_one(
-            self.connection,
-            """
-            select id, subscription_id, plan_code, plan_name, billing_period,
-                   price_snapshot, entitlements_snapshot, starts_at, ends_at, created_at
-            from subscription_entitlement_snapshots
-            where subscription_id = ?
-              and (ends_at is null or ends_at > CURRENT_TIMESTAMP)
-            order by starts_at desc, created_at desc
-            limit 1
-            """,
-            (subscription_id,),
-        )
-        return _map_snapshot(row) if row else None
-
-    def insert_snapshot(
-        self,
-        *,
-        snapshot_id: str,
-        subscription_id: str,
-        plan_code: str,
-        plan_name: str,
-        billing_period: str,
-        price_snapshot: dict[str, Any],
-        entitlements_snapshot: dict[str, Any],
-        starts_at: str,
-        ends_at: str | None,
-    ) -> None:
-        execute(
-            self.connection,
-            """
-            insert into subscription_entitlement_snapshots (
-              id, subscription_id, plan_code, plan_name, billing_period,
-              price_snapshot, entitlements_snapshot, starts_at, ends_at
-            )
-            values (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                snapshot_id,
-                subscription_id,
-                plan_code,
-                plan_name,
-                billing_period,
-                json_param(self.connection, price_snapshot),
-                json_param(self.connection, entitlements_snapshot),
-                starts_at,
-                ends_at,
             ),
         )
 
@@ -129,19 +76,4 @@ def _map_subscription(row: dict[str, Any]) -> TenantSubscription:
         cancelAtPeriodEnd=bool(row["cancel_at_period_end"]),
         createdAt=str(row["created_at"]),
         updatedAt=str(row["updated_at"]),
-    )
-
-
-def _map_snapshot(row: dict[str, Any]) -> SubscriptionEntitlementSnapshot:
-    return SubscriptionEntitlementSnapshot(
-        id=str(row["id"]),
-        subscriptionId=str(row["subscription_id"]),
-        planCode=str(row["plan_code"]),
-        planName=str(row["plan_name"]),
-        billingPeriod=str(row["billing_period"]),
-        priceSnapshot=json_load(row["price_snapshot"]),
-        entitlementsSnapshot=json_load(row["entitlements_snapshot"]),
-        startsAt=str(row["starts_at"]),
-        endsAt=str(row["ends_at"]) if row["ends_at"] is not None else None,
-        createdAt=str(row["created_at"]),
     )

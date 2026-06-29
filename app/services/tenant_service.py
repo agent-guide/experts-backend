@@ -30,6 +30,7 @@ from app.services._sql import (
     rowcount,
 )
 from app.services.plan_repository import PlanRepository
+from app.services.plan_pricing import select_price_snapshot
 from app.services.subscription_service import SubscriptionService
 
 
@@ -174,7 +175,7 @@ class TenantService:
         execute(
             self.connection,
             """
-            update tenant_subscriptions
+            update subscriptions
             set status = 'cancelled',
                 current_period_end = coalesce(current_period_end, CURRENT_TIMESTAMP),
                 updated_at = CURRENT_TIMESTAMP
@@ -186,7 +187,7 @@ class TenantService:
         execute(
             self.connection,
             """
-            insert into tenant_subscriptions (
+            insert into subscriptions (
               id, tenant_id, plan_id, status, billing_period,
               current_period_start, current_period_end, cancel_at_period_end
             )
@@ -203,7 +204,6 @@ class TenantService:
                 request.cancelAtPeriodEnd,
             ),
         )
-        self.subscription_service._create_snapshot(subscription_id, plan, billing_period)
         self.connection.commit()
         return self.get(tenant_id)
 
@@ -375,15 +375,15 @@ class TenantService:
     ) -> tuple[TenantSubscriptionSummary | None, TenantPlanSummary | None, TenantMonthlyUsageSummary]:
         current = self.subscription_service.current_subscription(tenant_id)
         subscription = current.subscription
-        snapshot = current.snapshot
-        price_snapshot = snapshot.priceSnapshot
-        entitlements = snapshot.entitlementsSnapshot
+        plan_config = current.plan
+        price_snapshot = select_price_snapshot(plan_config, subscription.billingPeriod)
+        entitlements = _entitlements_dict(plan_config)
         status = _subscription_status(subscription.status, subscription.currentPeriodEnd)
         summary = TenantSubscriptionSummary(
             subscriptionId=subscription.id,
             planId=subscription.planId,
-            planCode=snapshot.planCode,
-            planName=snapshot.planName,
+            planCode=plan_config.code,
+            planName=plan_config.name,
             billingPeriod=subscription.billingPeriod,
             status=status,
             rawStatus=subscription.status,
@@ -394,20 +394,11 @@ class TenantService:
             autoRenew=not subscription.cancelAtPeriodEnd and subscription.billingPeriod != "free",
             priceLabel=_price_label(price_snapshot),
         )
-        plan_row = fetch_one(
-            self.connection,
-            "select code, name, type_label from plans where id = ? limit 1",
-            (subscription.planId,),
-        )
         plan = TenantPlanSummary(
             id=subscription.planId,
-            code=str(plan_row["code"]) if plan_row else snapshot.planCode,
-            name=str(plan_row["name"]) if plan_row else snapshot.planName,
-            typeLabel=(
-                str(plan_row["type_label"])
-                if plan_row and plan_row["type_label"] is not None
-                else None
-            ),
+            code=plan_config.code,
+            name=plan_config.name,
+            typeLabel=plan_config.typeLabel,
             billingPeriod=subscription.billingPeriod,
             priceLabel=summary.priceLabel,
             priceSnapshot=price_snapshot,
@@ -658,6 +649,19 @@ def _days_until(value: str | None) -> int | None:
         return None
     delta = _parse_datetime(value) - datetime.now(timezone.utc)
     return max(delta.days, 0)
+
+
+def _entitlements_dict(plan: Plan) -> dict[str, Any]:
+    entitlements = plan.entitlements
+    return {
+        "monthlyQuestionLimit": entitlements.monthlyQuestionLimit if entitlements else 0,
+        "monthlyTokenLimit": entitlements.monthlyTokenLimit if entitlements else 0,
+        "seatLimit": entitlements.seatLimit if entitlements else 1,
+        "singleTurnTokenLimit": entitlements.singleTurnTokenLimit if entitlements else None,
+        "modelTiers": entitlements.modelTiers if entitlements else [],
+        "features": entitlements.features if entitlements else {},
+        "expertIds": plan.expertIds,
+    }
 
 
 def _parse_datetime(value: str) -> datetime:

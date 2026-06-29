@@ -1,8 +1,9 @@
 # Plans API
 
-Plans define which expert groups, model tiers, quotas, and product features a tenant can use.
-Phase 1 provides plan configuration, expert-group assignment, and current subscription snapshots.
-It does not yet enforce chat usage, token limits, seat limits, payments, or upgrades.
+Plans define which experts, model tiers, quotas, prices, and product features a tenant can use.
+Plan prices, entitlements, and expert ids are stored directly on `plans` as JSON configuration.
+Tenant subscriptions point to a plan and read the current plan configuration live. This phase does
+not yet enforce chat usage, token limits, seat limits, payments, or upgrades.
 
 ## Admin Plans
 
@@ -86,18 +87,7 @@ plan:write
     "createdAt": "2026-06-12T00:00:00+00:00",
     "updatedAt": "2026-06-12T00:00:00+00:00"
   },
-  "expertGroups": [
-    {
-      "id": "expert_group_basic",
-      "code": "basic",
-      "name": "基础专家组",
-      "description": "Free 版及以上可访问",
-      "sortOrder": 10,
-      "expertIds": [],
-      "createdAt": "2026-06-12T00:00:00+00:00",
-      "updatedAt": "2026-06-12T00:00:00+00:00"
-    }
-  ],
+  "expertIds": ["expert_123"],
   "createdAt": "2026-06-12T00:00:00+00:00",
   "updatedAt": "2026-06-12T00:00:00+00:00"
 }
@@ -151,9 +141,36 @@ Response `200`:
       "status": "active",
       "isRecommended": false,
       "sortOrder": 10,
-      "prices": [],
-      "entitlements": null,
-      "expertGroups": [],
+      "prices": [
+        {
+          "id": "plan_price_free_free_cny",
+          "planId": "plan_free",
+          "billingPeriod": "free",
+          "currency": "CNY",
+          "amountCents": 0,
+          "discountLabel": null,
+          "isEnabled": true,
+          "createdAt": "2026-06-12T00:00:00+00:00",
+          "updatedAt": "2026-06-12T00:00:00+00:00"
+        }
+      ],
+      "entitlements": {
+        "id": "plan_entitlement_free",
+        "planId": "plan_free",
+        "monthlyQuestionLimit": 100,
+        "monthlyTokenLimit": 100000,
+        "seatLimit": 1,
+        "singleTurnTokenLimit": null,
+        "modelTiers": ["core"],
+        "features": {
+          "teamManagement": false,
+          "apiAccess": false,
+          "privateDeployment": false
+        },
+        "createdAt": "2026-06-12T00:00:00+00:00",
+        "updatedAt": "2026-06-12T00:00:00+00:00"
+      },
+      "expertIds": [],
       "createdAt": "2026-06-12T00:00:00+00:00",
       "updatedAt": "2026-06-12T00:00:00+00:00"
     }
@@ -247,8 +264,8 @@ Request:
 All fields are optional. When `isRecommended` is true, other plans are automatically unmarked.
 `highlightItems` and `upgradeRules` replace the stored display configuration when provided.
 When `typeLabel` changes and `code` is omitted, the backend regenerates `code` from the new
-`typeLabel` using the same suffix rule as create. Existing subscription snapshots copy the old
-`planCode` and are not rewritten.
+`typeLabel` using the same suffix rule as create. Current subscriptions read the latest plan
+configuration.
 `level` must be an integer from `1` to `99`. `sortOrder` must be an integer from `0` to `9999`.
 
 Response `200`: the plan shape.
@@ -264,7 +281,7 @@ Errors:
 
 ## PUT /{plan_id}/prices
 
-Replace all price rows for a plan.
+Replace all prices stored on a plan.
 
 Request:
 
@@ -301,7 +318,7 @@ Errors:
 
 ## PUT /{plan_id}/entitlements
 
-Replace the entitlement row for a plan.
+Replace the entitlements stored on a plan.
 
 Request:
 
@@ -329,15 +346,15 @@ Errors:
 422 validation error
 ```
 
-## PUT /{plan_id}/expert-groups
+## PUT /{plan_id}/experts
 
-Replace the expert groups accessible by a plan.
+Replace the expert ids accessible by a plan.
 
 Request:
 
 ```json
 {
-  "groupIds": ["expert_group_basic", "expert_group_professional"]
+  "expertIds": ["expert_1", "expert_2"]
 }
 ```
 
@@ -347,7 +364,7 @@ Errors:
 
 ```text
 404 PLAN_NOT_FOUND
-404 EXPERT_GROUP_NOT_FOUND
+404 EXPERT_NOT_FOUND
 ```
 
 ## DELETE /{plan_id}
@@ -432,8 +449,23 @@ Response `200`:
           "updatedAt": "2026-06-12T00:00:00+00:00"
         }
       ],
-      "entitlements": null,
-      "expertGroups": [],
+      "entitlements": {
+        "id": "plan_entitlement_pro",
+        "planId": "plan_pro",
+        "monthlyQuestionLimit": 1000,
+        "monthlyTokenLimit": 2000000,
+        "seatLimit": 1,
+        "singleTurnTokenLimit": null,
+        "modelTiers": ["core", "enhanced"],
+        "features": {
+          "teamManagement": false,
+          "apiAccess": false,
+          "privateDeployment": false
+        },
+        "createdAt": "2026-06-12T00:00:00+00:00",
+        "updatedAt": "2026-06-12T00:00:00+00:00"
+      },
+      "expertIds": [],
       "createdAt": "2026-06-12T00:00:00+00:00",
       "updatedAt": "2026-06-12T00:00:00+00:00"
     }
@@ -443,8 +475,8 @@ Response `200`:
 
 ## GET /current-subscription
 
-Return the active tenant subscription and current entitlement snapshot. If the active tenant has no
-subscription, the backend creates a default `free` subscription and snapshot.
+Return the active tenant subscription and current plan configuration. If the active tenant has no
+subscription, the backend creates a default `free` subscription.
 
 Response `200`:
 
@@ -462,19 +494,30 @@ Response `200`:
     "createdAt": "2026-06-12T00:00:00+00:00",
     "updatedAt": "2026-06-12T00:00:00+00:00"
   },
-  "snapshot": {
-    "id": "subscription_snapshot_123",
-    "subscriptionId": "tenant_subscription_123",
-    "planCode": "free",
-    "planName": "免费版",
-    "billingPeriod": "free",
-    "priceSnapshot": {
-      "billingPeriod": "free",
-      "currency": "CNY",
-      "amountCents": 0,
-      "discountLabel": null
+  "plan": {
+    "id": "plan_free",
+    "code": "free",
+    "name": "免费版",
+    "level": 1,
+    "description": "入门级运营助手，适合首次体验专家问答能力。",
+    "typeLabel": "免费版",
+    "subtitle": "入门级运营助手",
+    "badgeLabel": "入门体验",
+    "highlightItems": ["基础专家问答", "基础体验权限", "轻量运营辅助"],
+    "upgradeRules": {
+      "fromPlanIds": [],
+      "toPlanIds": ["plan_pro", "plan_max", "plan_business"],
+      "rules": ["立即生效"],
+      "selfServiceEnabled": true
     },
-    "entitlementsSnapshot": {
+    "status": "active",
+    "isRecommended": false,
+    "sortOrder": 10,
+    "subscriptionCount": 1,
+    "prices": [],
+    "entitlements": {
+      "id": "plan_entitlement_free",
+      "planId": "plan_free",
       "monthlyQuestionLimit": 100,
       "monthlyTokenLimit": 100000,
       "seatLimit": 1,
@@ -485,17 +528,12 @@ Response `200`:
         "apiAccess": false,
         "privateDeployment": false
       },
-      "expertGroups": [
-        {
-          "id": "expert_group_basic",
-          "code": "basic",
-          "name": "基础专家组"
-        }
-      ]
+      "createdAt": "2026-06-12T00:00:00+00:00",
+      "updatedAt": "2026-06-12T00:00:00+00:00"
     },
-    "startsAt": "2026-06-12T00:00:00+00:00",
-    "endsAt": null,
-    "createdAt": "2026-06-12T00:00:00+00:00"
+    "expertIds": [],
+    "createdAt": "2026-06-12T00:00:00+00:00",
+    "updatedAt": "2026-06-12T00:00:00+00:00"
   }
 }
 ```
