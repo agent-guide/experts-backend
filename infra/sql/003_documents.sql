@@ -39,10 +39,10 @@ create unique index if not exists idx_documents_storage_key
 create index if not exists idx_documents_kb_created
   on documents (knowledge_base_id, created_at desc);
 
--- upload_sessions tracks a MinIO direct-upload handshake. document_id is allocated at
--- upload-url time (the object key depends on it) but the documents row is only inserted at
--- complete-upload, so document_id is plain text, not a foreign key.
-create table if not exists upload_sessions (
+-- document_upload_sessions tracks a MinIO direct-upload handshake for knowledge-base documents.
+-- document_id is allocated at upload-url time (the object key depends on it) but the documents row
+-- is only inserted at complete-upload, so document_id is plain text, not a foreign key.
+create table if not exists document_upload_sessions (
   id text primary key,
   knowledge_base_id text not null references knowledge_bases(id) on delete cascade,
   document_id text not null,
@@ -65,8 +65,12 @@ create table if not exists upload_sessions (
   updated_at timestamptz not null default now()
 );
 
-create index if not exists idx_upload_sessions_status
-  on upload_sessions (status, expires_at);
+create index if not exists idx_document_upload_sessions_status
+  on document_upload_sessions (status, expires_at);
 
-create index if not exists idx_upload_sessions_document
-  on upload_sessions (document_id);
+create index if not exists idx_document_upload_sessions_document
+  on document_upload_sessions (document_id);
+
+-- Legacy name cleanup. Upload sessions are ephemeral handshake records (short TTL, GC'd), so the
+-- old table is dropped rather than data-migrated after the rename to document_upload_sessions.
+drop table if exists upload_sessions;

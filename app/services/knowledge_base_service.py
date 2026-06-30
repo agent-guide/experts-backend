@@ -77,7 +77,7 @@ class KnowledgeBaseService:
         if not kb:
             raise ApiError(404, "KB_NOT_FOUND", "Knowledge base not found")
         authorize_kb_access(principal, kb, "delete")
-        # Soft delete: a hard delete would cascade documents/upload_sessions and strand their
+        # Soft delete: a hard delete would cascade documents/document_upload_sessions and strand their
         # MinIO objects. The base disappears from all reads immediately; GC
         # (DocumentService.purge_deleted_knowledge_bases) reclaims the objects, then hard-deletes.
         self.repo.soft_delete(knowledge_base_id, _now_iso())

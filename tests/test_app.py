@@ -4350,7 +4350,7 @@ def test_document_upload_url_rejects_files_over_configured_limit(tmp_path: Path)
         assert response.json()["code"] == "OBJECT_TOO_LARGE"
 
         with open_database_connection(settings) as connection:
-            row = connection.execute("select count(*) as count from upload_sessions").fetchone()
+            row = connection.execute("select count(*) as count from document_upload_sessions").fetchone()
         assert row is not None
         assert row["count"] == 0
 
@@ -4417,7 +4417,7 @@ def test_storage_gc_endpoint_reclaims_document_and_library_objects(tmp_path: Pat
         # Force the session past its TTL without waiting on the clock.
         with open_database_connection(settings) as connection:
             connection.execute(
-                "update upload_sessions set expires_at = ? where id = ?",
+                "update document_upload_sessions set expires_at = ? where id = ?",
                 ("2000-01-01T00:00:00+00:00", orphan["uploadSessionId"]),
             )
             connection.commit()
@@ -4535,7 +4535,7 @@ def test_storage_gc_keeps_rows_when_object_remove_fails(tmp_path: Path) -> None:
         store.put(orphan["objectKey"], 8)
         with open_database_connection(settings) as connection:
             connection.execute(
-                "update upload_sessions set expires_at = ? where id = ?",
+                "update document_upload_sessions set expires_at = ? where id = ?",
                 ("2000-01-01T00:00:00+00:00", orphan["uploadSessionId"]),
             )
             connection.commit()
@@ -4607,7 +4607,7 @@ def test_storage_gc_keeps_rows_when_object_remove_fails(tmp_path: Path) -> None:
                 "select id from documents where id = ?", (deleted_doc_id,)
             ).fetchone()
             session_row = connection.execute(
-                "select status from upload_sessions where id = ?", (orphan["uploadSessionId"],)
+                "select status from document_upload_sessions where id = ?", (orphan["uploadSessionId"],)
             ).fetchone()
             kb_row = connection.execute(
                 "select id from knowledge_bases where id = ?", (kb2_id,)

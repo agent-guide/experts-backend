@@ -40,7 +40,7 @@ class DocumentRepository:
     def __init__(self, connection: DatabaseConnection) -> None:
         self.connection = connection
 
-    # upload_sessions ------------------------------------------------------------
+    # document_upload_sessions ----------------------------------------------------
 
     def create_session(
         self,
@@ -61,7 +61,7 @@ class DocumentRepository:
         execute(
             self.connection,
             """
-            insert into upload_sessions (
+            insert into document_upload_sessions (
               id, knowledge_base_id, document_id, actor_user_id, upload_mode, file_name,
               file_type, content_type, file_size_bytes, object_bucket, object_key, status,
               expires_at, created_at, updated_at
@@ -88,7 +88,7 @@ class DocumentRepository:
     def get_session(self, session_id: str) -> UploadSession | None:
         row = fetch_one(
             self.connection,
-            f"select {_SESSION_COLUMNS} from upload_sessions where id = ? limit 1",
+            f"select {_SESSION_COLUMNS} from document_upload_sessions where id = ? limit 1",
             (session_id,),
         )
         return _map_session(row)
@@ -98,7 +98,7 @@ class DocumentRepository:
         execute(
             self.connection,
             """
-            update upload_sessions
+            update document_upload_sessions
             set status = ?, completed_at = ?, updated_at = ?
             where id = ?
             """,
@@ -109,7 +109,7 @@ class DocumentRepository:
         rows = fetch_all(
             self.connection,
             f"""
-            select {_SESSION_COLUMNS} from upload_sessions
+            select {_SESSION_COLUMNS} from document_upload_sessions
             where status = 'initiated' and expires_at < ?
             """,
             (before,),
@@ -245,7 +245,7 @@ class DocumentRepository:
         )
         session_rows = fetch_all(
             self.connection,
-            "select object_key from upload_sessions where knowledge_base_id = ?",
+            "select object_key from document_upload_sessions where knowledge_base_id = ?",
             (knowledge_base_id,),
         )
         keys = [str(row["storage_key"]) for row in doc_rows]
@@ -263,7 +263,7 @@ class DocumentRepository:
         )
         execute(
             self.connection,
-            "delete from upload_sessions where knowledge_base_id = ?",
+            "delete from document_upload_sessions where knowledge_base_id = ?",
             (knowledge_base_id,),
         )
 

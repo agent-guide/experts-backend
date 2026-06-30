@@ -14,7 +14,7 @@ create table if not exists knowledge_bases (
   description text,
   status text not null default 'active' check (status in ('active', 'archived')),
   -- Soft delete. delete is a soft delete (set deleted_at) rather than a hard row delete: the
-  -- documents/upload_sessions children cascade on a hard delete, which would drop their rows
+  -- documents/document_upload_sessions children cascade on a hard delete, which would drop their rows
   -- and strand the MinIO objects (no storage_key left to reclaim by). GC
   -- (purge_deleted_knowledge_bases) removes the objects first, then hard-deletes the rows.
   deleted_at timestamptz,
