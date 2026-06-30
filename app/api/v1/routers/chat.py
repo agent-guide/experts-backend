@@ -4,6 +4,7 @@ from fastapi.responses import StreamingResponse
 from app.api.deps import (
     get_acp_gateway_client,
     get_database,
+    get_object_store,
     require_tenant_permission,
 )
 from app.clients.acp_gateway import AcpGatewayClient
@@ -20,6 +21,8 @@ from app.domain.chat import (
     ResolvePermissionRequest,
 )
 from app.services.chat_service import ChatService
+from app.services.library_service import LibraryService
+from app.services.object_store import ObjectStore
 
 router = APIRouter()
 
@@ -28,10 +31,15 @@ def build_chat_service(
     connection: DatabaseConnection,
     settings: Settings,
     acp: AcpGatewayClient,
+    object_store: ObjectStore,
 ) -> ChatService:
+    # The chat service resolves turn attachments through the library service (§7.3), so it is
+    # constructed with one bound to the same connection and object store.
+    library = LibraryService(connection, object_store, settings)
     return ChatService(
         connection,
         acp=acp,
+        library=library,
     )
 
 
@@ -39,8 +47,9 @@ def get_chat_service(
     connection: DatabaseConnection = Depends(get_database),
     settings: Settings = Depends(get_settings),
     acp: AcpGatewayClient = Depends(get_acp_gateway_client),
+    object_store: ObjectStore = Depends(get_object_store),
 ) -> ChatService:
-    return build_chat_service(connection, settings, acp)
+    return build_chat_service(connection, settings, acp, object_store)
 
 
 # --- Sessions -----------------------------------------------------------------
@@ -143,12 +152,22 @@ async def create_turn(
     principal: Principal = Depends(require_tenant_permission("chat:ask")),
     settings: Settings = Depends(get_settings),
     acp: AcpGatewayClient = Depends(get_acp_gateway_client),
+    object_store: ObjectStore = Depends(get_object_store),
+    connection: DatabaseConnection = Depends(get_database),
 ) -> StreamingResponse:
+    # Pre-flight before the SSE stream starts: verify session ownership and §5-authorize any
+    # referenced attachments, so a denial is a clean HTTP error rather than an empty 200 stream.
+    build_chat_service(connection, settings, acp, object_store).validate_turn_preconditions(
+        principal, session_id, body
+    )
+
     # The compute engine creates and streams a turn in one shot; the service forwards the SSE
-    # stream to the caller while persisting the assembled turn record locally.
+    # stream to the caller while persisting the assembled turn record locally. The streaming
+    # generator outlives the request-scoped DB connection, so a fresh one is opened here; the
+    # object store is a plain client and is safe to reuse.
     async def events():
         with open_database_connection(settings) as connection:
-            service = build_chat_service(connection, settings, acp)
+            service = build_chat_service(connection, settings, acp, object_store)
             async for line in service.stream_turn(principal, session_id, body):
                 yield line
 

@@ -22,6 +22,9 @@ class LibraryFile(BaseModel):
     type: LibraryFileType
     sizeBytes: int
     sizeLabel: str
+    # Lifecycle (docs/LIBRARY_FILE_LIFECYCLE.md §3). expiresAt is set only for temporary files.
+    lifecycle: Literal["temporary", "permanent"] = "permanent"
+    expiresAt: str | None = None
     updatedAt: str
     createdAt: str
     previewSupported: bool
@@ -54,6 +57,9 @@ class LibraryUploadUrlResponse(BaseModel):
 class LibraryCompleteUploadRequest(BaseModel):
     uploadSessionId: str
     contentHash: str | None = None
+    # docs/LIBRARY_FILE_LIFECYCLE.md §7. 'temporary' mints an unbound chat attachment (expires on
+    # its retention window, bound to a session on first turn use); 'permanent' is a library file.
+    lifecycle: Literal["temporary", "permanent"] = "permanent"
 
 
 class LibraryDownloadResponse(BaseModel):
@@ -90,6 +96,12 @@ class LibraryFileRecord(BaseModel):
     contentHash: str | None = None
     previewSupported: bool
     metadata: dict[str, Any] = Field(default_factory=dict)
+    # Chat temporary-file lifecycle (docs/LIBRARY_FILE_LIFECYCLE.md §3).
+    source: Literal["library", "chat_upload"] = "library"
+    lifecycle: Literal["temporary", "permanent"] = "permanent"
+    expiresAt: str | None = None
+    promotedAt: str | None = None
+    chatSessionId: str | None = None
     createdAt: str
     updatedAt: str
 
@@ -111,5 +123,7 @@ class LibraryUploadSessionRecord(BaseModel):
     status: str
     expiresAt: str
     completedAt: str | None = None
+    # Chat-upload routing context (docs/LIBRARY_FILE_LIFECYCLE.md §4). Null for library uploads.
+    chatSessionId: str | None = None
     createdAt: str
     updatedAt: str

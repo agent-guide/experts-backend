@@ -22,6 +22,7 @@ from app.domain.library import (
     LibraryFileListResponse,
     LibraryPreviewResponse,
     LibrarySort,
+    LibraryUploadSessionRecord,
     LibraryUploadUrlRequest,
     LibraryUploadUrlResponse,
 )
@@ -68,6 +69,8 @@ class LibraryService:
         sort: LibrarySort,
         page: int,
         page_size: int,
+        lifecycle: str = "permanent",
+        session_id: str | None = None,
     ) -> LibraryFileListResponse:
         owner = self._owner(principal)
         normalized_type = None if file_type == "all" else file_type
@@ -79,6 +82,9 @@ class LibraryService:
             sort=sort,
             limit=page_size,
             offset=(page - 1) * page_size,
+            lifecycle=lifecycle,
+            chat_session_id=session_id,
+            now=_now_iso() if lifecycle == "temporary" else None,
         )
         return LibraryFileListResponse(
             items=[_to_item(file) for file in items],
@@ -93,14 +99,31 @@ class LibraryService:
         request: LibraryUploadUrlRequest,
     ) -> LibraryUploadUrlResponse:
         user_id, tenant_id = self._owner(principal)
-        if request.fileSizeBytes <= 0:
+        return self._allocate_upload(
+            user_id,
+            tenant_id,
+            file_name=request.fileName,
+            mime_type=request.mimeType,
+            file_size_bytes=request.fileSizeBytes,
+        )
+
+    def _allocate_upload(
+        self,
+        user_id: str,
+        tenant_id: str,
+        *,
+        file_name: str,
+        mime_type: str | None,
+        file_size_bytes: int,
+    ) -> LibraryUploadUrlResponse:
+        if file_size_bytes <= 0:
             raise ApiError(400, "LIBRARY_INVALID_SIZE", "fileSizeBytes must be positive")
-        if request.fileSizeBytes > self.settings.object_storage_max_upload_bytes:
+        if file_size_bytes > self.settings.object_storage_max_upload_bytes:
             raise ApiError(413, "OBJECT_TOO_LARGE", "Object upload is too large")
 
-        safe_name = _safe_file_name(request.fileName)
+        safe_name = _safe_file_name(file_name)
         extension = _extension(safe_name)
-        file_type = _resolve_file_type(safe_name, request.mimeType)
+        file_type = _resolve_file_type(safe_name, mime_type)
         file_id = f"file_{uuid4().hex}"
         session_id = f"upl_{uuid4().hex}"
         object_key = _object_key(tenant_id, user_id, file_id, safe_name)
@@ -112,12 +135,12 @@ class LibraryService:
             file_id=file_id,
             user_id=user_id,
             tenant_id=tenant_id,
-            original_name=request.fileName,
+            original_name=file_name,
             safe_name=safe_name,
-            mime_type=request.mimeType,
+            mime_type=mime_type,
             file_type=file_type,
             extension=extension,
-            file_size_bytes=request.fileSizeBytes,
+            file_size_bytes=file_size_bytes,
             storage_bucket=self.store.bucket,
             storage_object_key=object_key,
             content_hash=None,
@@ -127,12 +150,12 @@ class LibraryService:
         upload_url = self.store.presigned_put_url(
             object_key,
             expires=timedelta(seconds=self.settings.presigned_url_ttl_seconds),
-            content_type=request.mimeType,
-            content_length=request.fileSizeBytes,
+            content_type=mime_type,
+            content_length=file_size_bytes,
         )
         self.connection.commit()
 
-        headers = {"Content-Type": request.mimeType} if request.mimeType else {}
+        headers = {"Content-Type": mime_type} if mime_type else {}
         return LibraryUploadUrlResponse(
             uploadSessionId=session_id,
             fileId=file_id,
@@ -148,7 +171,50 @@ class LibraryService:
         request: LibraryCompleteUploadRequest,
     ) -> LibraryFile:
         user_id, tenant_id = self._owner(principal)
-        session = self.repo.get_upload_session(request.uploadSessionId)
+        session = self._load_session_for_completion(request.uploadSessionId, user_id, tenant_id)
+        # §7: a temporary file is minted unbound (no session) and expires on its retention window;
+        # it binds to a session on first turn use (§5). A permanent file is an ordinary library file.
+        if request.lifecycle == "temporary":
+            source, lifecycle = "chat_upload", "temporary"
+            expires_at: str | None = _now_plus_ttl(self.settings.chat_attachment_retention_seconds)
+        else:
+            source, lifecycle, expires_at = "library", "permanent", None
+        record = self._persist_completed_file(
+            session,
+            user_id,
+            tenant_id,
+            source=source,
+            lifecycle=lifecycle,
+            expires_at=expires_at,
+        )
+        return _to_item(record)
+
+    def promote_file(self, principal: Principal, file_id: str) -> LibraryFile:
+        """Promote a temporary chat file to a permanent library file with no byte copy (§10)."""
+        user_id, tenant_id = self._owner(principal)
+        record = self.repo.promote_file(user_id, tenant_id, file_id, _now_iso())
+        if record is None:
+            # Distinguish a missing/deleted file (404) from a non-promotable one (409): expired,
+            # already permanent. The expiry guard lives in promote_file's SQL where clause.
+            if self.repo.get_file(user_id, tenant_id, file_id) is None:
+                raise ApiError(404, "LIBRARY_FILE_NOT_FOUND", "Library file not found")
+            raise ApiError(
+                409,
+                "LIBRARY_FILE_NOT_PROMOTABLE",
+                "File is not a promotable temporary file (expired, already permanent, or deleted)",
+            )
+        self.connection.commit()
+        return _to_item(record)
+
+    def _load_session_for_completion(
+        self, upload_session_id: str, user_id: str, tenant_id: str
+    ) -> LibraryUploadSessionRecord:
+        """Load and validate an upload session for completion (owner, status, expiry, size).
+
+        Shared by the library and chat complete-upload paths; the lifecycle/routing decision is
+        made by each caller after this returns.
+        """
+        session = self.repo.get_upload_session(upload_session_id)
         if session is None:
             raise ApiError(404, "LIBRARY_UPLOAD_SESSION_NOT_FOUND", "Upload session not found")
         if session.userId != user_id or session.tenantId != tenant_id:
@@ -171,7 +237,19 @@ class LibraryService:
                 "Uploaded object size does not match the declared size",
                 {"declared": session.fileSizeBytes, "actual": stat.size},
             )
+        return session
 
+    def _persist_completed_file(
+        self,
+        session: LibraryUploadSessionRecord,
+        user_id: str,
+        tenant_id: str,
+        *,
+        source: str,
+        lifecycle: str,
+        expires_at: str | None,
+        chat_session_id: str | None = None,
+    ) -> LibraryFileRecord:
         now = _now_iso()
         try:
             record = self.repo.create_file(
@@ -195,6 +273,10 @@ class LibraryService:
                 ),
                 metadata={},
                 now=now,
+                source=source,
+                lifecycle=lifecycle,
+                expires_at=expires_at,
+                chat_session_id=chat_session_id,
             )
         except Exception as exc:  # noqa: BLE001 - mapped only for documented completion race
             if is_unique_violation(exc):
@@ -208,7 +290,80 @@ class LibraryService:
 
         self.repo.set_upload_session_status(session.id, "completed", now, completed=True)
         self.connection.commit()
-        return _to_item(record)
+        return record
+
+    def resolve_turn_attachments(
+        self, principal: Principal, session_id: str, file_ids: list[str], *, bind: bool
+    ) -> list[LibraryFileRecord]:
+        """Load and §5-authorize the files a turn references, auto-binding temporaries (§7.3).
+
+        Authorization by kind:
+        - permanent: readable by its owner in any session.
+        - temporary, unbound (chat_session_id is null): readable by its owner. With bind=True it is
+          bound to this session (once); with bind=False (pre-flight) it is allowed as-is.
+        - temporary, bound to this session: readable while not expired.
+        - temporary, bound to another session: rejected.
+
+        Raises rather than silently dropping an unauthorized id, so a turn never half-references
+        files it was denied. bind=True commits the binding.
+        """
+        records: list[LibraryFileRecord] = []
+        user_id, tenant_id = self._owner(principal)
+        bound_any = False
+        for file_id in file_ids:
+            record = self.repo.get_file(user_id, tenant_id, file_id)
+            if record is None:
+                raise ApiError(404, "LIBRARY_FILE_NOT_FOUND", f"Library file not found: {file_id}")
+            if record.lifecycle == "temporary":
+                if record.expiresAt is None or _expired(record.expiresAt):
+                    raise ApiError(
+                        403, "LIBRARY_FILE_FORBIDDEN", f"Attachment has expired: {file_id}"
+                    )
+                if record.chatSessionId is None and bind:
+                    # First turn to reference this file binds it to this session (once). A
+                    # concurrent turn in another session may win the race, so re-read the outcome.
+                    bound = self.repo.bind_temporary_file_session(
+                        user_id, tenant_id, file_id, session_id, _now_iso()
+                    )
+                    record = bound or self.repo.get_file(user_id, tenant_id, file_id) or record
+                    bound_any = True
+                if record.chatSessionId is not None and record.chatSessionId != session_id:
+                    raise ApiError(
+                        403,
+                        "LIBRARY_FILE_FORBIDDEN",
+                        f"Attachment is bound to another session: {file_id}",
+                    )
+            records.append(record)
+        if bound_any:
+            self.connection.commit()
+        return records
+
+    @staticmethod
+    def attachment_snapshot(records: list[LibraryFileRecord], attached_at: str) -> list[dict]:
+        """Denormalized per-turn provenance snapshot (§9). Self-contained by design."""
+        return [
+            {
+                "fileId": record.id,
+                "name": record.originalName,
+                "mimeType": record.mimeType,
+                "sizeBytes": record.sizeBytes,
+                "lifecycle": record.lifecycle,
+                "attachedAt": attached_at,
+            }
+            for record in records
+        ]
+
+    def attachment_delivery_url(self, record: LibraryFileRecord) -> str:
+        """Presigned GET URL for URL-based delivery (§8.2, option A).
+
+        The engine receives a short-lived URL instead of inlined content, and fetches the file
+        itself. Works uniformly for every type (text, DOCX, image, PDF). The TTL is sized to
+        outlive a full turn (attachment_delivery_url_ttl_seconds).
+        """
+        return self.store.presigned_get_url(
+            record.storageObjectKey,
+            expires=timedelta(seconds=self.settings.attachment_delivery_url_ttl_seconds),
+        )
 
     def preview_file(self, principal: Principal, file_id: str) -> LibraryPreviewResponse:
         record = self._require_file(principal, file_id)
@@ -283,6 +438,24 @@ class LibraryService:
         self.connection.commit()
         return purged
 
+    def purge_expired_temporary_files(self, limit: int = 100) -> int:
+        """Temporary-file GC pass (§12.2).
+
+        Hard-delete the rows of expired temporary attachments and remove their objects (the
+        default: §9's provenance snapshot already preserves history, so the row need not linger).
+        Promotion clears expires_at, so promoted files are excluded. There is no on-disk delivery
+        copy to reclaim -- delivery is content-only (§12.3).
+        """
+        now = _now_iso()
+        expired = self.repo.list_expired_temporary_files(now, limit)
+        purged = 0
+        for file_id, storage_key in expired:
+            if remove_if_present(self.store, storage_key):
+                self.repo.hard_delete_file(file_id)
+                purged += 1
+        self.connection.commit()
+        return purged
+
     def _require_file(self, principal: Principal, file_id: str) -> LibraryFileRecord:
         user_id, tenant_id = self._owner(principal)
         record = self.repo.get_file(user_id, tenant_id, file_id)
@@ -305,6 +478,8 @@ def _to_item(record: LibraryFileRecord) -> LibraryFile:
         type=record.fileType,
         sizeBytes=record.sizeBytes,
         sizeLabel=_size_label(record.sizeBytes),
+        lifecycle=record.lifecycle,
+        expiresAt=record.expiresAt,
         updatedAt=record.updatedAt,
         createdAt=record.createdAt,
         previewSupported=_record_preview_supported(record),
@@ -312,7 +487,23 @@ def _to_item(record: LibraryFileRecord) -> LibraryFile:
 
 
 def _object_key(tenant_id: str, user_id: str, file_id: str, safe_name: str) -> str:
-    return f"library/{tenant_id}/users/{user_id}/{file_id}/{safe_name}"
+    return f"library/{tenant_id}/users/{user_id}/{file_id}/{_ascii_key_name(safe_name)}"
+
+
+def _ascii_key_name(safe_name: str) -> str:
+    """ASCII-only name for the storage object key.
+
+    Non-ASCII object keys (e.g. Chinese filenames) force PyJWT to emit \\uXXXX escapes inside the
+    signed presigned-URL token; clients that re-encode the URL strip those backslashes and corrupt
+    the signature (401). The display name is kept separately as original_name, so the key name is
+    cosmetic -- collapse anything outside [A-Za-z0-9._-] to '_' and preserve the extension.
+    """
+    stem, dot, ext = safe_name.rpartition(".")
+    base = stem if dot else safe_name
+    ext = ext if dot else ""
+    base = re.sub(r"[^A-Za-z0-9._-]+", "_", base).strip("._-") or "file"
+    ext = re.sub(r"[^A-Za-z0-9]+", "", ext)
+    return f"{base}.{ext}" if ext else base
 
 
 def _safe_file_name(file_name: str) -> str:

@@ -91,12 +91,58 @@ ngent / Codex are upstream/optional integrations, not the source of truth.
     `_stream_turn_acp` reconciles it after the turn via `_fetch_acp_title` (`AcpGatewayClient.list_sessions`),
     matching `sessions[].session_id` to `chat_sessions.acp_session_id`. The inline `session_info`
     branch is kept for agents that *do* emit it (e.g. opencode).
-- The turn request body is **`question` only**. ngent's turn API takes just the prompt
-  (`{input, stream}`), so model / knowledge-base / retrieval options are not accepted and the
-  `chat_turns` option columns are stored as defaults — do not re-add request fields without
-  wiring them into the outgoing payload. The streaming handler opens its own DB connection
+- The turn request body is **`question` plus `attachmentFileIds`** (and `webSearchEnabled`).
+  ngent's turn API takes just the prompt (`{input, stream}`), so model / knowledge-base / retrieval
+  options are not accepted and the `chat_turns` option columns are stored as defaults — do not
+  re-add request fields without wiring them into the outgoing payload. `attachmentFileIds` *is*
+  wired (see Chat attachments below). The streaming handler opens its own DB connection
   (`open_database_connection`) inside the generator, since the request-scoped `get_database`
-  connection is closed before the `StreamingResponse` body runs.
+  connection is closed before the `StreamingResponse` body runs; a route-level pre-flight
+  (`validate_turn_preconditions`) authorizes the session + attachments before the stream starts,
+  so denials are clean HTTP errors rather than an empty 200 stream.
+
+### Chat attachments & library file lifecycle
+
+- Chat temporary files **reuse the library tables** (`library_files`) rather than a new store — see
+  `docs/LIBRARY_FILE_LIFECYCLE.md`. `library_files` carries lifecycle columns (`source`, `lifecycle`,
+  `expires_at`, `promoted_at`, `chat_session_id`) under a named cross-column invariant
+  (`library_files_lifecycle_invariant`): `temporary => expires_at not null` (its `chat_session_id`
+  may be null while **unbound**); `permanent => expires_at null`. The invariant is a table-level
+  check (fresh DBs) + an existing-PostgreSQL `DO` block (drop-then-add, so it updates in place) +
+  **app-layer `validate_lifecycle_invariant` on every write** (the only enforcement on existing
+  SQLite, where `ADD CONSTRAINT` is skipped).
+- **Upload is unified under `/library/files`** (no `/chat/attachments/*` routes):
+  `POST /library/files/upload-url` + `/complete-upload` with `lifecycle: "temporary"|"permanent"`. A
+  temporary file is created **unbound** (`chat_session_id is null`), so it can be uploaded before a
+  chat session exists.
+- **Storage object keys are ASCII-only** (`_ascii_key_name` in `library_service.py`). A non-ASCII key
+  (e.g. a Chinese filename) forces PyJWT to `\uXXXX`-escape the object key inside the signed
+  presigned-URL token; a client that re-encodes the URL (codex did this) strips the backslashes and
+  breaks the signature → 401. The real display name is preserved separately as `original_name`, so
+  the key name is cosmetic. The delivered URL must also be **absolute** — set
+  `EXPERT_OBJECT_STORAGE_PUBLIC_BASE_URL` (local backend) / a reachable MinIO host, never a bare
+  relative path, or the agent resolves it against the wrong origin.
+- **Binding is deferred to first turn use**: when a turn's `attachmentFileIds` first references an
+  unbound temporary file, `resolve_turn_attachments(..., bind=True)` binds it to that session via a
+  once-only conditional update (`where chat_session_id is null`, idempotent/race-safe). The turn
+  route pre-flights with `bind=False` (authorize-only) before the SSE stream so denials are clean
+  HTTP errors. Authorization (§5): temporary unbound → owner-scoped; temporary bound → owner + that
+  session; bound-to-another-session → 403; permanent → owner.
+- **Listing**: `GET /library/files` is permanent-only by default (repository layer);
+  `?lifecycle=temporary` lists the caller's non-expired temporary files (unbound when no `sessionId`,
+  a session's bound files with `&sessionId=`). `user_id`+`tenant_id` are always in the where clause,
+  so the `lifecycle` filter can't leak across users. `POST /library/files/{id}/promote` flips
+  temporary→permanent with no byte copy (works on unbound files too).
+- A turn snapshots its referenced files into `chat_turns.attachments` (jsonb, self-contained) for
+  durable provenance that survives GC. Delivery is **presigned-URL** (§8 option A): each authorized
+  attachment gets a short-lived GET URL (`attachment_delivery_url`, TTL
+  `attachment_delivery_url_ttl_seconds`, default 1h) appended to the runtime input as an
+  `[Attachment: name (mime)] Content available at: <url>` block; the engine fetches it. `request_text`
+  stays the bare question and the URL is never persisted. The §8.2 server-side text-extraction form
+  is a no-network fallback but is not currently wired.
+- GC: `LibraryService.purge_expired_temporary_files` (in `/ops/storage/gc`) hard-deletes expired
+  temporary rows + objects. Session deletion is **TTL-only** — `delete_session` does no attachment
+  cleanup; expired attachments are reclaimed on their own deadline.
 - **Expert marketplace (`/expert-market/*`) requires sign-in** (`require_principal`, any
   authenticated caller) but no specific permission; it lists only `published` experts/categories.
 
@@ -153,4 +199,5 @@ ngent / Codex are upstream/optional integrations, not the source of truth.
 
 - `docs/KNOWLEDGE_BASE_STORAGE_AND_BUILD_SPEC.md` (architecture + technical spec, reflects shipped code) — design rationale in `docs/KNOWLEDGE_BASE_STORAGE_AND_BUILD_DESIGN.md`
 - `docs/USER_TENANT_RBAC_DESIGN.md`
+- `docs/LIBRARY_FILE_LIFECYCLE.md` (chat temporary files & promotion, reflects shipped code).
 - API reference under `docs/api/`.

@@ -47,4 +47,5 @@ async def run_storage_gc(
         "purgedKnowledgeBases": document_service.purge_deleted_knowledge_bases(),
         "expiredLibrarySessions": library_service.expire_stale_sessions(),
         "purgedLibraryFiles": library_service.purge_deleted_files(),
+        "purgedTemporaryFiles": library_service.purge_expired_temporary_files(),
     }

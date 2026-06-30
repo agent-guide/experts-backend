@@ -61,6 +61,14 @@ class Settings(BaseSettings):
     minio_secure: bool = False
     # Short-lived presigned URL TTL for document upload/download (seconds). See design section 11.
     presigned_url_ttl_seconds: int = 900
+    # Retention window for chat temporary files (seconds). A temporary attachment gets
+    # expires_at = now() + this at complete-upload; promotion clears it. Default 1 day
+    # (docs/LIBRARY_FILE_LIFECYCLE.md §14.1, configurable).
+    chat_attachment_retention_seconds: int = 60 * 60 * 24
+    # TTL for the presigned URL delivered to the compute engine for a turn attachment
+    # (docs/LIBRARY_FILE_LIFECYCLE.md §8.2, delivery option A). Must outlive the whole turn,
+    # since the agent may fetch the URL minutes after the turn starts. Default 1 hour.
+    attachment_delivery_url_ttl_seconds: int = 60 * 60
 
 
 @lru_cache

@@ -4473,6 +4473,7 @@ def test_storage_gc_endpoint_reclaims_document_and_library_objects(tmp_path: Pat
             "purgedKnowledgeBases": 1,
             "expiredLibrarySessions": 1,
             "purgedLibraryFiles": 1,
+            "purgedTemporaryFiles": 0,
         }
         for key in (
             doc_payload["objectKey"],
@@ -4490,6 +4491,7 @@ def test_storage_gc_endpoint_reclaims_document_and_library_objects(tmp_path: Pat
             "purgedKnowledgeBases": 0,
             "expiredLibrarySessions": 0,
             "purgedLibraryFiles": 0,
+            "purgedTemporaryFiles": 0,
         }
 
 
@@ -4600,6 +4602,7 @@ def test_storage_gc_keeps_rows_when_object_remove_fails(tmp_path: Path) -> None:
             "purgedKnowledgeBases": 0,
             "expiredLibrarySessions": 0,
             "purgedLibraryFiles": 0,
+            "purgedTemporaryFiles": 0,
         }
 
         with open_database_connection(settings) as connection:
@@ -4633,6 +4636,7 @@ def test_storage_gc_keeps_rows_when_object_remove_fails(tmp_path: Path) -> None:
             "purgedKnowledgeBases": 1,
             "expiredLibrarySessions": 1,
             "purgedLibraryFiles": 1,
+            "purgedTemporaryFiles": 0,
         }
 
 
@@ -4692,6 +4696,7 @@ def _upload_library_file(
     content: bytes,
     mime_type: str,
     store: FakeObjectStore | None = None,
+    lifecycle: str = "permanent",
 ) -> tuple[dict, dict]:
     created = client.post(
         "/api/v1/library/files/upload-url",
@@ -4713,7 +4718,7 @@ def _upload_library_file(
     completed = client.post(
         "/api/v1/library/files/complete-upload",
         headers=headers,
-        json={"uploadSessionId": upload["uploadSessionId"]},
+        json={"uploadSessionId": upload["uploadSessionId"], "lifecycle": lifecycle},
     )
     assert completed.status_code == 201, completed.text
     return completed.json(), upload
@@ -5285,3 +5290,283 @@ def test_smooth_text_buffer_tracks_line_start() -> None:
     assert buf.push("qr\nstuvwx") == "qr\n"
     assert buf.flush() == "stuvwx"
     assert buf.chunk_at_line_start is True
+
+
+
+def _chat_attachment_settings(tmp_path: Path) -> Settings:
+    return Settings(
+        database_url=f"sqlite:///{tmp_path / 'chat_attachments.sqlite3'}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+    )
+
+
+def _chat_attachment_login(client: TestClient, settings: Settings) -> dict[str, str]:
+    _seed_tenant(settings)
+    _seed_tenant_user(
+        settings, "tenant_user", "tenant@example.com", "Tenant User", "tenant-secret", "member"
+    )
+    login = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "tenant@example.com",
+            "password": "tenant-secret",
+            "tenantId": "tenant_default",
+        },
+    )
+    assert login.status_code == 200, login.text
+    return {
+        "Authorization": f"Bearer {login.json()['accessToken']}",
+        "x-tenant-id": "tenant_default",
+    }
+
+
+def test_library_temporary_upload_lifecycle_and_promote(tmp_path: Path) -> None:
+    settings = _chat_attachment_settings(tmp_path)
+    store = FakeObjectStore()
+    with TestClient(_kb_app(settings, store)) as client:
+        headers = _chat_attachment_login(client, settings)
+
+        # 1. Upload a temporary file through the unified library endpoint (unbound: no session yet).
+        completed, _ = _upload_library_file(
+            client,
+            headers,
+            file_name="report.pdf",
+            mime_type="application/pdf",
+            content=b"x" * 1024,
+            store=store,
+            lifecycle="temporary",
+        )
+        file_id = completed["id"]
+        assert completed["lifecycle"] == "temporary"
+        assert completed["expiresAt"] is not None
+
+        # 2. It shows in the temporary (unbound) listing, not in the permanent library listing.
+        pending = client.get("/api/v1/library/files?lifecycle=temporary", headers=headers)
+        assert [item["id"] for item in pending.json()["items"]] == [file_id]
+        library = client.get("/api/v1/library/files", headers=headers)
+        assert file_id not in [item["id"] for item in library.json()["items"]]
+
+        # 3. Promote it; it becomes a permanent library file with no byte copy.
+        promoted = client.post(f"/api/v1/library/files/{file_id}/promote", headers=headers)
+        assert promoted.status_code == 200, promoted.text
+        assert promoted.json()["lifecycle"] == "permanent"
+
+        # 4. Now in the library listing and gone from the temporary listing.
+        assert file_id in [
+            item["id"]
+            for item in client.get("/api/v1/library/files", headers=headers).json()["items"]
+        ]
+        assert client.get(
+            "/api/v1/library/files?lifecycle=temporary", headers=headers
+        ).json()["items"] == []
+
+        # 5. Re-promoting a now-permanent file is a 409.
+        assert (
+            client.post(f"/api/v1/library/files/{file_id}/promote", headers=headers).status_code
+            == 409
+        )
+
+
+def test_library_permanent_upload_is_visible(tmp_path: Path) -> None:
+    settings = _chat_attachment_settings(tmp_path)
+    store = FakeObjectStore()
+    with TestClient(_kb_app(settings, store)) as client:
+        headers = _chat_attachment_login(client, settings)
+        completed, _ = _upload_library_file(
+            client,
+            headers,
+            file_name="keep.png",
+            mime_type="image/png",
+            content=b"y" * 512,
+            store=store,
+            lifecycle="permanent",
+        )
+        assert completed["lifecycle"] == "permanent"
+        assert completed["expiresAt"] is None
+        library = client.get("/api/v1/library/files", headers=headers)
+        assert completed["id"] in [item["id"] for item in library.json()["items"]]
+
+
+def _chat_attachment_acp_app(settings: Settings, store: FakeObjectStore, fake_acp):
+    app = create_app(settings)
+    app.dependency_overrides[get_acp_gateway_client] = lambda: fake_acp
+    app.dependency_overrides[get_object_store] = lambda: store
+    return app
+
+
+def _acp_attachment_settings(tmp_path: Path, name: str) -> Settings:
+    return Settings(
+        database_url=f"sqlite:///{tmp_path / name}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+        acp_gateway_base_url="http://gateway.test",
+        acp_route_prefix="/acp",
+        acp_default_cwd=str(tmp_path / "acp-workspace"),
+    )
+
+
+def test_object_key_is_ascii_for_unicode_filename() -> None:
+    # A non-ASCII object key forces \uXXXX escapes into the signed presigned-URL token; clients
+    # that re-encode the URL strip the backslashes and break the signature (401). The storage key
+    # must therefore stay ASCII while original_name keeps the real (unicode) display name.
+    from app.services.library_service import _ascii_key_name, _object_key
+
+    key = _object_key("tenant_x", "user_y", "file_z", "ChatGPT-销售售前AI培训内容.pdf")
+    assert key.isascii()
+    assert key == "library/tenant_x/users/user_y/file_z/ChatGPT-_AI.pdf"
+    assert _ascii_key_name("报告.PDF") == "file.PDF"
+    assert _ascii_key_name("无扩展名文件") == "file"
+    assert _ascii_key_name("正常 file (1).docx") == "file_1.docx"
+
+
+def test_turn_autobinds_attachment_delivers_url_and_records_provenance(tmp_path: Path) -> None:
+    settings = _acp_attachment_settings(tmp_path, "turn_attach.sqlite3")
+    store = FakeObjectStore()
+    fake_acp = FakeAcpGatewayClient()
+    with TestClient(_chat_attachment_acp_app(settings, store, fake_acp)) as client:
+        headers = _chat_attachment_login(client, settings)
+        session_id = client.post("/api/v1/chat/sessions", headers=headers, json={}).json()["id"]
+
+        # Upload a temporary file (unbound) via the unified library endpoint.
+        content = b"The mitochondria is the powerhouse of the cell."
+        file_id = _upload_library_file(
+            client,
+            headers,
+            file_name="notes.txt",
+            mime_type="text/plain",
+            content=content,
+            store=store,
+            lifecycle="temporary",
+        )[0]["id"]
+
+        turn = client.post(
+            f"/api/v1/chat/sessions/{session_id}/turns",
+            headers=headers,
+            json={"question": "Summarize this", "attachmentFileIds": [file_id]},
+        )
+        assert turn.status_code == 200, turn.text
+
+        # §8.2 delivery (option A): a presigned URL is appended to the runtime input, NOT the file
+        # content; request_text stays the bare question.
+        delivered_input = fake_acp.turn_calls[0]["input"]
+        assert "Summarize this" in delivered_input
+        assert "[Attachment: notes.txt (text/plain)]" in delivered_input
+        assert "https://minio.test/" in delivered_input
+        # The raw content is never inlined.
+        assert "powerhouse of the cell" not in delivered_input
+
+        # Auto-bind: the file is now bound to this session and shows in its session listing.
+        bound = client.get(
+            f"/api/v1/library/files?lifecycle=temporary&sessionId={session_id}", headers=headers
+        )
+        assert file_id in [item["id"] for item in bound.json()["items"]]
+        # The no-session listing still returns it: without sessionId it lists ALL of the caller's
+        # temporary files (bound and unbound), not just the unbound ones.
+        assert file_id in [
+            item["id"]
+            for item in client.get(
+                "/api/v1/library/files?lifecycle=temporary", headers=headers
+            ).json()["items"]
+        ]
+        # A different session's listing does not include it.
+        other_session = client.post("/api/v1/chat/sessions", headers=headers, json={}).json()["id"]
+        assert file_id not in [
+            item["id"]
+            for item in client.get(
+                f"/api/v1/library/files?lifecycle=temporary&sessionId={other_session}",
+                headers=headers,
+            ).json()["items"]
+        ]
+
+        # §9 provenance snapshot on the turn.
+        messages = client.get(
+            f"/api/v1/chat/sessions/{session_id}/messages", headers=headers
+        ).json()["items"]
+        snapshot = messages[0]["attachments"]
+        assert len(snapshot) == 1
+        assert snapshot[0]["fileId"] == file_id
+        assert snapshot[0]["name"] == "notes.txt"
+        assert messages[0]["requestText"] == "Summarize this"
+
+
+def test_turn_rejects_attachment_bound_to_another_session(tmp_path: Path) -> None:
+    settings = _acp_attachment_settings(tmp_path, "turn_attach_deny.sqlite3")
+    store = FakeObjectStore()
+    fake_acp = FakeAcpGatewayClient()
+    with TestClient(_chat_attachment_acp_app(settings, store, fake_acp)) as client:
+        headers = _chat_attachment_login(client, settings)
+        s1 = client.post("/api/v1/chat/sessions", headers=headers, json={}).json()["id"]
+        s2 = client.post("/api/v1/chat/sessions", headers=headers, json={}).json()["id"]
+        file_id = _upload_library_file(
+            client,
+            headers,
+            file_name="p.txt",
+            mime_type="text/plain",
+            content=b"private to session one",
+            store=store,
+            lifecycle="temporary",
+        )[0]["id"]
+
+        # First reference in s1 auto-binds the file to s1.
+        first = client.post(
+            f"/api/v1/chat/sessions/{s1}/turns",
+            headers=headers,
+            json={"question": "bind it", "attachmentFileIds": [file_id]},
+        )
+        assert first.status_code == 200, first.text
+
+        # Referencing the s1-bound file from s2 is denied (§5), cleanly, before any runtime call.
+        fake_acp.turn_calls.clear()
+        denied = client.post(
+            f"/api/v1/chat/sessions/{s2}/turns",
+            headers=headers,
+            json={"question": "leak it", "attachmentFileIds": [file_id]},
+        )
+        assert denied.status_code == 403
+        assert denied.json()["code"] == "LIBRARY_FILE_FORBIDDEN"
+        assert fake_acp.turn_calls == []
+
+
+def test_temporary_file_gc_hard_deletes_expired(tmp_path: Path) -> None:
+    # A negative retention window makes complete-upload mint an already-expired temporary file,
+    # so the temporary-file GC pass has something to reclaim without sleeping.
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'temp_gc.sqlite3'}",
+        default_tenant_id="tenant_default",
+        jwt_secret="test-secret-with-at-least-32-bytes",
+        chat_attachment_retention_seconds=-10,
+    )
+    store = FakeObjectStore()
+    with TestClient(_kb_app(settings, store)) as client:
+        headers = _chat_attachment_login(client, settings)
+        upload = client.post(
+            "/api/v1/library/files/upload-url",
+            headers=headers,
+            json={"fileName": "ephemeral.txt", "mimeType": "text/plain", "fileSizeBytes": 4},
+        ).json()
+        store.put(upload["objectKey"], 4)
+        file_id = client.post(
+            "/api/v1/library/files/complete-upload",
+            headers=headers,
+            json={"uploadSessionId": upload["uploadSessionId"], "lifecycle": "temporary"},
+        ).json()["id"]
+        object_key = upload["objectKey"]
+        assert object_key in store.objects
+
+        # The already-expired file is not listed (not-expired filter) but is GC-eligible.
+        assert client.get(
+            "/api/v1/library/files?lifecycle=temporary", headers=headers
+        ).json()["items"] == []
+
+        from app.services.library_repository import LibraryRepository
+        from app.services.library_service import LibraryService
+
+        with open_database_connection(settings) as connection:
+            purged = LibraryService(connection, store, settings).purge_expired_temporary_files()
+            assert purged == 1
+            assert object_key not in store.objects
+            assert object_key in store.removed
+            assert LibraryRepository(connection).get_file(
+                "tenant_user", "tenant_default", file_id
+            ) is None

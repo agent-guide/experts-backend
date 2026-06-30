@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.core.errors import ApiError
 from app.db import DatabaseConnection
 from app.domain.library import LibraryFileRecord, LibrarySort, LibraryUploadSessionRecord
 from app.services._sql import execute, fetch_all, fetch_one, json_load, json_param, rowcount
@@ -10,14 +11,47 @@ from app.services._sql import execute, fetch_all, fetch_one, json_load, json_par
 _COLUMNS = (
     "id, user_id, tenant_id, original_name, safe_name, mime_type, file_type, extension, "
     "size_bytes, storage_bucket, storage_object_key, content_hash, preview_supported, "
-    "metadata, created_at, updated_at"
+    "metadata, source, lifecycle, expires_at, promoted_at, chat_session_id, created_at, updated_at"
 )
 
 _SESSION_COLUMNS = (
     "id, file_id, user_id, tenant_id, original_name, safe_name, mime_type, file_type, extension, "
     "file_size_bytes, storage_bucket, storage_object_key, content_hash, status, expires_at, "
-    "completed_at, created_at, updated_at"
+    "completed_at, chat_session_id, created_at, updated_at"
 )
+
+
+def validate_lifecycle_invariant(
+    *, lifecycle: str, chat_session_id: str | None, expires_at: str | None
+) -> None:
+    """Re-validate the §3.4 cross-column lifecycle invariant in application code.
+
+    The DB check covers fresh databases and existing PostgreSQL, but cannot be retrofitted onto an
+    existing SQLite table, so every write path re-validates here to guarantee the invariant
+    uniformly. A violation is a backend bug, not user input, so it surfaces as a 500.
+
+    A temporary file always has an expiry; its chat_session_id may be null (unbound) until it is
+    bound to a session on first turn use (§5/§7).
+    """
+    del chat_session_id  # no longer part of the invariant; kept for call-site symmetry
+    if lifecycle == "temporary":
+        if expires_at is None:
+            raise ApiError(
+                500,
+                "LIBRARY_LIFECYCLE_INVARIANT_VIOLATION",
+                "A temporary file must have expires_at",
+            )
+    elif lifecycle == "permanent":
+        if expires_at is not None:
+            raise ApiError(
+                500,
+                "LIBRARY_LIFECYCLE_INVARIANT_VIOLATION",
+                "A permanent file must not have expires_at",
+            )
+    else:
+        raise ApiError(
+            500, "LIBRARY_LIFECYCLE_INVARIANT_VIOLATION", f"Unknown lifecycle: {lifecycle}"
+        )
 
 _SORT_SQL: dict[str, str] = {
     "updatedAt_desc": "updated_at desc, id asc",
@@ -51,16 +85,25 @@ class LibraryRepository:
         preview_supported: bool,
         metadata: dict[str, Any],
         now: str,
+        source: str = "library",
+        lifecycle: str = "permanent",
+        expires_at: str | None = None,
+        promoted_at: str | None = None,
+        chat_session_id: str | None = None,
     ) -> LibraryFileRecord:
+        validate_lifecycle_invariant(
+            lifecycle=lifecycle, chat_session_id=chat_session_id, expires_at=expires_at
+        )
         execute(
             self.connection,
             """
             insert into library_files (
               id, user_id, tenant_id, original_name, safe_name, mime_type, file_type,
               extension, size_bytes, storage_bucket, storage_object_key, content_hash,
-              preview_supported, metadata, created_at, updated_at
+              preview_supported, metadata, source, lifecycle, expires_at, promoted_at,
+              chat_session_id, created_at, updated_at
             )
-            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 file_id,
@@ -77,6 +120,11 @@ class LibraryRepository:
                 content_hash,
                 preview_supported,
                 json_param(self.connection, metadata),
+                source,
+                lifecycle,
+                expires_at,
+                promoted_at,
+                chat_session_id,
                 now,
                 now,
             ),
@@ -103,6 +151,7 @@ class LibraryRepository:
         content_hash: str | None,
         expires_at: str,
         now: str,
+        chat_session_id: str | None = None,
     ) -> None:
         execute(
             self.connection,
@@ -110,9 +159,9 @@ class LibraryRepository:
             insert into library_upload_sessions (
               id, file_id, user_id, tenant_id, original_name, safe_name, mime_type, file_type,
               extension, file_size_bytes, storage_bucket, storage_object_key, content_hash,
-              status, expires_at, created_at, updated_at
+              status, expires_at, chat_session_id, created_at, updated_at
             )
-            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'initiated', ?, ?, ?)
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'initiated', ?, ?, ?, ?)
             """,
             (
                 session_id,
@@ -129,6 +178,7 @@ class LibraryRepository:
                 storage_object_key,
                 content_hash,
                 expires_at,
+                chat_session_id,
                 now,
                 now,
             ),
@@ -196,9 +246,28 @@ class LibraryRepository:
         sort: LibrarySort,
         limit: int,
         offset: int,
+        lifecycle: str = "permanent",
+        chat_session_id: str | None = None,
+        now: str | None = None,
     ) -> tuple[list[LibraryFileRecord], int]:
+        # user_id + tenant_id are always in the where clause, so this is the real ownership
+        # boundary regardless of the lifecycle filter (§11).
         where = ["user_id = ?", "tenant_id = ?", "deleted_at is null"]
         params: list[Any] = [user_id, tenant_id]
+        if lifecycle == "temporary":
+            # Temporary listing (§11): owner-scoped and never expired. Without a session it returns
+            # all of the caller's temporary files (bound and unbound); with one, only that session's
+            # bound files. Both stay owner-scoped, so there is no cross-user exposure.
+            where.append("lifecycle = 'temporary'")
+            where.append("expires_at > ?")
+            params.append(now)
+            if chat_session_id is not None:
+                where.append("chat_session_id = ?")
+                params.append(chat_session_id)
+        else:
+            # §11 safeguard: the default listing is permanent-only, unconditionally. A caller that
+            # does not explicitly ask for temporary files never sees them.
+            where.append("lifecycle = 'permanent'")
         if file_type is not None:
             where.append("file_type = ?")
             params.append(file_type)
@@ -224,6 +293,71 @@ class LibraryRepository:
         return [f for f in (_map_file(row) for row in rows) if f is not None], int(
             total_row["count"] if total_row else 0
         )
+
+    def promote_file(
+        self, user_id: str, tenant_id: str, file_id: str, now: str
+    ) -> LibraryFileRecord | None:
+        """Flip a live temporary file to permanent with no byte copy (§10).
+
+        The expiry guard lives in the SQL where clause so a promotion racing the GC pass cannot
+        resurrect an already-expired file. Returns None if nothing matched (expired, already
+        permanent, or deleted).
+        """
+        cursor = execute(
+            self.connection,
+            """
+            update library_files
+            set lifecycle = 'permanent', expires_at = null, promoted_at = ?, updated_at = ?
+            where id = ? and user_id = ? and tenant_id = ?
+              and deleted_at is null
+              and lifecycle = 'temporary'
+              and expires_at > ?
+            """,
+            (now, now, file_id, user_id, tenant_id, now),
+        )
+        if rowcount(cursor) == 0:
+            return None
+        return self.get_file(user_id, tenant_id, file_id)
+
+    def bind_temporary_file_session(
+        self, user_id: str, tenant_id: str, file_id: str, session_id: str, now: str
+    ) -> LibraryFileRecord | None:
+        """Bind an unbound temporary file to a session, exactly once (§7 auto-bind).
+
+        The `chat_session_id is null` guard makes the bind idempotent and race-safe: a second
+        attempt (or a concurrent turn in another session) matches no row. Returns None when nothing
+        was bound; the caller re-reads to see who won.
+        """
+        cursor = execute(
+            self.connection,
+            """
+            update library_files
+            set chat_session_id = ?, updated_at = ?
+            where id = ? and user_id = ? and tenant_id = ?
+              and deleted_at is null
+              and lifecycle = 'temporary'
+              and chat_session_id is null
+              and expires_at > ?
+            """,
+            (session_id, now, file_id, user_id, tenant_id, now),
+        )
+        if rowcount(cursor) == 0:
+            return None
+        return self.get_file(user_id, tenant_id, file_id)
+
+    def list_expired_temporary_files(self, now: str, limit: int = 100) -> list[tuple[str, str]]:
+        """Temporary files past their deadline (§12.2). Returns (file_id, storage_object_key)."""
+        rows = fetch_all(
+            self.connection,
+            """
+            select id, storage_object_key from library_files
+            where lifecycle = 'temporary' and deleted_at is null and expires_at < ?
+            order by expires_at asc
+            limit ?
+            """,
+            (now, limit),
+        )
+        return [(str(row["id"]), str(row["storage_object_key"])) for row in rows]
 
     def soft_delete_file(self, user_id: str, tenant_id: str, file_id: str, now: str) -> bool:
         cursor = execute(
@@ -272,6 +406,11 @@ def _map_file(row: dict[str, Any] | None) -> LibraryFileRecord | None:
         contentHash=str(row["content_hash"]) if row.get("content_hash") is not None else None,
         previewSupported=bool(row["preview_supported"]),
         metadata=json_load(row["metadata"]),
+        source=str(row["source"]) if row.get("source") is not None else "library",
+        lifecycle=str(row["lifecycle"]) if row.get("lifecycle") is not None else "permanent",
+        expiresAt=str(row["expires_at"]) if row.get("expires_at") is not None else None,
+        promotedAt=str(row["promoted_at"]) if row.get("promoted_at") is not None else None,
+        chatSessionId=str(row["chat_session_id"]) if row.get("chat_session_id") is not None else None,
         createdAt=str(row["created_at"]),
         updatedAt=str(row["updated_at"]),
     )
@@ -297,6 +436,7 @@ def _map_session(row: dict[str, Any] | None) -> LibraryUploadSessionRecord | Non
         status=str(row["status"]),
         expiresAt=str(row["expires_at"]),
         completedAt=str(row["completed_at"]) if row.get("completed_at") is not None else None,
+        chatSessionId=str(row["chat_session_id"]) if row.get("chat_session_id") is not None else None,
         createdAt=str(row["created_at"]),
         updatedAt=str(row["updated_at"]),
     )

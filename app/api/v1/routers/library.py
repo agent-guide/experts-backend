@@ -36,6 +36,12 @@ async def list_files(
     page: int = Query(default=1, ge=1),
     pageSize: int = Query(default=20, ge=1, le=100),  # noqa: N803 - API field
     sort: LibrarySort = "updatedAt_desc",
+    # docs/LIBRARY_FILE_LIFECYCLE.md §11. Default is permanent-only. lifecycle=temporary lists the
+    # caller's non-expired temporary files: all of them (bound and unbound) without sessionId, or a
+    # single session's bound ones when sessionId is given. Both stay owner-scoped, so there is no
+    # cross-user exposure.
+    lifecycle: str = Query(default="permanent", pattern="^(permanent|temporary)$"),
+    sessionId: str | None = None,  # noqa: N803 - API field
     principal: Principal = Depends(require_tenant_permission("chat:ask")),
     connection: DatabaseConnection = Depends(get_database),
     object_store: ObjectStore = Depends(get_object_store),
@@ -48,6 +54,8 @@ async def list_files(
         sort=sort,
         page=page,
         page_size=pageSize,
+        lifecycle=lifecycle,
+        session_id=sessionId,
     )
 
 
@@ -71,6 +79,17 @@ async def complete_upload(
     settings: Settings = Depends(get_settings),
 ) -> LibraryFile:
     return _service(connection, object_store, settings).complete_upload(principal, body)
+
+
+@router.post("/files/{file_id}/promote", response_model=LibraryFile)
+async def promote_file(
+    file_id: str,
+    principal: Principal = Depends(require_tenant_permission("chat:ask")),
+    connection: DatabaseConnection = Depends(get_database),
+    object_store: ObjectStore = Depends(get_object_store),
+    settings: Settings = Depends(get_settings),
+) -> LibraryFile:
+    return _service(connection, object_store, settings).promote_file(principal, file_id)
 
 
 @router.get("/files/{file_id}/preview", response_model=LibraryPreviewResponse)

@@ -20,6 +20,14 @@ class ChatTurnRequest(BaseModel):
             "otherwise uses the default prefix with search_mode=off."
         ),
     )
+    attachmentFileIds: list[str] | None = Field(
+        default=None,
+        description=(
+            "Completed library_files ids referenced by this turn (docs/LIBRARY_FILE_LIFECYCLE.md "
+            "§7.3). Each is authorized per §5; a temporary file must belong to this session and not "
+            "be expired."
+        ),
+    )
 
 
 class RenameSessionRequest(BaseModel):
@@ -59,5 +67,8 @@ class ChatTurn(BaseModel):
     status: str
     stopReason: str | None = None
     errorMessage: str | None = None
+    # Per-turn attachment provenance snapshot (docs/LIBRARY_FILE_LIFECYCLE.md §9). Self-contained,
+    # so it survives the referenced file being expired and GC-removed.
+    attachments: list[dict] = Field(default_factory=list)
     createdAt: str
     completedAt: str | None = None

@@ -20,6 +20,7 @@ from app.domain.chat import (
     ResolvePermissionRequest,
 )
 from app.services.chat_repository import ChatRepository
+from app.services.library_service import LibraryService
 
 
 class ChatService:
@@ -40,9 +41,11 @@ class ChatService:
         connection: DatabaseConnection,
         *,
         acp: AcpGatewayClient | None = None,
+        library: LibraryService | None = None,
     ) -> None:
         self.connection = connection
         self.acp = acp
+        self.library = library
         self.repo = ChatRepository(connection)
 
     def _require_acp(self) -> AcpGatewayClient:
@@ -197,6 +200,14 @@ class ChatService:
         acp_session_id = route.session_id
         cwd = acp.prepare_cwd(str(tenant_id))
 
+        # Authorize referenced attachments (§5), snapshot them for provenance (§9), and build a
+        # presigned URL per attachment for URL-based delivery (§8.2, option A). request_text stays
+        # the user's question; the attachment URLs are appended only to the input sent to the runtime.
+        attachments_snapshot, attachment_text = self._prepare_attachments(
+            principal, session_id, request
+        )
+        turn_input = request.question + attachment_text
+
         # The ACP data plane has no server turn id; generate one up front and persist immediately
         # so the public contract still opens with turn_started before any text.
         turn_id = f"turn_{uuid4().hex}"
@@ -210,6 +221,7 @@ class ChatService:
             query_rewrite=False,
             multi_hop_config=None,
             now=_now_iso(),
+            attachments=attachments_snapshot,
         )
         self.connection.commit()
         yield _sse("turn_started", {"turnId": turn_id})
@@ -223,6 +235,7 @@ class ChatService:
                 principal=principal,
                 session_id=session_id,
                 request=request,
+                turn_input=turn_input,
                 initial_acp_session_id=acp_session_id,
                 cwd=cwd,
                 route=route,
@@ -288,6 +301,7 @@ class ChatService:
                 principal=principal,
                 session_id=session_id,
                 request=request,
+                turn_input=turn_input,
                 initial_acp_session_id=None,
                 cwd=cwd,
                 route=route,
@@ -335,6 +349,7 @@ class ChatService:
         principal: Principal,
         session_id: str,
         request: ChatTurnRequest,
+        turn_input: str,
         initial_acp_session_id: str | None,
         cwd: str,
         route: _AcpRoute,
@@ -388,7 +403,7 @@ class ChatService:
 
         async for line in acp.stream_turn(
             thread_id=session_id,
-            input=request.question,
+            input=turn_input,
             tenant_id=principal.active_tenant_id,
             session_id=initial_acp_session_id,
             cwd=cwd,
@@ -560,6 +575,54 @@ class ChatService:
             tenant_id=principal.active_tenant_id,
         )
         return data or {"permissionId": permission_id, "status": "resolved"}
+
+    # --- Attachments ----------------------------------------------------------
+
+    def validate_turn_preconditions(
+        self, principal: Principal, session_id: str, request: ChatTurnRequest
+    ) -> None:
+        """Pre-flight a turn before its SSE stream starts.
+
+        Verifies session ownership and §5-authorizes any referenced attachments, so a denial is a
+        clean HTTP error rather than an empty 200 stream (the body has already started once the
+        first event is yielded). Authorization only -- no object bytes are read here.
+        """
+        self._require_session(principal, session_id)
+        file_ids = request.attachmentFileIds or []
+        if file_ids and self.library is not None:
+            # bind=False: pre-flight only authorizes (an unbound temporary file is allowed as-is);
+            # the actual bind happens when the turn runs (_prepare_attachments, bind=True).
+            self.library.resolve_turn_attachments(principal, session_id, file_ids, bind=False)
+
+    def _prepare_attachments(
+        self, principal: Principal, session_id: str, request: ChatTurnRequest
+    ) -> tuple[list[dict], str]:
+        """Authorize, snapshot, and URL-deliver a turn's attachments (§5/§8.2/§9).
+
+        Returns (provenance snapshot, text appended to the runtime input). The snapshot is stored
+        on the turn; the appended text carries a presigned URL per attachment (option A) and never
+        altered the stored request_text. The URLs themselves are not persisted.
+        """
+        file_ids = request.attachmentFileIds or []
+        if not file_ids:
+            return [], ""
+        if self.library is None:
+            raise ApiError(503, "LIBRARY_UNCONFIGURED", "Library service is not configured")
+        # bind=True: the first turn to reference an unbound temporary file binds it to this session.
+        records = self.library.resolve_turn_attachments(
+            principal, session_id, file_ids, bind=True
+        )
+        snapshot = self.library.attachment_snapshot(records, _now_iso())
+        blocks: list[str] = []
+        for record in records:
+            # Option A delivery: a short-lived presigned URL, not the inlined content. The engine
+            # fetches the file itself. The URL is never persisted (request_text / snapshot exclude it).
+            url = self.library.attachment_delivery_url(record)
+            kind = record.mimeType or "binary"
+            blocks.append(
+                f"\n\n[Attachment: {record.originalName} ({kind})]\nContent available at: {url}"
+            )
+        return snapshot, "".join(blocks)
 
     # --- Ownership guards -----------------------------------------------------
 

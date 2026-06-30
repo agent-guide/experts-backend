@@ -16,11 +16,17 @@ create table if not exists chat_turns (
   stop_reason text,
   error_message text,
   is_internal boolean not null default false,
+  -- Per-turn attachment provenance snapshot (§9). Denormalized, mandatory-on-write for turns that
+  -- reference files, so history/audit survive the referenced library_files row being GC-removed.
+  -- Each
+  -- element: {fileId, name, mimeType, sizeBytes, lifecycle, attachedAt}.
+  attachments jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
   completed_at timestamptz
 );
 
 alter table chat_turns add column if not exists reasoning_text text;
+alter table chat_turns add column if not exists attachments jsonb not null default '[]'::jsonb;
 
 create index if not exists idx_chat_turns_session_created
   on chat_turns (session_id, created_at asc);

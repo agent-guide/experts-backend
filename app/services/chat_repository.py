@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from app.db import DatabaseConnection
@@ -155,6 +156,7 @@ class ChatRepository:
         query_rewrite: bool,
         multi_hop_config: dict[str, Any] | None,
         now: str,
+        attachments: list[dict] | None = None,
     ) -> None:
         execute(
             self.connection,
@@ -162,9 +164,9 @@ class ChatRepository:
             insert into chat_turns (
                 id, session_id, tenant_id, user_id, request_text, model,
                 query_rewrite, multi_hop_config, status,
-                is_internal, created_at
+                is_internal, attachments, created_at
             )
-            values (?, ?, ?, ?, ?, ?, ?, ?, 'running', false, ?)
+            values (?, ?, ?, ?, ?, ?, ?, ?, 'running', false, ?, ?)
             """,
             (
                 turn_id,
@@ -175,6 +177,7 @@ class ChatRepository:
                 model,
                 query_rewrite,
                 json_param(self.connection, multi_hop_config) if multi_hop_config is not None else None,
+                json_param(self.connection, attachments or []),
                 now,
             ),
         )
@@ -257,6 +260,22 @@ def _map_turn(row: dict[str, Any]) -> ChatTurn:
         status=str(row["status"]),
         stopReason=str(row["stop_reason"]) if row.get("stop_reason") is not None else None,
         errorMessage=str(row["error_message"]) if row.get("error_message") is not None else None,
+        attachments=_load_attachment_list(row.get("attachments")),
         createdAt=str(row["created_at"]),
         completedAt=str(row["completed_at"]) if row.get("completed_at") is not None else None,
     )
+
+
+def _load_attachment_list(value: Any) -> list[dict]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return []
+        if isinstance(parsed, list):
+            return parsed
+    return []
